@@ -1,0 +1,1700 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>URL と HTTP — YouTubeが見えるまで</title>
+<meta name="description" content="Rust で書かれた小さなブラウザ saba（d0iasm/sababook の ch7）の入口を読む。5 つのクレートの分担、#![no_std] と alloc、main と関数ポインタ型、Url::parse による URL の分解、HttpClient::get が組み立てる HTTP/1.1 の要求、HttpResponse が状態行・ヘッダ・本文に切る応答を、http://host.test:8000/test.html を例に 1 行ずつ追う。">
+<meta property="og:title" content="URL と HTTP — YouTubeが見えるまで">
+<meta property="og:description" content="Rust で書かれた小さなブラウザ saba の入口を読む。URL の分解、HTTP/1.1 の要求、応答を切るコードを、具体的な値を入れて 1 行ずつ追う。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+  svg a { cursor: pointer; }
+  svg a:hover text, svg a:focus-visible text { text-decoration: underline; text-underline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第IX部 ブラウザを読む ／ 第31章 ／ 全36章</p>
+    <h1 id="h-s0">URL と HTTP</h1>
+    <p class="standfirst">第30章のエミュレータに続いて、今度は Rust で書かれた小さなブラウザ saba を 1 行ずつ読む。この章はその入口で、アドレスバーの文字列を Url に分解し、HTTP の要求を組み立てて TCP に書き、返ってきたバイト列を状態行・ヘッダ・本文に切るまでを追う。第10章が Chromium で追った道の最初の区間を、読める大きさの実物でたどる。例は http://host.test:8000/test.html。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>全体の形</a><p>Cargo.toml の 5 つのクレート、#![no_std] と alloc、noli ＝ OS の入口。層への当てはめと行数。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>main の流れ</a><p>Browser を Rc&lt;RefCell&gt; で作り、WasabiUI に渡し、start(handle_url)。関数ポインタ型が 2 つのクレートをつなぐ。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>URL を分解する</a><p>Url::parse。http:// を落とし、/ で 2 つに切り、: の手前が host。&amp;str と String。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>port・path と Result</a><p>port は文字列のまま "8000"、path は先頭の / なし。7 つのテスト。Err を境界で Error に包み直す。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>要求を組み立てて送る</a><p>lookup_host → TcpStream::connect → GET /test.html HTTP/1.1 を push_str で。改行は LF だけ。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>応答を読む</a><p>4,096 バイトずつ 0 まで read。\r\n を \n に、状態行・ヘッダ・本文に切る。302 の分岐。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の章 HTML トークナイザへ。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードは <a href="https://github.com/d0iasm/sababook">d0iasm/sababook</a>（Asami Doi、MIT ライセンス）の ch7/saba から引用した（2025 年 1 月 6 日のコミット c87dc64。行番号は元のファイルのもので、長い行は折り返し、省いた行は … で示した）。このリポジトリは書籍『［作って学ぶ］ブラウザのしくみ』のサンプルコードだが、この章の説明はコードと、Web で公開されている仕様（URL Standard・RFC 9112・Rust の std の文書など。2026 年 11 月に閲覧）だけから書き、書籍の文章は使っていない。saba は Wasabi OS（<a href="https://github.com/hikalium/wasabi">hikalium/wasabi</a>）の上で動く。noli と Wasabi の振る舞いは、その for_saba ブランチのソース（2026 年 11 月に閲覧）で確かめた。この章の担当は saba をビルドも実行もしておらず、動きはコードを読んで追ったものである。図は模式図。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 全体の形 ================= -->
+<section class="scene sc-anim" id="s1" data-tab="全体" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>全体の形 — クレートと層</h2>
+    <p class="sh-meta"><span class="chip">Cargo.toml</span><span class="chip">#![no_std]</span><span class="chip">alloc</span><span class="chip">noli</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">第30章の gb-emu-desktop に続いて、Rust の小さなブラウザ saba（ch7 が最終形）を読む。Cargo.toml と lib.rs の頭から、5 つのクレートの分担と、std 無しの事情を見る。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">saba が動く Wasabi OS は hikalium/wasabi で公開されている自作の OS で、noli はその上のプログラムが OS の機能を呼ぶためのライブラリである。この章の担当は saba をビルドも実行もしておらず、動きはすべてコードを読んで追った。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="Cargo.toml と lib.rs のコードと、5 つのクレートの箱と依存の矢印、その下の Wasabi OS の図"></svg></div>
+    <figcaption>図1　左は段階ごとのコード（Cargo.toml、lib.rs と main.rs の頭、use の列、rust-toolchain.toml、handle_url の骨）。右は 5 つのクレートと依存の矢印、その下の Wasabi OS。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 main の流れ ================= -->
+<section class="scene sc-anim" id="s2" data-tab="main" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>main の流れ — Browser・WasabiUI・handle_url</h2>
+    <p class="sh-meta"><span class="chip">main.rs</span><span class="chip">Rc&lt;RefCell&lt;T&gt;&gt;</span><span class="chip">fn(String) -&gt; Result</span><span class="chip">entry_point!</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">URL の文字列は、ui_wasabi から main.rs の handle_url に渡る。main は Browser と WasabiUI を作り start を呼ぶだけ。その引数の型がクレートの間の約束になる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Rc&lt;RefCell&lt;T&gt;&gt; は「持ち主を数えて共有し、中を書き換えられる包み」で、saba は Browser・Page・DOM の木にこの形を使う。参照カウントと借用の実行時検査の仕組みは、木を作る第33章 場面2 で開く。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="main.rs と browser.rs のコードと、Browser・Page・WasabiUI の箱、アドレスバーから handle_url へ渡る URL の文字列の図"></svg></div>
+    <figcaption>図2　左は段階ごとのコード（main.rs、browser.rs、app.rs の抜粋）。右は main が作る Browser・Page・WasabiUI と、Enter で handle_url に渡る URL の文字列。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 URL を分解する ================= -->
+<section class="scene sc-anim" id="s3" data-tab="URL" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>URL を分解する — Url::parse</h2>
+    <p class="sh-meta"><span class="chip">url.rs</span><span class="chip">splitn(2, "/")</span><span class="chip">find(':')</span><span class="chip">&amp;str</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">handle_url は最初に URL を分解する。Url は 5 つの String を持ち、parse が http:// を確かめ、/ と : と ? で切って埋める。この場面は host を取るまで。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">is_http は部分文字列の検査なので、"ftp://a/?u=http://b" も通る。trim_start_matches は何も落とさず、host は最初の : の手前の "ftp" になる、と読める。テストが確かめるのは正しい入力 5 つと誤りの 2 つ。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="url.rs のコードと、URL の文字を 1 文字ずつ並べた列に、切る位置を示した図"></svg></div>
+    <figcaption>図3　左は段階ごとのコード（url.rs）。右は URL の 31 文字と、trim_start_matches・splitn・find で切る位置。下は具体的な値の追跡。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 port・path・searchpart と Result ================= -->
+<section class="scene sc-anim" id="s4" data-tab="port" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>port・path・searchpart と Result</h2>
+    <p class="sh-meta"><span class="chip">"80"</span><span class="chip">parse::&lt;u16&gt;()</span><span class="chip">#[cfg(test)]</span><span class="chip">Error::UnexpectedInput</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">残りは port・path・searchpart。port は文字列で持ち、main.rs が u16 にする。7 つのテストが結果を固定し、失敗は Result で返って main.rs が Error に包み直す。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Result&lt;T, E&gt; は成功なら T、失敗なら E で、main.rs は match で両方を書く。第30章 場面6 の gb-emu は失敗を eprintln! で知らせて続けたが、saba は Error に包んで返し、main が 1 を返して終わる。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="url.rs と main.rs のコードと、URL の文字の列に port・path・searchpart の切る位置を示した図、7 つのテストの表"></svg></div>
+    <figcaption>図4　左は段階ごとのコード（url.rs、main.rs）。右上は URL の文字の列と切る位置、その下は段階ごとの図（段階5 は url.rs の 7 つのテスト）、右下は Url の欄。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 要求を組み立てて送る ================= -->
+<section class="scene sc-anim" id="s5" data-tab="要求" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>要求を組み立てて送る — HttpClient::get</h2>
+    <p class="sh-meta"><span class="chip">lookup_host</span><span class="chip">TcpStream</span><span class="chip">push_str</span><span class="chip">\n</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">host・port・path から、HttpClient::get が要求を送る。名前解決と TCP の接続は noli を通して OS に頼み、要求は push_str で 1 行ずつ組み立ててバイト列として書く。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">第21章 場面1 の要求と形は同じで、違うのは行の終わり（LF の 1 バイト）と、Host に port が無いこと。RFC 9112 §3.2 は Host に authority と同じ host.test:8000 を求める（MUST）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="net/wasabi/src/http.rs のコードと、名前解決から TCP の接続、1 行ずつ積み上がる要求の文字列、バイト列になって TcpStream へ流れる図"></svg></div>
+    <figcaption>図5　左は段階ごとのコード（net/wasabi/src/http.rs）。右上は lookup_host → SocketAddr → TcpStream の道、右下は push_str で積み上がる要求の 5 行と、write でバイト列になって OS へ渡る所。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 応答を読む ================= -->
+<section class="scene sc-anim" id="s6" data-tab="応答" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>応答を読む — HttpResponse と 302</h2>
+    <p class="sh-meta"><span class="chip">4,096 バイト</span><span class="chip">from_utf8</span><span class="chip">split_once</span><span class="chip">302</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">バイト列を 4,096 バイトずつ最後まで読み、UTF-8 の文字列にして、状態行・ヘッダ・本文に切る。できた HttpResponse の body が HTML の文字列で、次の章はこれを 1 文字ずつ読む。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">saba が読むヘッダは Location だけ。Content-Length も Content-Type も Transfer-Encoding も読まない。本文の終わりは接続が閉じたことで知る。chunked の応答なら、長さの行が本文に混ざったまま次の章へ渡る、と読める。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="net/wasabi/src/http.rs と saba_core/src/http.rs と main.rs のコードと、4,096 バイトずつ読む受信バッファ、応答の文字列を状態行・ヘッダ・本文に切る図、HttpResponse の欄"></svg></div>
+    <figcaption>図6　左は段階ごとのコード（net/wasabi と saba_core の http.rs、main.rs）。右上は read で受信の列が伸びる所、右下は応答の文字列を切る位置と、埋まっていく HttpResponse の欄。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — URL と HTTP</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>saba は 5 つのクレート。#![no_std] で std を外し、alloc で String・Vec を使う。noli が OS の入口、saba_core は依存が無く OS を知らない（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>main は Browser を Rc&lt;RefCell&gt; で作り、WasabiUI に渡して start(handle_url) を呼ぶ。引数の型 fn(String) -&gt; Result&lt;HttpResponse, Error&gt; が UI と net の間の約束（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>Url::parse は http:// を確かめて落とし、/ で 2 つに切り、: の手前が host。&amp;str は借りた断片、String は持ち主（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>port は文字列 "8000"（無ければ "80"）、path は先頭の / が無い "test.html"、searchpart は ? の後ろ。7 つのテストが固定し、Err は Error::UnexpectedInput に包み直す（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>HttpClient::get は lookup_host → SocketAddr → TcpStream::connect の後、要求行・Host・Accept・Connection: close・空行を push_str で組み、77 バイトを write する。改行は LF だけ（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>応答は 4,096 バイトずつ 0 まで read し、from_utf8 → \r\n を \n に → split_once で状態行・ヘッダ・本文に切る。302 の転送先は parse() が無く止まる、と読める。body が次の章の入力（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th>クレート（crate）</th><td>Rust のコンパイルの単位。saba（実行ファイル）、saba_core・net_wasabi・ui_wasabi（path で指す）、noli（git で取る）。Cargo.toml の [dependencies] と features で結ぶ。</td></tr>
+        <tr><th>#![no_std] と alloc</th><td>std を使わない宣言。core は常に使え、ヒープがあれば extern crate alloc で String・Vec・Rc・format! が使える。Wasabi の上で動く saba の全クレートに付く。</td></tr>
+        <tr><th>noli</th><td>hikalium/wasabi の for_saba ブランチにある、Wasabi の上のプログラム用のライブラリ。lookup_host・TcpStream・Window・Api::read_key・entry_point!。第9章 場面3 のシステムコールの入口に当たる。</td></tr>
+        <tr><th>関数ポインタ型</th><td>fn(String) -&gt; Result&lt;HttpResponse, Error&gt; のように「この形の関数」を値として受け渡す型。外の変数を捕まえないのでクロージャ（第30章 場面5）より単純。ui_wasabi が net_wasabi を知らずに済む。</td></tr>
+        <tr><th>Rc&lt;RefCell&lt;T&gt;&gt;</th><td>持ち主を数えて共有する Rc と、借用を実行時に検査して中を書き換えられる RefCell の組。Browser・Page・WasabiUI がこの形。仕組みは第33章 場面2。</td></tr>
+        <tr><th><i class="sw d"></i>Url</th><td>url・host・port・path・searchpart の 5 つの String。例は host "host.test"、port "8000"、path "test.html"（先頭の / なし）、searchpart ""。parse は Result&lt;Self, String&gt;。</td></tr>
+        <tr><th>&amp;str と String</th><td>&amp;str は文字列を借りた断片（先頭の位置と長さ）、String はヒープの持ち主。splitn の各片や [..i] は &amp;str で、to_string() で String に写す。</td></tr>
+        <tr><th>splitn・split_once</th><td>splitn(n, pat) は最大 n 個に切る反復子、split_once(pat) は最初の pat の前後の組を Option で返す。url.rs と http.rs の切り分けはこの 2 つと find・split で書かれている。</td></tr>
+        <tr><th><i class="sw x"></i>Error</th><td>saba_core の enum。Network・UnexpectedInput・InvalidUI・Other（各 String を持つ）。Url::parse の Err(String) は main.rs で UnexpectedInput に包み直す。</td></tr>
+        <tr><th><i class="sw d"></i>HttpResponse と Connection: close</th><td>version・status_code（u32）・reason・headers（Vec&lt;Header&gt;）・body の 5 欄。要求に close を付けたのでサーバーは応答の後に接続を閉じ（RFC 9112 §9.6）、saba は Content-Length を読まず、read が 0 を返すまでを本文にする。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <p class="note">この章で主に読んだのは 6 ファイル（main.rs・url.rs・error.rs・browser.rs と、net と saba_core の http.rs）、テストを除いて 444 行。</p>
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg, A = YT.anim;
+
+  /* ---------- この章で使う部品（第30章と同じ作り） ---------- */
+
+  const op = (el, v) => { el.style.opacity = v; };
+  const playing = () => YT.motion.playing;
+  const KW = /\b(fn|let|mut|pub|struct|impl|use|mod|const|match|if|else|for|in|loop|while|break|return|move|self|Self|crate|as|dyn|ref|where|enum|type|extern)\b/g;
+
+  /* 等幅のコードの 1 行。予約語は太字、// から後ろは薄い色。空白は詰めない（pre） */
+  function codeLine(parent, x, y, s, cls) {
+    const t = S.text(x, y, '', { cls: 't-mono pre ' + (cls || 't-sm') }, parent);
+    // 注釈は行頭か空白の後の //。"http://" のような文字列の中の // は注釈にしない
+    const cmm = s.match(/(^|\s)\/\//);
+    const ci = cmm ? cmm.index + cmm[1].length : -1;
+    const code = ci >= 0 ? s.slice(0, ci) : s, cm = ci >= 0 ? s.slice(ci) : '';
+    // 文字列リテラルの中の語（"… in headers" の in など）は予約語にしない
+    const strs = [...code.matchAll(/"(?:\\.|[^"\\])*"/g)].map((q) => [q.index, q.index + q[0].length]);
+    let last = 0, m;
+    KW.lastIndex = 0;
+    while ((m = KW.exec(code))) {
+      if (strs.some(([a, b]) => m.index > a && m.index < b)) continue;
+      if (m.index > last) S.el('tspan', { text: code.slice(last, m.index) }, t);
+      S.el('tspan', { text: m[0], cls: 't-b' }, t);
+      last = m.index + m[0].length;
+    }
+    if (last < code.length) S.el('tspan', { text: code.slice(last) }, t);
+    if (cm) S.el('tspan', { text: cm, cls: 't-dim' }, t);
+    return t;
+  }
+  /* コードの板。lines は [行番号, 文字列]（行番号 null は折り返しの続き、'' は見出しの行）。
+     hl(a, b) で a〜b 行め（0 始まり）を照らす。hl() で消す */
+  function codePanel(parent, x, y, w, lines, opts) {
+    opts = opts || {};
+    const lh = opts.lh || 16, pad = 10;
+    const g = S.g({}, parent);
+    const h = pad * 2 + lines.length * lh + 2;
+    S.rect(x, y, w, h, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+    const band = S.rect(x + 3, y, w - 6, lh, { rx: 3, cls: 'f-x-soft', style: { display: 'none' } }, g);
+    const y0 = y + pad + 11;
+    lines.forEach(([ln, s], k) => {
+      const yy = y0 + k * lh;
+      if (ln === '') { S.text(x + pad, yy, s, { cls: 't-xs t-dim' }, g); return; }
+      if (ln != null) S.text(x + pad + 26, yy, String(ln), { cls: 't-xs t-dim t-mono t-end' }, g);
+      codeLine(g, x + pad + 34, yy, s, opts.cls);
+    });
+    const api = {
+      g, h,
+      hl(a, b) {
+        if (a == null) { band.style.display = 'none'; return api; }
+        if (b == null) b = a;
+        S.attrs(band, { y: y0 + a * lh - 12, height: (b - a + 1) * lh });
+        band.style.display = '';
+        return api;
+      }
+    };
+    return api;
+  }
+  /* 枠と題（と小さな説明）の箱 */
+  function box(parent, x, y, w, h, title, sub, cls, tcls) {
+    const g = S.g({}, parent);
+    const r = S.rect(x, y, w, h, { rx: 5, cls: cls || 'f-sf s-rule w1' }, g);
+    const t = S.text(x + w / 2, y + (sub ? h / 2 - 2 : h / 2 + 4), title, { cls: 't-c ' + (tcls || 't-sm t-b') }, g);
+    const s = sub ? S.text(x + w / 2, y + h / 2 + 12, sub, { cls: 't-c t-xs t-dim' }, g) : null;
+    return { g, r, t, s, x, y, w, h };
+  }
+  /* 他の章の場面へのリンク（SVG の a） */
+  function xlink(parent, x, y, href, label, end) {
+    const a = S.el('a', { href, 'aria-label': label }, parent);
+    S.text(x, y, label + ' ↗', { cls: 't-xs t-mid' + (end ? ' t-end' : '') }, a);
+    return a;
+  }
+  /* 文の列（段階ごとの具体的な値の追跡） */
+  function trace(parent, x, y, lines, lh) {
+    return lines.map((s, k) => {
+      const cls = typeof s === 'string' ? 't-sm' : s[1];
+      return S.text(x, y + k * (lh || 20), typeof s === 'string' ? s : s[0], { cls: cls + ' pre' }, parent);
+    });
+  }
+  /* 箱の枠を「注目」にする／戻す */
+  const lit = (b, on, base) => b.r.setAttribute('class', on ? 'f-sf s-x w2' : (base || 'f-sf s-rule w1'));
+  /* 文字を 1 文字ずつ箱に並べた列。X(k) は k 文字めの左端 */
+  function charRow(parent, x, y, s, w, h) {
+    const g = S.g({}, parent);
+    const cells = Array.from(s).map((ch, k) => {
+      const r = S.rect(x + k * w, y, w, h, { cls: 'f-sf s-rule w1' }, g);
+      const t = S.text(x + k * w + w / 2, y + h / 2 + 4, ch, { cls: 't-c t-xs t-mono pre' }, g);
+      return { r, t, ch };
+    });
+    return { g, cells, x, y, w, h, X: (k) => x + k * w };
+  }
+  /* 文字の列の下の括弧（x0〜x1）と、その下の札 */
+  function bracket(parent, x0, x1, y, label, cls, tcls) {
+    const g = S.g({}, parent);
+    S.path(`M${x0},${y} v6 H${x1} v-6`, { cls: 'f-none ' + (cls || 's-mid w15') }, g);
+    if (label) S.text((x0 + x1) / 2, y + 20, label, { cls: 't-c t-xs ' + (tcls || '') }, g);
+    return g;
+  }
+
+  /* ================================================================
+     場面1 全体の形
+     行数は ch7/saba の *.rs を wc で数えた値（テストは #[cfg(test)] から後ろ）。全体 6,343（除くと 5,077）、
+     saba_core 5,712（除くと 4,446）、ui 444、net 91、src/main.rs 96
+     ================================================================ */
+  const s1 = {
+    steps: [
+      { title: '5 つのクレート：Cargo.toml', text: '**クレート**はコンパイルの単位。`[package]` の saba が実行ファイル。`[dependencies]` の 3 つは `path` で指すリポジトリの中のライブラリ、noli は `git` で取る外のライブラリ。net・ui・noli は `optional` で、feature `wasabi` がまとめて有効にする。' },
+      { title: '#![no_std] と extern crate alloc', text: 'saba は OS 無しの target `x86_64-unknown-none` 向けに作るので、std は使えない。`#![no_std]` で外すと、どこでも使える core だけが残る。ヒープがあれば `extern crate alloc` で String・Vec・Rc・`format!` が戻る。' },
+      { title: '層に当てはめる', text: 'noli は[[09-os.html#s3|第9章 場面3]]のシステムコールの入口に当たる。net_wasabi はその上の名前解決と TCP の口、ui_wasabi は窓とマウス・キーボードの口。saba_core は依存が無く、OS を知らずに URL・HTML・CSS・JS を扱う。[[10-browser.html#s2|第10章 場面2]]から場面5 の仕事がここに入る。' },
+      { title: '大きさと道具', text: '`.rs` は 34 ファイル・6,343 行、テストを除くと 5,077 行で、約 9 割が saba_core にある。`rust-toolchain.toml` が nightly-2024-01-01 に固定する。ch0 の最初の saba は 12 行で、`Api::write_string` で文字を出すだけ。' },
+      { title: 'この章で追う道', text: 'Enter で ui_wasabi が `handle_url` に URL を渡す。`Url::parse` が分解し、`HttpClient::get` が TCP で要求を送り、応答を `HttpResponse` にして返す。Chromium の HSTS もプロセスの分離も無く、1 つのプログラムが全部をする。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      // 左: 段階ごとのコード
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'Cargo.toml（ch7/saba。空行を詰めた）'],
+        [1, '[package]'],
+        [2, 'name = "saba"'],
+        [4, 'edition = "2021"'],
+        [5, 'default-run = "saba"'],
+        [7, '[features]'],
+        [8, 'default = ["wasabi"]'],
+        [9, 'wasabi = ["dep:net_wasabi", "dep:ui_wasabi", "dep:noli"]'],
+        [11, '[[bin]]'],
+        [12, 'name = "saba"'],
+        [13, 'path = "src/main.rs"'],
+        [14, 'required-features = ["wasabi"]'],
+        [16, '[dependencies]'],
+        [17, 'saba_core = { path = "./saba_core" }'],
+        [18, 'net_wasabi = { path = "./net/wasabi", optional = true }'],
+        [19, 'ui_wasabi = { path = "./ui/wasabi", optional = true }'],
+        [20, 'noli = { git = "https://github.com/hikalium/wasabi.git",'],
+        [null, '         branch = "for_saba", optional = true }']
+      ]).hl(13, 17);
+      panel([
+        ['', 'saba_core/src/lib.rs（全 12 行）'],
+        [1, '#![no_std]'],
+        [3, 'extern crate alloc;'],
+        [5, 'pub mod browser;'],
+        [6, 'pub mod constants;'],
+        [7, 'pub mod display_item;'],
+        [8, 'pub mod error;'],
+        [9, 'pub mod http;'],
+        [10, 'pub mod renderer;'],
+        [11, 'pub mod url;'],
+        [12, 'pub mod utils;'],
+        ['', 'src/main.rs（頭の部分）'],
+        [1, '#![no_std]'],
+        [2, '#![no_main]'],
+        [4, 'extern crate alloc;'],
+        [8, 'use alloc::rc::Rc;'],
+        [9, 'use alloc::string::String;'],
+        [10, 'use core::cell::RefCell;']
+      ]).hl(1, 2);
+      panel([
+        ['', 'src/main.rs（use の列。どのクレートから何を使うか）'],
+        [11, 'use net_wasabi::http::HttpClient;'],
+        [12, 'use noli::*;'],
+        [13, 'use saba_core::browser::Browser;'],
+        [14, 'use saba_core::error::Error;'],
+        [15, 'use saba_core::http::HttpResponse;'],
+        [16, 'use saba_core::url::Url;'],
+        [17, 'use ui_wasabi::app::WasabiUI;'],
+        ['', 'net/wasabi/src/http.rs'],
+        [6, 'use noli::net::lookup_host;'],
+        [7, 'use noli::net::SocketAddr;'],
+        [8, 'use noli::net::TcpStream;'],
+        [9, 'use saba_core::error::Error;'],
+        [10, 'use saba_core::http::HttpResponse;'],
+        ['', 'ui/wasabi/src/app.rs（抜粋）'],
+        [12, 'use noli::sys::wasabi::Api;'],
+        [13, 'use noli::window::StringSize;'],
+        [14, 'use noli::window::Window;']
+      ]).hl(9, 11);
+      panel([
+        ['', 'rust-toolchain.toml'],
+        [1, '[toolchain]'],
+        [2, 'channel = "nightly-2024-01-01"'],
+        [3, 'components = [ "rustfmt", "rust-src" ]'],
+        [4, 'targets = [ "x86_64-unknown-linux-gnu" ]'],
+        [5, 'profile = "default"'],
+        ['', 'ch0/saba/src/main.rs（リポジトリの最初のプログラム。全 12 行）'],
+        [1, '#![no_std]'],
+        [2, '#![cfg_attr(not(target_os = "linux"), no_main)]'],
+        [4, 'use noli::prelude::*;'],
+        [6, 'fn main() {'],
+        [7, '    Api::write_string("Hello World\\n");'],
+        [8, '    println!("Hello from println!");'],
+        [9, '    Api::exit(42);'],
+        [10, '}'],
+        [12, 'entry_point!(main);']
+      ]).hl(2, 2);
+      panel([
+        ['', 'src/main.rs（handle_url の骨。詰めた。中身は場面2〜6）'],
+        [19, 'fn handle_url(url: String) -> Result<HttpResponse, Error> {'],
+        [21, '  let parsed_url = match Url::new(url.to_string()).parse() {'],
+        [22, '    Ok(url) => url,'],
+        [23, '    Err(e) => { return Err(Error::UnexpectedInput(…)); }'],
+        [29, '  };'],
+        [32, '  let client = HttpClient::new();'],
+        [33, '  let response = match client.get('],
+        [34, '    parsed_url.host(),'],
+        [35, '    parsed_url.port().parse::<u16>().expect(…),'],
+        [39, '    parsed_url.path(),'],
+        [40, '  ) {'],
+        [41, '    Ok(res) => { … }    // 302 なら Location へ（場面6）'],
+        [67, '    Err(e) => { return Err(Error::Network(…)) }'],
+        [73, '  };'],
+        [74, '  Ok(response)'],
+        [75, '}']
+      ]).hl(1, 1);
+      // 左下: 段階ごとの具体的な値
+      st.tr = S.g({}, svg);
+      // 右: 5 つのクレートと OS
+      const g = st.g = S.g({}, svg);
+      S.text(490, 36, '5 つのクレートと依存（矢印は「使う」向き。行数はテスト込み）', { cls: 't-xs t-dim' }, g);
+      st.saba = box(g, 490, 46, 454, 46, 'saba（src/main.rs）— 実行ファイル。main と handle_url', '96 行');
+      st.net = box(g, 490, 128, 120, 56, 'net_wasabi', 'HttpClient・91 行');
+      st.core = box(g, 630, 128, 150, 56, 'saba_core', '5,712 行（約 9 割）');
+      st.ui = box(g, 800, 128, 130, 56, 'ui_wasabi', 'WasabiUI・444 行');
+      st.noli = box(g, 490, 232, 454, 44, 'noli（hikalium/wasabi、branch for_saba）', 'net・window・sys：OS の機能を呼ぶ入口');
+      st.os = box(g, 490, 306, 454, 56, 'Wasabi OS', 'TCP／IP・画面・キーボード・マウス（カーネル）', 'f-none s-dim w1 dash');
+      st.coreNote = S.text(705, 206, '依存なし（OS を知らない）', { cls: 't-c t-xs t-dim' }, g);
+      const ar = (d, cls) => S.path(d, { cls: 'f-none ' + (cls || 's-mid w15'), 'marker-end': mk('mid') }, g);
+      st.ar = {
+        sn: ar('M550,92 V126'), sc: ar('M705,92 V126'), su: ar('M865,92 V126'),
+        snoli: ar('M940,92 V230', 's-mid w1 dash'),
+        nc: ar('M610,156 H628'), uc: ar('M800,156 H782'),
+        nn: ar('M550,184 V230'), un: ar('M865,184 V230'),
+        no: ar('M717,276 V304')
+      };
+      S.text(726, 296, 'システムコール', { cls: 't-xs t-dim' }, g);
+      // 層の札（段階3・4）
+      const gl = st.gl = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 390, '層への当てはめ', { cls: 't-sm t-b' }, gl);
+      [['noli', 'OS の API の入口 ＝ 第9章 場面3 システムコール', '09-os.html#s3'],
+       ['net_wasabi', '名前解決と TCP の口（lookup_host・TcpStream）＝ 第19章 場面2', '19-tcp.html#s2'],
+       ['ui_wasabi', '窓・マウス・キーボード ＝ 第7章 場面5', '07-shuuhen.html#s5'],
+       ['saba_core', 'OS に依らない中身 ＝ 第10章 場面2〜5 のレンダラの仕事', '10-browser.html#s2']].forEach(([a, b, href], k) => {
+        const y = 414 + k * 24;
+        S.text(490, y, a, { cls: 't-xs t-mono t-b' }, gl);
+        xlink(gl, 580, y, href, b);
+      });
+      // この章で追う道（段階5）
+      const gr = st.gr = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 390, 'この章で追う道（呼ばれる順）', { cls: 't-sm t-b' }, gr);
+      st.route = ['① ui_wasabi：Enter → handle_url("http://host.test:8000/test.html")', '② saba：handle_url → saba_core の Url::parse（場面3・4）', '③ saba：HttpClient::get → net_wasabi', '④ net_wasabi：lookup_host・TcpStream::connect・write → noli', '⑤ noli → Wasabi OS：名前解決と TCP。応答が同じ道を戻る', '⑥ saba：HttpResponse を返す → ui が Page に渡す（場面6 → 第32章）'];
+      st.routeT = st.route.map((s, k) => S.text(490, 414 + k * 22, s, { cls: 't-xs' }, gr));
+      st.routeBoxes = [[st.ui], [st.saba, st.core], [st.saba, st.net], [st.net, st.noli], [st.noli, st.os], [st.saba, st.ui]];
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['Cargo.toml：実行ファイル saba と、path で指す 3 つのクレート', 'saba_core・net_wasabi・ui_wasabi はこのリポジトリの中（./saba_core など）', 'noli は git（hikalium/wasabi、branch for_saba）から取る', 'feature wasabi を外すと net・ui・noli は付かず、bin saba も作れない'],
+        ['run_on_wasabi.sh 45 行：target/x86_64-unknown-none/release/saba を動かす', 'core は常にある：Option・Result・str・slice・u16 の parse', 'extern crate alloc：ヒープがあれば String・Vec・Rc・format! が使える', '#![no_main]：入口の関数は noli の entry_point! が作る（場面2）'],
+        ['noli ＝ Wasabi のシステムコールの入口（第9章 場面3）', 'net_wasabi ＝ 名前解決と TCP の口：lookup_host・SocketAddr・TcpStream', 'ui_wasabi ＝ 窓・マウス・キーボード：Window・Api::read_key', 'saba_core ＝ 依存なし。OS を知らない（Cargo.toml の [dependencies] が空）'],
+        ['Rust 全体 34 ファイル・6,343 行（テスト込み）。テストを除くと 5,077 行', 'saba_core 5,712（除くと 4,446）／ui 444／net 91／src/main.rs 96', 'targets の linux-gnu は Linux 用。Wasabi 用は x86_64-unknown-none（段階2）', 'ch0 の main は 12 行：Api::write_string → println! → Api::exit(42)'],
+        ['① ui：Enter → handle_url("http://host.test:8000/test.html")', '② saba_core：Url::parse → host・port・path・searchpart（場面3・4）', '③ net：HttpClient::get → noli の TcpStream → OS（場面5）', '④ 応答 → HttpResponse → Page::receive_response（場面6 → 第32章）']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 352, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+      // 注目する箱
+      lit(st.saba, i === 0 || i === 1);
+      lit(st.core, i === 1 || i === 2);
+      lit(st.net, i === 2); lit(st.ui, i === 2); lit(st.noli, i === 2);
+      lit(st.os, false, 'f-none s-dim w1 dash');
+      st.coreNote.setAttribute('class', i === 2 ? 't-c t-xs t-x t-b' : 't-c t-xs t-dim');
+      for (const k in st.ar) st.ar[k].setAttribute('class', 'f-none ' + (k === 'snoli' ? 's-mid w1 dash' : 's-mid w15'));
+      if (i === 0) ['sn', 'sc', 'su', 'snoli'].forEach((k) => st.ar[k].setAttribute('class', 'f-none s-x w2'));
+      if (i === 2) ['nn', 'un', 'no', 'snoli'].forEach((k) => st.ar[k].setAttribute('class', 'f-none s-x w2'));
+      S.fade(st.gl, i === 2 || i === 3);
+      S.fade(st.gr, i === 4);
+      st.routeT.forEach((t) => t.setAttribute('class', 't-xs'));
+    },
+    frame(ctx) {
+      const st = ctx.state;
+      if (ctx.step !== 4) return;
+      // 段階5: 呼ばれる順に 1.3 秒ずつ照らす（8 秒で 1 周。止めている人には道の全部が照らされた姿）
+      const n = st.route.length;
+      const k = playing() ? Math.min(n - 1, Math.floor(U.mod(ctx.ts, n * 1.3 + 0.6) / 1.3)) : -1;
+      const all = [st.ui, st.saba, st.core, st.net, st.noli, st.os];
+      all.forEach((b) => lit(b, false, b === st.os ? 'f-none s-dim w1 dash' : undefined));
+      if (k < 0) all.forEach((b) => lit(b, true));
+      else st.routeBoxes[k].forEach((b) => lit(b, true));
+      st.routeT.forEach((t, j) => t.setAttribute('class', (k < 0 || j === k) ? 't-xs t-b t-x' : (j < k ? 't-xs' : 't-xs t-dim')));
+    }
+  };
+
+  /* ================================================================
+     場面2 main の流れ
+     main.rs 77〜96、browser.rs 7〜28、ui/wasabi/src/app.rs 35〜71・77〜79・151〜165・181〜184。
+     窓の 600×400 は saba_core/src/constants.rs の WINDOW_WIDTH・WINDOW_HEIGHT（窓の絵は模式で、縮尺は合わせていない）
+     ================================================================ */
+  const URL0 = 'http://host.test:8000/test.html';
+  const s2 = {
+    steps: [
+      { title: 'main は 3 つ：Browser、WasabiUI、start', text: 'main は `Browser::new()` と `WasabiUI::new(browser)` で 2 つを作り、`start(handle_url)` を呼ぶ。戻り値は `u64` で、0 が成功、`Err` なら `println!` で知らせて 1。入口の関数は noli の `entry_point!(main)` が作る。' },
+      { title: 'Browser::new は Rc<RefCell<Browser>> を返す', text: '`new` は Browser を `Rc::new(RefCell::new(…))` で包み、`Rc::downgrade(&browser)`（Weak）を Page に渡してから pages に積む。**Rc<RefCell<T>>** は持ち主を数えて共有し、中を書き換えられる包み。仕組みは[[33-saba-dom.html#s2|第33章 場面2]]。' },
+      { title: 'WasabiUI に Browser を渡し、Rc<RefCell> で包む', text: '`WasabiUI::new(browser)` は Rc を欄 `browser` に移し、`Window::new` で 600×400 の窓を開く。main は UI も `Rc::new(RefCell::new(…))` で包み、`ui.borrow_mut()` で中を書き換える権利を取って `start` を呼ぶ。' },
+      { title: 'handle_url の型は関数ポインタ', text: '`start` の引数の型 `fn(String) -> Result<HttpResponse, Error>` は**関数ポインタ型**。この形の関数なら何でも渡せる。ui_wasabi は net_wasabi を依存に持たず、この型だけを知る。main.rs の `handle_url` がその約束を満たす。' },
+      { title: 'Enter で URL の文字列が handle_url に入る', text: 'UI は `handle_mouse_input` と `handle_key_input` を繰り返す。ツールバーを押すと Editing になり、文字は `input_url` に `push`。Enter（0x0A）で `start_navigation` が呼ばれ、`handle_url` に URL の String が渡る。' },
+      { title: 'handle_url の輪郭と、Chromium との違い', text: '`handle_url` は `Url::parse`、`HttpClient::get`、302 の分岐の 3 段で `Ok(response)` を返し、UI が Page の `receive_response` に渡す。[[10-browser.html#s1.4|第10章 場面1]]のネットワークサービスの別プロセスは無く、取得も描画も同じループで進む。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = st.mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'src/main.rs'],
+        [77, 'fn main() -> u64 {'],
+        [78, '    // Browser構造体を初期化'],
+        [79, '    let browser = Browser::new();'],
+        [81, '    // WasabiUI構造体を初期化'],
+        [82, '    let ui = Rc::new(RefCell::new(WasabiUI::new(browser)));'],
+        [84, '    // アプリの実行を開始'],
+        [85, '    match ui.borrow_mut().start(handle_url) {'],
+        [86, '        Ok(_) => {}'],
+        [87, '        Err(e) => {'],
+        [88, '            println!("browser fails to start {:?}", e);'],
+        [89, '            return 1;'],
+        [90, '        }'],
+        [91, '    };'],
+        [93, '    0'],
+        [94, '}'],
+        [96, 'entry_point!(main);']
+      ]).hl(1, 7);
+      panel([
+        ['', 'saba_core/src/browser.rs（詰めた）'],
+        [7, 'pub struct Browser {'],
+        [8, '    active_page_index: usize,'],
+        [9, '    pages: Vec<Rc<RefCell<Page>>>,'],
+        [10, '}'],
+        [12, 'impl Browser {'],
+        [13, '    pub fn new() -> Rc<RefCell<Self>> {'],
+        [14, '        let mut page = Page::new();'],
+        [16, '        let browser = Rc::new(RefCell::new(Self {'],
+        [17, '            active_page_index: 0,'],
+        [18, '            pages: Vec::new(),'],
+        [19, '        }));'],
+        [21, '        page.set_browser(Rc::downgrade(&browser));'],
+        [22, '        browser.borrow_mut().pages'],
+        [null, '            .push(Rc::new(RefCell::new(page)));'],
+        [24, '        browser'],
+        [25, '    }'],
+        [27, '    pub fn current_page(&self) -> Rc<RefCell<Page>> { … }']
+      ]).hl(6, 14);
+      panel([
+        ['', 'ui/wasabi/src/app.rs（詰めた）'],
+        [35, 'pub struct WasabiUI {'],
+        [36, '    browser: Rc<RefCell<Browser>>,'],
+        [37, '    input_url: String,'],
+        [38, '    input_mode: InputMode,'],
+        [39, '    window: Window,'],
+        [40, '    cursor: Cursor,'],
+        [41, '}'],
+        [44, 'pub fn new(browser: Rc<RefCell<Browser>>) -> Self {'],
+        [45, '    Self {'],
+        [46, '        browser,'],
+        [47, '        input_url: String::new(),'],
+        [48, '        input_mode: InputMode::Normal,'],
+        [49, '        window: Window::new("saba".to_string(), WHITE,'],
+        [null, '            WINDOW_INIT_X_POS, WINDOW_INIT_Y_POS,'],
+        [null, '            WINDOW_WIDTH, WINDOW_HEIGHT).unwrap(),'],
+        [58, '        cursor: Cursor::new(),'],
+        [59, '    }']
+      ]).hl(8, 16);
+      panel([
+        ['', 'ui/wasabi/src/app.rs'],
+        [62, 'pub fn start('],
+        [63, '    &mut self,'],
+        [64, '    handle_url: fn(String) -> Result<HttpResponse, Error>,'],
+        [65, ') -> Result<(), Error> {'],
+        [66, '    self.setup()?;'],
+        [68, '    self.run_app(handle_url)?;'],
+        [70, '    Ok(())'],
+        [71, '}'],
+        ['', 'src/main.rs 19（この型に合う関数）'],
+        [19, 'fn handle_url(url: String) -> Result<HttpResponse, Error> {'],
+        ['', 'src/main.rs 85（関数の名前をそのまま値として渡す）'],
+        [85, '    match ui.borrow_mut().start(handle_url) {'],
+        ['', 'ui/wasabi/Cargo.toml（net_wasabi は無い）'],
+        [7, 'saba_core = { path = "../../saba_core" }'],
+        [8, 'noli = { git = "https://github.com/hikalium/wasabi.git",'],
+        [null, '         branch = "for_saba" }']
+      ]).hl(3, 3);
+      panel([
+        ['', 'ui/wasabi/src/app.rs（詰めた）'],
+        [77, 'loop {'],
+        [78, '    self.handle_mouse_input(handle_url)?;'],
+        [79, '    self.handle_key_input(handle_url)?;'],
+        [151, 'InputMode::Editing => {'],
+        [152, '  if let Some(c) = Api::read_key() {'],
+        [153, '    if c == 0x0A as char {          // Enter'],
+        [155, '      self.start_navigation(handle_url,'],
+        [null, '                            self.input_url.clone())?;'],
+        [157, '      self.input_url = String::new();'],
+        [158, '      self.input_mode = InputMode::Normal;'],
+        [163, '    } else {'],
+        [164, '      self.input_url.push(c);'],
+        [165, '      self.update_address_bar()?;'],
+        [181, 'match handle_url(destination) {'],
+        [182, '  Ok(response) => {'],
+        [183, '    let page = self.browser.borrow().current_page();'],
+        [184, '    page.borrow_mut().receive_response(response);']
+      ]).hl(6, 8);
+      panel([
+        ['', 'src/main.rs（handle_url。詰めた）'],
+        [19, 'fn handle_url(url: String) -> Result<HttpResponse, Error> {'],
+        [21, '  let parsed_url = match Url::new(url.to_string()).parse() {'],
+        [22, '    Ok(url) => url,                       // 場面3・4'],
+        [23, '    Err(e) => { return Err(Error::UnexpectedInput(…)); }'],
+        [32, '  let client = HttpClient::new();'],
+        [33, '  let response = match client.get(…) {'],
+        [41, '    Ok(res) => {                          // 場面5'],
+        [43, '      if res.status_code() == 302 { … }   // 場面6'],
+        [63, '      else { res }'],
+        [67, '    Err(e) => { return Err(Error::Network(…)) }'],
+        [74, '  Ok(response)'],
+        [75, '}'],
+        ['', 'ui/wasabi/src/app.rs 181〜184（受け取る側）'],
+        [181, 'match handle_url(destination) {'],
+        [182, '  Ok(response) => {'],
+        [183, '    let page = self.browser.borrow().current_page();'],
+        [184, '    page.borrow_mut().receive_response(response);']
+      ]).hl(1, 12);
+      st.tr = S.g({}, svg);
+      // 右上: Browser と Page
+      const g = st.g = S.g({}, svg);
+      S.text(490, 44, 'Browser::new() が作るもの（browser.rs）', { cls: 't-xs t-dim' }, g);
+      st.bOuter = S.rect(490, 52, 230, 90, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      S.text(498, 66, 'Rc<RefCell<Browser>>', { cls: 't-xs t-mono t-dim' }, g);
+      S.rect(498, 74, 214, 60, { rx: 4, cls: 'f-in s-rule w1' }, g);
+      S.text(506, 90, 'Browser', { cls: 't-sm t-b' }, g);
+      S.text(506, 106, 'active_page_index: 0', { cls: 't-xs t-mono' }, g);
+      S.text(506, 122, 'pages: [', { cls: 't-xs t-mono' }, g);
+      S.circle(566, 118, 4, { cls: 'f-fg' }, g);
+      S.text(576, 122, ']', { cls: 't-xs t-mono' }, g);
+      st.pOuter = S.rect(770, 52, 174, 90, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      S.text(778, 66, 'Rc<RefCell<Page>>', { cls: 't-xs t-mono t-dim' }, g);
+      S.rect(778, 74, 158, 60, { rx: 4, cls: 'f-in s-rule w1' }, g);
+      S.text(786, 90, 'Page', { cls: 't-sm t-b' }, g);
+      S.text(786, 106, 'browser: Weak<…>', { cls: 't-xs t-mono' }, g);
+      S.text(786, 122, 'frame: None, …', { cls: 't-xs t-mono t-dim' }, g);
+      st.rcArrow = S.path('M586,118 H766', { cls: 'f-none s-fg w2', 'marker-end': mk('fg') }, g);   // "]" を貫かないよう括弧の外から
+      S.text(745, 132, 'Rc', { cls: 't-c t-xs t-mono' }, g);
+      st.weakArrow = S.path('M770,100 H724', { cls: 'f-none s-dim w15 dash', 'marker-end': mk('dim') }, g);
+      S.text(745, 94, 'Weak', { cls: 't-c t-xs t-mono t-dim' }, g);
+      // 右中: WasabiUI と handle_url
+      st.uOuter = S.rect(490, 170, 290, 90, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      S.text(498, 184, 'Rc<RefCell<WasabiUI>>（main.rs 82）', { cls: 't-xs t-mono t-dim' }, g);
+      S.rect(498, 192, 274, 60, { rx: 4, cls: 'f-in s-rule w1' }, g);
+      S.text(506, 208, 'WasabiUI', { cls: 't-sm t-b' }, g);
+      S.text(506, 224, 'browser: Rc<RefCell<Browser>>', { cls: 't-xs t-mono' }, g);
+      S.text(506, 240, 'input_url: String ／ window: Window（600×400）', { cls: 't-xs t-mono' }, g);
+      st.uiToB = S.path('M712,192 V144', { cls: 'f-none s-fg w15', 'marker-end': mk('fg') }, g);
+      st.hBox = box(g, 830, 170, 114, 90, 'fn handle_url', 'src/main.rs 19〜75');
+      st.startArrow = S.path('M780,215 H828', { cls: 'f-none s-fg w15', 'marker-end': mk('fg') }, g);
+      st.startLbl = S.text(804, 164, 'start(handle_url)', { cls: 't-c t-xs t-mono' }, g);
+      st.sig = S.text(944, 288, 'fn(String) -> Result<HttpResponse, Error>', { cls: 't-end t-xs t-mono t-x t-b fade hide' }, g);
+      // 右下: 窓と流れ
+      const gw = st.gw = S.g({}, svg);
+      S.rect(490, 300, 230, 160, { rx: 4, cls: 'f-sf s-rule w1' }, gw);
+      S.rect(490, 300, 230, 18, { rx: 4, cls: 'f-in' }, gw);
+      S.text(605, 313, 'saba（Window 600×400。模式）', { cls: 't-c t-xs t-dim' }, gw);
+      S.line(490, 344, 720, 344, { cls: 's-soft w1' }, gw);
+      st.abar = S.rect(498, 323, 214, 16, { rx: 3, cls: 'f-sf s-rule w1' }, gw);
+      st.abarT = S.text(503, 335, '', { cls: 't-xs t-mono t-d pre' }, gw);
+      st.caret = S.rect(503, 326, 1.5, 10, { cls: 'f-x' }, gw);
+      S.text(605, 406, '内容の領域（第35章で描く）', { cls: 't-c t-xs t-dim' }, gw);
+      st.enterTag = S.label(gw, 688, 360, 'Enter', { cls: 't-xs t-b t-x', box: 'f-sf s-x w15' });
+      st.modeT = S.text(490, 480, '', { cls: 't-xs t-mono' }, gw);
+      st.inputT = S.text(490, 498, '', { cls: 't-xs t-mono pre' }, gw);
+      const gf = st.gf = S.g({ cls: 'fade hide' }, svg);
+      st.flow = ['① ツールバーを押す → Editing', '② 1 文字ずつ input_url.push(c)', '③ Enter（0x0A）→ start_navigation', '④ handle_url(destination)', '　 Url::parse（場面3・4）', '　 HttpClient::get（場面5）', '　 302 なら Location へ（場面6）', '⑤ Ok → Page::receive_response', '⑥ update_ui → 描画（第35章）'];
+      st.flowT = st.flow.map((s, k) => S.text(736, 312 + k * 22, s, { cls: 't-xs' }, gf));
+      // 動く札: URL の String が handle_url へ
+      st.tokPath = S.path('M610,330 V284 H887 V246', { cls: 'f-none s-none' }, svg);
+      st.tok = S.label(svg, 610, 330, 'String', { cls: 't-xs t-mono t-b t-d', box: 'f-sf s-d w15' });
+      op(st.tok, 0);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state, mk = st.mk;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['Browser::new() → Rc<RefCell<Browser>>（Page を 1 つ持つ）', 'WasabiUI::new(browser) → 窓 600×400 を開く → Rc<RefCell<…>> に包む', 'start の run_app は loop を抜けないので、戻るのは Err のとき → println! して 1', 'entry_point!(main)：noli が本当の入口を作り、main を呼ぶ'],
+        ['Page::new() → page（まだ Browser を知らない）', 'Rc::new(RefCell::new(Browser { active_page_index: 0, pages: [] }))', 'Rc::downgrade(&browser) → Weak<RefCell<Browser>> → page.set_browser(…)', 'pages.push(Rc::new(RefCell::new(page)))：強い参照は Browser → Page の向きだけ'],
+        ['WasabiUI::new(browser)：Rc を欄 browser に移す（持ち主の数は 1 のまま）', 'Window::new("saba", WHITE, x, y, 600, 400).unwrap() → 窓', 'Rc::new(RefCell::new(ui)) → ui。borrow_mut() で &mut WasabiUI を取る', 'RefCell は借りる権利を実行時に数える（第33章 場面2）'],
+        ['型 fn(String) -> Result<HttpResponse, Error>：関数ポインタ', 'main.rs 19 の handle_url はこの型に合う → 名前をそのまま値として渡せる', 'ui/wasabi/Cargo.toml に net_wasabi は無い。UI は型だけを知る', 'クロージャ（第30章 場面5）と違い、外の変数を捕まえない関数の値'],
+        ['ツールバーを押す → input_mode ＝ Editing、input_url ＝ ""', 'Api::read_key() → \'h\' \'t\' \'t\' \'p\' … を 1 文字ずつ input_url.push(c)', 'Enter（0x0A）→ start_navigation(handle_url, input_url.clone())', 'handle_url("http://host.test:8000/test.html") ← String が入る'],
+        ['Url::new(url.to_string()).parse() → Ok(Url) か Err(String)（場面3・4）', 'client.get(host, 8000, path) → Ok(HttpResponse) か Err(Error)（場面5）', 'status_code() == 302 なら Location を見る（場面6）→ Ok(response)', 'UI: page.borrow_mut().receive_response(response) → 第32章へ']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 352, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+      const on = (r, yes) => r.setAttribute('class', yes ? 'f-sf s-x w2' : 'f-sf s-rule w1');
+      on(st.bOuter, i <= 1); on(st.pOuter, i === 1); on(st.uOuter, i === 0 || i === 2 || i === 4); lit(st.hBox, i === 0 || i === 3 || i === 5);
+      st.weakArrow.setAttribute('class', i === 1 ? 'f-none s-x w2 dash' : 'f-none s-dim w15 dash'); st.weakArrow.setAttribute('marker-end', mk(i === 1 ? 'x' : 'dim'));
+      st.rcArrow.setAttribute('class', i === 1 ? 'f-none s-x w2' : 'f-none s-fg w2'); st.rcArrow.setAttribute('marker-end', mk(i === 1 ? 'x' : 'fg'));
+      st.uiToB.setAttribute('class', i === 2 ? 'f-none s-x w2' : 'f-none s-fg w15'); st.uiToB.setAttribute('marker-end', mk(i === 2 ? 'x' : 'fg'));
+      st.startArrow.setAttribute('class', i === 3 ? 'f-none s-x w2' : 'f-none s-fg w15'); st.startArrow.setAttribute('marker-end', mk(i === 3 ? 'x' : 'fg'));
+      st.startLbl.setAttribute('class', i === 3 ? 't-c t-xs t-mono t-x t-b' : 't-c t-xs t-mono');
+      S.fade(st.sig, i >= 3);
+      S.fade(st.gf, i >= 4);
+      op(st.gw, i === 2 || i >= 4 ? '' : 0.45);
+      op(st.g, i === 4 ? 0.6 : '');
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      let typed = i >= 5 ? URL0.length : 0, mode = i >= 4 ? 'Normal' : 'Normal', enter = false, tokF = -1, phase = -1;
+      if (i === 4) {
+        // 6.4 秒で 1 周: 0.6 秒で押す → 0.1 秒に 1 文字 → Enter → 札が handle_url へ。止めている人には札が着いた姿
+        const tt = playing() ? U.mod(ctx.ts, 6.4) : 5.6;
+        if (tt < 0.6) { phase = 0; mode = 'Normal'; }
+        else if (tt < 3.7) { phase = 1; mode = 'Editing'; typed = Math.min(URL0.length, Math.floor((tt - 0.6) / 0.1)); }
+        else if (tt < 4.3) { phase = 2; mode = 'Editing'; typed = URL0.length; enter = true; }
+        // handle_url の間は Editing のまま。input_url と mode を戻すのは start_navigation が戻ってから（app.rs 157・158）
+        else { phase = 3; mode = 'Editing'; typed = URL0.length; tokF = U.prog(tt, 4.3, 1.2); }
+      }
+      st.abarT.textContent = URL0.slice(0, typed);
+      st.abar.setAttribute('class', phase === 0 || phase === 1 || phase === 2 ? 'f-sf s-x w15' : 'f-sf s-rule w1');
+      const cx = 503 + typed * 6.0;
+      S.attrs(st.caret, { x: cx });
+      st.caret.style.display = phase === 1 || phase === 2 ? '' : 'none';
+      op(st.enterTag, enter ? 1 : 0);
+      st.modeT.textContent = i >= 4 ? 'input_mode ＝ ' + mode : '';
+      st.inputT.textContent = i >= 4 ? 'input_url ＝ "' + (i === 5 ? '' : URL0.slice(0, typed)) + '"' + (i === 5 ? '（遷移が済んでから空に戻す）' : '') : '';
+      if (tokF >= 0) { S.place(st.tok, st.tokPath, tokF); op(st.tok, 1); } else op(st.tok, 0);
+      // 流れの一覧: 段階5 は①〜④、段階6 は④〜⑤を順に
+      let k = -1;
+      if (i === 4) k = phase === 0 ? 0 : phase === 1 ? 1 : phase === 2 ? 2 : 3;
+      if (i === 5) k = playing() ? 3 + Math.floor(U.mod(ctx.ts, 6) / 1.2) : -2;
+      st.flowT.forEach((t, j) => {
+        let cls = 't-xs';
+        if (i === 5 && k === -2 && j >= 3 && j <= 7) cls = 't-xs t-b t-x';
+        else if (j === k) cls = 't-xs t-b t-x';
+        else if (i === 4 && j > 3) cls = 't-xs t-dim';
+        else if (i === 5 && (j < 3 || j > 7)) cls = 't-xs t-dim';
+        t.setAttribute('class', cls);
+      });
+    }
+  };
+
+  /* ================================================================
+     場面3 URL を分解する
+     url.rs 5〜60・110〜121・124〜206。例: "http://host.test:8000/test.html"（31 文字）→ trim の後は 24 文字、
+     find(':') ＝ Some(9)、"/" は 14 文字め。URL Standard の部品の名前は url.spec.whatwg.org の basic URL parser から
+     ================================================================ */
+  const TRIM = 'host.test:8000/test.html';
+  const s3 = {
+    steps: [
+      { title: 'struct Url：5 つの String', text: '`Url` は `url`・`host`・`port`・`path`・`searchpart` の 5 つの `String` を持つ。`new(url)` は url だけを入れ、残りは `"".to_string()` の空文字列。**String** はヒープに置いた文字列の持ち主。欄は `host()` などが `clone()` した写しで返す。' },
+      { title: 'parse：http:// でなければ Err', text: '`parse` は `is_http()`、中身は `self.url.contains("http://")`。無ければ `Err("Only HTTP scheme is supported.")` で、https も止まる。通れば 4 つの extract_* で欄を埋め、`Ok(self.clone())` で写しを返す。' },
+      { title: 'extract_host ①：http:// を落とし、/ で 2 つに', text: '`trim_start_matches("http://")` で頭の 7 文字を落とし、`splitn(2, "/")` で最初の `/` の前後に分け、`collect()` で `Vec<&str>` にする。**&str** は String の中を借りた断片で、文字を写さずに元を指す。2 つの断片は self.url の中にある。' },
+      { title: 'extract_host ②：: を探して手前を取る', text: '`find(\':\')` は最初の `:` の位置を `Option<usize>` で返し、ここでは `Some(9)`。`if let Some(index)` で受け、`[..index]` で手前の `"host.test"` を切り、`to_string()` で String に写す。`:` が無ければ全部が host。' },
+      { title: 'URL Standard との距離', text: 'URL Standard のパーサは状態機械で、scheme・host・port・path・query・fragment を出す。saba は `http://` を落として `/`・`:`・`?` で切るだけで、`#` も区切らない。例の URL では port の型と、path を文字列にした pathname の先頭の `/` が違う。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'saba_core/src/url.rs（詰めた）'],
+        [6, 'pub struct Url {'],
+        [7, '    url: String,'],
+        [8, '    host: String,'],
+        [9, '    port: String,'],
+        [10, '    path: String,'],
+        [11, '    searchpart: String,'],
+        [12, '}'],
+        [14, 'impl Url {'],
+        [15, '    pub fn new(url: String) -> Self {'],
+        [16, '        Self {'],
+        [17, '            url,'],
+        [18, '            host: "".to_string(),'],
+        [19, '            port: "".to_string(),'],
+        [20, '            path: "".to_string(),'],
+        [21, '            searchpart: "".to_string(),'],
+        [22, '        }'],
+        [23, '    }'],
+        [25, '    pub fn host(&self) -> String { self.host.clone() }']
+      ]).hl(1, 7);
+      panel([
+        ['', 'saba_core/src/url.rs'],
+        [41, '    fn is_http(&self) -> bool {'],
+        [42, '        if self.url.contains("http://") {'],
+        [43, '            return true;'],
+        [44, '        }'],
+        [45, '        false'],
+        [46, '    }'],
+        [110, '    pub fn parse(&mut self) -> Result<Self, String> {'],
+        [111, '        if !self.is_http() {'],
+        [112, '            return Err("Only HTTP scheme is supported."'],
+        [null, '                       .to_string());'],
+        [113, '        }'],
+        [115, '        self.host = self.extract_host();'],
+        [116, '        self.port = self.extract_port();'],
+        [117, '        self.path = self.extract_path();'],
+        [118, '        self.searchpart = self.extract_searchpart();'],
+        [120, '        Ok(self.clone())'],
+        [121, '    }']
+      ]).hl(7, 11);
+      panel([
+        ['', 'saba_core/src/url.rs'],
+        [48, '    fn extract_host(&self) -> String {'],
+        [49, '        let url_parts: Vec<&str> = self'],
+        [50, '            .url'],
+        [51, '            .trim_start_matches("http://")'],
+        [52, '            .splitn(2, "/")'],
+        [53, '            .collect();'],
+        [55, '        if let Some(index) = url_parts[0].find(\':\') {'],
+        [56, '            url_parts[0][..index].to_string()'],
+        [57, '        } else {'],
+        [58, '            url_parts[0].to_string()'],
+        [59, '        }'],
+        [60, '    }'],
+        ['', 'Rust の std の文書から'],
+        ['', 'str::trim_start_matches(pat)：先頭から pat に合う部分を繰り返し取り除く'],
+        ['', 'str::splitn(n, pat)：pat で切るが最大 n 個まで。最後の 1 つに残り全部が入る'],
+        ['', 'Iterator::collect()：反復子の中身を Vec などの入れ物に集める']
+      ]).hl(2, 6);
+      panel([
+        ['', 'saba_core/src/url.rs'],
+        [55, '        if let Some(index) = url_parts[0].find(\':\') {'],
+        [56, '            url_parts[0][..index].to_string()'],
+        [57, '        } else {'],
+        [58, '            url_parts[0].to_string()'],
+        [59, '        }'],
+        ['', 'Rust の std の文書から'],
+        ['', 'str::find(pat) -> Option<usize>：最初に合う位置（バイト単位）。無ければ None'],
+        ['', 's[..index]：先頭から index の手前までの &str（文字の境でなければ panic）'],
+        ['', 'str::to_string()：&str を写して新しい String を作る'],
+        ['', 'if let Some(x) = … { } else { }：Option の中身がある時だけ x を使う']
+      ]).hl(1, 2);
+      panel([
+        ['', 'URL Standard「basic URL parser」の状態（抜粋。url.spec.whatwg.org）'],
+        ['', 'scheme start → scheme → … → authority → host → port'],
+        ['', '→ path start → path → query → fragment（全部で 21 の状態。2026 年 11 月時点）'],
+        ['', '1 文字ずつ読んで状態を移る。第32章の HTML トークナイザと同じ作り'],
+        ['', 'special scheme の表：http の既定のポートは 80'],
+        ['', 'saba_core/src/url.rs（parse の本体）'],
+        [115, '        self.host = self.extract_host();'],
+        [116, '        self.port = self.extract_port();'],
+        [117, '        self.path = self.extract_path();'],
+        [118, '        self.searchpart = self.extract_searchpart();'],
+        ['', '4 つの関数がそれぞれ "http://" を落とし、"/"・":"・"?" で切る（場面4）']
+      ]).hl(6, 9);
+      st.tr = S.g({}, svg);
+      const g = st.g = S.g({}, svg);
+      // 上: self.url の 31 文字
+      S.text(490, 40, 'self.url：String（31 文字）', { cls: 't-xs t-dim' }, g);
+      st.rowA = charRow(g, 496, 48, URL0, 14, 22);
+      const X = st.rowA.X;
+      st.legend5 = S.text(944, 40, 'URL Standard の部品（破線）／saba の切り方（実線）', { cls: 't-end t-xs t-dim fade hide' }, g);
+      // 段階2: is_http と、通らない例
+      const g2 = st.g2 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 100, 'is_http()：self.url.contains("http://") → true（先頭の 7 文字が合う）', { cls: 't-xs' }, g2);
+      S.text(490, 122, '"example.com" → false → Err（test_no_scheme、url.rs 194〜198）', { cls: 't-xs t-dim' }, g2);
+      S.text(490, 140, '"https://example.com:8888/index.html" → false → Err（test_unsupported_scheme、201〜205）', { cls: 't-xs t-dim' }, g2);
+      // 段階5: URL Standard の部品と saba の切り方
+      const g5 = st.g5 = S.g({ cls: 'fade hide' }, svg);
+      const D = 's-dim w15 dash';
+      bracket(g5, X(0), X(4), 76, 'scheme "http"', D, 't-dim'); bracket(g5, X(7), X(16), 76, 'host "host.test"', D, 't-dim'); bracket(g5, X(17), X(21), 76, 'port 8000', D, 't-dim'); bracket(g5, X(21), X(31), 76, 'pathname "/test.html"', D, 't-dim');
+      bracket(g5, X(0), X(7), 104, '落とす'); bracket(g5, X(7), X(21), 104, 'url_parts[0] → host と port'); bracket(g5, X(22), X(31), 104, 'url_parts[1] → "test.html"');
+      S.text(490, 142, 'path の先頭の / が saba には無い（場面5 で "GET /" に続けて補う）', { cls: 't-xs t-x' }, g5);
+      // 中: trim の後の 24 文字
+      const gB = st.gB = S.g({}, svg);
+      S.text(490, 168, 'trim_start_matches の結果（24 文字の &str）', { cls: 't-xs t-dim' }, gB);
+      st.findLbl = S.text(944, 168, '', { cls: 't-end t-xs t-mono t-x t-b' }, gB);
+      st.rowB = charRow(gB, 496, 176, TRIM, 14, 22);
+      const XB = st.rowB.X;
+      TRIM.split('').forEach((_, k) => S.text(XB(k) + 7, 212, String(k), { cls: 't-c t-xs t-mono t-dim' }, gB));
+      st.scan = S.rect(496, 176, 14, 22, { cls: 'f-none s-x w2', style: { display: 'none' } }, gB);
+      // 段階3: 括弧と Vec<&str>
+      const g3 = st.g3 = S.g({ cls: 'fade hide' }, svg);
+      bracket(g3, XB(0), XB(14), 222, 'url_parts[0]（14 文字）'); bracket(g3, XB(15), XB(24), 222, 'url_parts[1]（9 文字）');
+      S.rect(490, 254, 454, 58, { rx: 5, cls: 'f-sf s-rule w1' }, g3);
+      S.text(498, 270, 'url_parts: Vec<&str>（collect() の結果。文字は写していない）', { cls: 't-xs t-b' }, g3);
+      S.text(498, 288, '[0] &str { 先頭 0, 長さ 14 } → "host.test:8000"', { cls: 't-xs t-mono' }, g3);
+      S.text(498, 304, '[1] &str { 先頭 15, 長さ 9 } → "test.html"', { cls: 't-xs t-mono' }, g3);
+      // 段階4: [..9] と to_string
+      const g4 = st.g4 = S.g({ cls: 'fade hide' }, svg);
+      bracket(g4, XB(0), XB(9), 222, '[..9] → "host.test"（&str）');
+      S.rect(490, 254, 310, 30, { rx: 5, cls: 'f-d-soft s-d w15' }, g4);
+      S.text(500, 273, '.to_string() → String "host.test"（新しい持ち主）', { cls: 't-xs t-mono t-b t-d' }, g4);
+      S.path('M645,286 V326', { cls: 'f-none s-d w2', 'marker-end': mk('d') }, g4);
+      // 下: Url の欄
+      S.rect(490, 328, 454, 120, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      S.text(498, 344, 'Url（self。parse が欄を埋める）', { cls: 't-xs t-b' }, g);
+      st.fields = [['url', '"http://host.test:8000/test.html"'], ['host', '""'], ['port', '""'], ['path', '""'], ['searchpart', '""']].map(([n, v], k) => {
+        const y = 362 + k * 17;
+        S.text(498, y, n + ':', { cls: 't-xs t-mono' }, g);
+        return S.text(580, y, v, { cls: 't-xs t-mono pre' }, g);
+      });
+      // &str と String（段階3・4）
+      const gs = st.gs = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 472, 'String：ヒープの文字列の持ち主（先頭の位置・長さ・容量）。持ち主が消えると解放される', { cls: 't-xs' }, gs);
+      S.text(490, 490, '&str：借りた断片（先頭の位置・長さ）。持ち主より長生きできない', { cls: 't-xs' }, gs);
+      S.text(490, 508, 'to_string()・clone()：写して新しい String を作る。Url の欄はこの写しを持つ', { cls: 't-xs' }, gs);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['Url::new("http://host.test:8000/test.html")', 'url ＝ "http://host.test:8000/test.html"（31 文字。String）', 'host ＝ ""、port ＝ ""、path ＝ ""、searchpart ＝ ""', 'host() などは self.host.clone() → 写しを返す（中の String は貸さない）'],
+        ['is_http()：url.contains("http://") ＝ true', '"example.com".contains("http://") ＝ false → Err（test_no_scheme）', '"https://example.com:8888/index.html" も false → Err（test_unsupported_scheme）', 'Err("Only HTTP scheme is supported.") → main.rs が Error::UnexpectedInput に包む'],
+        ['trim_start_matches("http://") → "host.test:8000/test.html"（24 文字の &str）', 'splitn(2, "/") → 最初の "/" で 2 つまで → ["host.test:8000", "test.html"]', 'collect() → Vec<&str>：2 つの断片。どちらも self.url の中を指す', '&str ＝ 先頭の位置と長さ（0, 14）と（15, 9）。文字は写さない'],
+        ['url_parts[0] ＝ "host.test:8000"　.find(\':\') ＝ Some(9)', 'url_parts[0][..9] ＝ "host.test"（&str。0 から 9 の手前まで）', '.to_string() → String "host.test" → self.host に入る', '":" が無ければ url_parts[0].to_string() が丸ごと host'],
+        ['URL Standard：scheme "http"、host "host.test"、port 8000、pathname "/test.html"', 'saba：host "host.test"、port "8000"（文字列）、path "test.html"（場面4）', 'path の先頭の "/" が無い。場面5 で "GET /" に続けて補う', 'fragment（#…）・https・パーセント符号化はこの版に無い']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 360, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);   // 段階1 の板は 19 行で y 342 まで
+      S.fade(st.g2, i === 1); S.fade(st.g5, i === 4); S.fade(st.legend5, i === 4); S.fade(st.g3, i === 2); S.fade(st.g4, i === 3); S.fade(st.gs, i === 2 || i === 3);
+      st.g3.style.opacity = ''; st.g4.style.opacity = '';
+      st.rowA.cells.forEach((c, k) => {
+        c.r.setAttribute('class', (i === 1 && k < 7) ? 'f-x-soft s-x w15' : (i >= 2 && i <= 3 && k < 7) ? 'f-in s-rule w1' : 'f-sf s-rule w1');
+        c.t.setAttribute('class', 't-c t-xs t-mono pre' + (i >= 2 && i <= 3 && k < 7 ? ' t-dim' : ''));
+      });
+      op(st.gB, i >= 2 ? '' : 0.35);
+      st.rowB.cells.forEach((c) => c.r.setAttribute('class', 'f-sf s-rule w1'));
+      st.scan.style.display = 'none';
+      st.findLbl.textContent = '';
+      st.fields[1].textContent = i >= 3 ? '"host.test"' : '""';
+      st.fields[1].setAttribute('class', 't-xs t-mono pre' + (i === 3 ? ' t-d t-b' : ''));
+      st.fields[2].textContent = i === 4 ? '"8000"（場面4）' : '""';
+      st.fields[3].textContent = i === 4 ? '"test.html"（場面4）' : '""';
+      st.fields[4].textContent = i === 4 ? '""（場面4）' : '""';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      if (i !== 2 && i !== 3) return;
+      // 段階3 は "/"（添字 14）、段階4 は ":"（添字 9）を 0.15 秒に 1 文字ずつ探す。5 秒で 1 周。止めている人には見つけた後の姿
+      const target = i === 2 ? 14 : 9;
+      const tt = playing() ? U.mod(ctx.ts, 5) : 4.5;
+      const k = Math.min(target, Math.floor(tt / 0.15));
+      const found = tt >= target * 0.15 + 0.3;
+      st.scan.style.display = found ? 'none' : '';
+      S.attrs(st.scan, { x: st.rowB.X(k) });
+      st.rowB.cells.forEach((c, j) => {
+        let cls = 'f-sf s-rule w1';
+        if (found && j === target) cls = 'f-x-soft s-x w15';
+        else if (found && (i === 2 || j < target)) cls = 'f-d-soft s-rule w1';
+        c.r.setAttribute('class', cls);
+      });
+      (i === 2 ? st.g3 : st.g4).style.opacity = found ? '' : 0;
+      st.findLbl.textContent = i === 2 ? (found ? 'splitn(2, "/")：[14] の "/" で切る' : 'splitn(2, "/")：最初の "/" を探す') : (found ? 'find(\':\') ＝ Some(9)' : 'find(\':\')：[' + k + '] を見る');
+    }
+  };
+
+  /* ================================================================
+     場面4 port・path・searchpart と Result
+     url.rs 62〜108・124〜206、main.rs 19〜40。8000 ＝ 0x1F40 ＝ 0001 1111 0100 0000。
+     テストの入力と期待値は url.rs 128〜205 のとおり
+     ================================================================ */
+  const QEX = 'index.html?a=123&b=456';   // test_url_host_port_path_searchpart（180〜191 行）の url_parts[1]
+  const TESTS = [
+    ['test_url_host', 'http://example.com', '"example.com" ／ "80" ／ "" ／ ""'],
+    ['test_url_host_port', 'http://example.com:8888', '"example.com" ／ "8888" ／ "" ／ ""'],
+    ['test_url_host_port_path', 'http://example.com:8888/index.html', '"example.com" ／ "8888" ／ "index.html" ／ ""'],
+    ['test_url_host_path', 'http://example.com/index.html', '"example.com" ／ "80" ／ "index.html" ／ ""'],
+    ['test_url_host_port_path_searchpart', 'http://example.com:8888/index.html?a=123&b=456', '"example.com" ／ "8888" ／ "index.html" ／ "a=123&b=456"'],
+    ['test_no_scheme', 'example.com', 'Err("Only HTTP scheme is supported.")'],
+    ['test_unsupported_scheme', 'https://example.com:8888/index.html', 'Err("Only HTTP scheme is supported.")']
+  ];
+  const s4 = {
+    steps: [
+      { title: 'extract_port：: の後ろ、無ければ "80"', text: '`extract_port` も同じ 5 行で `url_parts` を作り、`find(\':\')` が `Some(index)` なら `[index + 1..]`（`:` の次から末尾まで）を取る。例では `"8000"`。`:` が無ければ `"80".to_string()`。**文字列のまま**で、Url の欄 port も String。' },
+      { title: 'port を u16 にするのは main.rs', text: '`client.get` の port は `u16`。main.rs は `parsed_url.port().parse::<u16>()` で `"8000"` を数 8000 にする。`parse` は `Result` を返し、`expect` は `Err` なら書いた文面で止まる（panic）。' },
+      { title: 'extract_path：/ の後ろを ? で切った前', text: '`url_parts.len() < 2`（`/` が無い）なら path は `""`。あれば `url_parts[1]` を `splitn(2, "?")` で切り、前が path。例は `"test.html"` で、**先頭の `/` は含まない**。URL Standard の pathname `"/test.html"` と 1 文字違う。' },
+      { title: 'extract_searchpart：? の後ろ', text: '同じ `splitn(2, "?")` の後ろが searchpart。`?` が無ければ `len() < 2` で `""`。例では空。テストの `"index.html?a=123&b=456"` なら `"a=123&b=456"` が丸ごと入り、`&` や `=` では切らない（[[10-browser.html#s1.2|第10章 場面1]]のクエリ）。' },
+      { title: '7 つのテストが挙動を固定する', text: '`#[cfg(test)] mod tests` は `cargo test` のときだけコンパイルされる。7 つの `#[test]` が `assert_eq!(expected, Url::new(url).parse())` で期待値と比べる。この章の値はこの期待値と突き合わせた（テストは走らせていない）。' },
+      { title: 'Result<Self, String> を境界で Error に包み直す', text: '`parse` の `Result<Self, String>` を main.rs は `match` で受け、`Err(e)` なら `Error::UnexpectedInput(…)` に包み直して `return` する。外から来た文字列を入口で Url に変え、失敗をそこで返す形は[[29-imi.html#s5.2|第29章 場面5]]の「入口でパース」に当たる。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'saba_core/src/url.rs'],
+        [77, '    fn extract_port(&self) -> String {'],
+        [78, '        let url_parts: Vec<&str> = self'],
+        [79, '            .url'],
+        [80, '            .trim_start_matches("http://")'],
+        [81, '            .splitn(2, "/")'],
+        [82, '            .collect();'],
+        [84, '        if let Some(index) = url_parts[0].find(\':\') {'],
+        [85, '            url_parts[0][index + 1..].to_string()'],
+        [86, '        } else {'],
+        [87, '            "80".to_string()'],
+        [88, '        }'],
+        [89, '    }'],
+        ['', 'Rust の std の文書から'],
+        ['', 's[index + 1..]：index + 1 から末尾までの &str'],
+        ['', '"80".to_string()：文字列リテラル（&\'static str）から String を作る']
+      ]).hl(7, 11);
+      panel([
+        ['', 'src/main.rs'],
+        [32, '    let client = HttpClient::new();'],
+        [33, '    let response = match client.get('],
+        [34, '        parsed_url.host(),'],
+        [35, '        parsed_url.port().parse::<u16>().expect(&format!('],
+        [36, '            "port number should be u16 but got {}",'],
+        [37, '            parsed_url.port()'],
+        [38, '        )),'],
+        [39, '        parsed_url.path(),'],
+        [40, '    ) {'],
+        ['', 'net/wasabi/src/http.rs 19（受け取る側の型）'],
+        [19, 'pub fn get(&self, host: String, port: u16, path: String)'],
+        [null, '    -> Result<HttpResponse, Error> {'],
+        ['', 'Rust の std の文書から'],
+        ['', 'str::parse::<T>()：FromStr を実装する T に変換。Result<T, T::Err>'],
+        ['', 'u16：0〜65,535。"8000" → Ok(8000)、"abc"・"70000" → Err'],
+        ['', 'Result::expect(msg)：Ok なら中身、Err なら msg を出して panic']
+      ]).hl(4, 7);
+      panel([
+        ['', 'saba_core/src/url.rs'],
+        [62, '    fn extract_path(&self) -> String {'],
+        [63, '        let url_parts: Vec<&str> = self'],
+        [64, '            .url'],
+        [65, '            .trim_start_matches("http://")'],
+        [66, '            .splitn(2, "/")'],
+        [67, '            .collect();'],
+        [69, '        if url_parts.len() < 2 {'],
+        [70, '            return "".to_string();'],
+        [71, '        }'],
+        [73, '        let path_and_searchpart: Vec<&str> ='],
+        [null, '            url_parts[1].splitn(2, "?").collect();'],
+        [74, '        path_and_searchpart[0].to_string() // (d3)'],
+        [75, '    }']
+      ]).hl(7, 12);
+      panel([
+        ['', 'saba_core/src/url.rs'],
+        [91, '    fn extract_searchpart(&self) -> String {'],
+        [92, '        let url_parts: Vec<&str> = self'],
+        [93, '            .url'],
+        [94, '            .trim_start_matches("http://")'],
+        [95, '            .splitn(2, "/")'],
+        [96, '            .collect();'],
+        [98, '        if url_parts.len() < 2 {'],
+        [99, '            return "".to_string();'],
+        [100, '        }'],
+        [102, '        let path_and_searchpart: Vec<&str> ='],
+        [null, '            url_parts[1].splitn(2, "?").collect();'],
+        [103, '        if path_and_searchpart.len() < 2 {'],
+        [104, '            "".to_string()'],
+        [105, '        } else {'],
+        [106, '            path_and_searchpart[1].to_string()'],
+        [107, '        }'],
+        [108, '    }']
+      ]).hl(10, 16);
+      panel([
+        ['', 'saba_core/src/url.rs（テスト。詰めた）'],
+        [124, '#[cfg(test)]'],
+        [125, 'mod tests {'],
+        [126, '    use super::*;'],
+        [128, '    #[test]'],
+        [129, '    fn test_url_host() {'],
+        [130, '        let url = "http://example.com".to_string();'],
+        [131, '        let expected = Ok(Url {'],
+        [132, '            url: url.clone(),'],
+        [133, '            host: "example.com".to_string(),'],
+        [134, '            port: "80".to_string(),'],
+        [135, '            path: "".to_string(),'],
+        [136, '            searchpart: "".to_string(),'],
+        [137, '        });'],
+        [138, '        assert_eq!(expected, Url::new(url).parse());'],
+        [139, '    }'],
+        [200, '    #[test]'],
+        [201, '    fn test_unsupported_scheme() { … }   // https → Err']
+      ]).hl(4, 15);
+      panel([
+        ['', 'src/main.rs（詰めた）'],
+        [19, 'fn handle_url(url: String) -> Result<HttpResponse, Error> {'],
+        [20, '  // URLを解釈する'],
+        [21, '  let parsed_url = match Url::new(url.to_string()).parse() {'],
+        [22, '    Ok(url) => url,'],
+        [23, '    Err(e) => {'],
+        [24, '      return Err(Error::UnexpectedInput(format!('],
+        [25, '        "input html is not supported: {:?}",'],
+        [26, '        e'],
+        [27, '      )));'],
+        [28, '    }'],
+        [29, '  };'],
+        ['', 'saba_core/src/error.rs（全 9 行）'],
+        [3, '#[derive(Debug, Clone, PartialEq, Eq)]'],
+        [4, 'pub enum Error {'],
+        [5, '    Network(String),'],
+        [6, '    UnexpectedInput(String),'],
+        [7, '    InvalidUI(String),'],
+        [8, '    Other(String),']
+      ]).hl(3, 11);
+      st.tr = S.g({}, svg);
+      const g = st.g = S.g({}, svg);
+      // 上: trim の後の 24 文字
+      S.text(490, 40, 'trim_start_matches の結果（24 文字）', { cls: 't-xs t-dim' }, g);
+      st.lbl = S.text(944, 40, '', { cls: 't-end t-xs t-mono t-x t-b' }, g);
+      st.rowB = charRow(g, 496, 48, TRIM, 14, 22);
+      const XB = st.rowB.X;
+      TRIM.split('').forEach((_, k) => S.text(XB(k) + 7, 84, String(k), { cls: 't-c t-xs t-mono t-dim' }, g));
+      st.scan = S.rect(496, 48, 14, 22, { cls: 'f-none s-x w2', style: { display: 'none' } }, g);
+      st.br1 = bracket(g, XB(10), XB(14), 92, '[index + 1..] → "8000" → port'); st.br1.setAttribute('class', 'fade hide');
+      st.br3 = bracket(g, XB(15), XB(24), 92, 'url_parts[1] → splitn(2, "?") → ["test.html"] → path'); st.br3.setAttribute('class', 'fade hide');
+      st.br4 = bracket(g, XB(15), XB(24), 92, '"?" が無い → len() ＝ 1 < 2 → searchpart ＝ ""'); st.br4.setAttribute('class', 'fade hide');
+      // 段階4: テストの例の 22 文字
+      const g4 = st.g4 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 136, 'テストの例（url.rs 182）の url_parts[1]：22 文字。& や = では切らない', { cls: 't-xs t-dim' }, g4);
+      st.rowQ = charRow(g4, 496, 144, QEX, 14, 22);
+      const XQ = st.rowQ.X;
+      st.scanQ = S.rect(496, 144, 14, 22, { cls: 'f-none s-x w2', style: { display: 'none' } }, g4);
+      st.brQ = S.g({}, g4);
+      bracket(st.brQ, XQ(0), XQ(10), 172, 'path "index.html"'); bracket(st.brQ, XQ(11), XQ(22), 172, 'searchpart "a=123&b=456"');
+      // 段階2: "8000" → 8000
+      const g2 = st.g2 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 130, 'main.rs 35：parsed_url.port().parse::<u16>().expect(…)', { cls: 't-sm t-b' }, g2);
+      const bA = box(g2, 490, 146, 150, 40, '"8000"', 'String（4 文字）', 'f-d-soft s-d w15', 't-sm t-mono t-b t-d');
+      S.path('M640,166 H686', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g2);
+      S.text(663, 158, 'parse', { cls: 't-c t-xs t-mono' }, g2);
+      const bB = box(g2, 688, 146, 110, 40, 'Ok(8000)', 'Result<u16, _>', 'f-sf s-rule w1', 't-sm t-mono t-b');
+      S.path('M798,166 H836', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g2);
+      S.text(817, 158, 'expect', { cls: 't-c t-xs t-mono' }, g2);
+      const bC = box(g2, 838, 146, 106, 40, '8000', 'u16（2 バイト）', 'f-d-soft s-d w15', 't-sm t-mono t-b t-d');
+      void bA; void bB; void bC;
+      S.text(490, 212, '8000 ＝ 0x1F40 ＝ 0001 1111 0100 0000　→ client.get(host, 8000, path) の port', { cls: 't-xs t-mono' }, g2);
+      S.text(490, 236, 'Err の中は ParseIntError。kind は "abc" → InvalidDigit、"70000" → PosOverflow、"" → Empty', { cls: 't-xs' }, g2);
+      S.text(490, 256, '→ expect が "port number should be u16 but got …" を出して止まる（panic）', { cls: 't-xs t-x' }, g2);
+      S.text(490, 280, 'port を String のまま持ち、数が要る所で直す。URL Standard の URL は port を数（か null）で持つ', { cls: 't-xs t-dim' }, g2);
+      // 段階5: 7 つのテスト
+      const g5 = st.g5 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 130, 'url.rs 128〜205 の 7 つのテスト：入力 → 期待（host ／ port ／ path ／ searchpart）', { cls: 't-sm t-b' }, g5);
+      TESTS.forEach(([name, input, out], k) => {
+        const y = 152 + k * 38;
+        S.text(490, y, (k + 1) + '. "' + input + '"', { cls: 't-xs t-mono' }, g5);
+        S.text(944, y, name, { cls: 't-end t-xs t-dim', style: { display: k === 4 ? 'none' : '' } }, g5);
+        S.text(506, y + 15, '→ ' + out, { cls: 't-xs t-mono' + (k >= 5 ? ' t-x' : '') }, g5);
+      });
+      // 段階6: Result の流れ
+      const g6 = st.g6 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 130, 'main.rs 21〜29：Result<Url, String> を match で受ける', { cls: 't-sm t-b' }, g6);
+      const bP = box(g6, 490, 146, 190, 44, 'Url::new(url).parse()', 'Result<Url, String>');
+      const bOk = box(g6, 720, 140, 224, 36, 'Ok(url) → parsed_url: Url', 'host・port・path・searchpart', 'f-d-soft s-d w15', 't-sm t-mono t-b t-d');
+      const bErr = box(g6, 720, 196, 224, 44, 'Err(e) → Error::UnexpectedInput(…)', '"input html is not supported: …"', 'f-x-soft s-x w15', 't-xs t-mono t-b t-x');
+      S.path('M680,160 H718', { cls: 'f-none s-d w2', 'marker-end': mk('d') }, g6);
+      S.path('M680,176 L718,214', { cls: 'f-none s-x w2', 'marker-end': mk('x') }, g6);
+      S.path('M832,240 V262', { cls: 'f-none s-x w2', 'marker-end': mk('x') }, g6);
+      const bRet = box(g6, 720, 264, 224, 44, 'return Err → start → main', 'println!("browser fails to start …")、1', 'f-sf s-rule w1', 't-xs t-mono t-b');
+      void bP; void bOk; void bErr; void bRet;
+      S.text(490, 232, '文字列の誤り（String）を、', { cls: 't-xs' }, g6);
+      S.text(490, 248, 'プログラム共通の enum Error に包み直す。', { cls: 't-xs' }, g6);
+      S.text(490, 264, '呼び手が扱うのは Error の 4 種だけ：', { cls: 't-xs' }, g6);
+      S.text(490, 280, 'Network／UnexpectedInput', { cls: 't-xs t-mono' }, g6);
+      S.text(490, 296, 'InvalidUI／Other（error.rs）', { cls: 't-xs t-mono' }, g6);
+      S.text(490, 334, '第29章 場面5 との差：Url の port は String のままで、数かどうかは', { cls: 't-xs t-dim' }, g6);
+      S.text(490, 350, '型が保証しない。u16 にする失敗は段階2 の expect で止まる', { cls: 't-xs t-dim' }, g6);
+      // 下: Url の欄
+      S.rect(490, 424, 454, 112, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      S.text(498, 440, 'Url（self。parse が欄を埋める）', { cls: 't-xs t-b' }, g);
+      st.fields = [['url', '"http://host.test:8000/test.html"'], ['host', '"host.test"'], ['port', '""'], ['path', '""'], ['searchpart', '""']].map(([n, v], k) => {
+        const y = 457 + k * 17;
+        S.text(498, y, n + ':', { cls: 't-xs t-mono' }, g);
+        return S.text(580, y, v, { cls: 't-xs t-mono pre' }, g);
+      });
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['url_parts[0] ＝ "host.test:8000"　find(\':\') ＝ Some(9)', 'url_parts[0][10..] ＝ "8000"（&str）→ to_string() → port ＝ "8000"', '":" が無ければ "80".to_string()（test_url_host の期待値は "80"）', 'port は String のまま。数に直すのは呼ぶ側（次の段階）'],
+        ['"8000".parse::<u16>() ＝ Ok(8000)　→ expect → 8000: u16', '8000 ＝ 0x1F40 ＝ 0001 1111 0100 0000（2 バイト）', 'ParseIntError の kind："abc" → InvalidDigit、"70000" → PosOverflow、"" → Empty', 'Err なら expect が "port number should be u16 but got …" で panic'],
+        ['url_parts ＝ ["host.test:8000", "test.html"]　len() ＝ 2 → 続行', 'url_parts[1].splitn(2, "?") → ["test.html"]（"?" が無いので 1 つ）', 'path_and_searchpart[0] ＝ "test.html" → path（先頭の "/" は無い）', '"/" が無い "http://example.com" なら len() ＝ 1 → path ＝ ""'],
+        ['path_and_searchpart.len() ＝ 1 < 2 → searchpart ＝ ""', 'テストの "index.html?a=123&b=456" → ["index.html", "a=123&b=456"]', '→ path "index.html"、searchpart "a=123&b=456"（& や = では切らない）', 'これで 4 つの欄がそろい、parse は Ok(self.clone()) を返す'],
+        ['#[cfg(test)]：cargo test のときだけコンパイルされる', '7 つの #[test]。assert_eq!(expected, Url::new(url).parse())', '左が期待、右が実際。違えば両方を表示して失敗する', 'この章の値はこの期待値と照らし合わせた（テストは走らせていない）'],
+        ['parse() → Ok(Url) か Err("Only HTTP scheme is supported.")', 'Ok(url) → parsed_url: Url（値が match の外に出る）', 'Err(e) → Error::UnexpectedInput(format!("input html is not supported: {:?}", e))', '→ return Err → start → main が println! して 1 を返す']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 360, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);   // 段階6 の板は 19 行で y 342 まで
+      S.fade(st.br1, i === 0); S.fade(st.br3, i === 2); S.fade(st.br4, i === 3);
+      S.fade(st.g4, i === 3); S.fade(st.g2, i === 1); S.fade(st.g5, i === 4); S.fade(st.g6, i === 5);
+      st.br1.style.opacity = ''; st.br3.style.opacity = ''; st.br4.style.opacity = ''; st.brQ.style.opacity = '';
+      op(st.rowB.g, i === 1 || i >= 4 ? 0.4 : '');
+      st.rowB.cells.forEach((c) => c.r.setAttribute('class', 'f-sf s-rule w1'));
+      st.scan.style.display = 'none';
+      st.lbl.textContent = '';
+      st.fields[2].textContent = '"8000"';   // 段階1 の extract_port で埋まる
+      st.fields[3].textContent = i >= 2 ? '"test.html"' : '""';
+      st.fields[4].textContent = i >= 3 ? '""' : '""';
+      st.fields[2].setAttribute('class', 't-xs t-mono pre' + (i === 0 ? ' t-d t-b' : ''));
+      st.fields[3].setAttribute('class', 't-xs t-mono pre' + (i === 2 ? ' t-d t-b' : ''));
+      st.fields[4].setAttribute('class', 't-xs t-mono pre' + (i === 3 ? ' t-d t-b' : ''));
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      if (i !== 0 && i !== 2 && i !== 3) return;
+      // 段階1: ":"（9）を探して後ろを取る。段階3: url_parts[1]（15〜23）に "?" を探す（無い）。段階4: 例の文字列に "?"（10）を探す。
+      // 0.15 秒に 1 文字、5 秒で 1 周。止めている人には探し終えた姿
+      const tt = playing() ? U.mod(ctx.ts, 5) : 4.5;
+      const from = i === 2 ? 15 : 0, to = i === 0 ? 9 : i === 2 ? 23 : 10;
+      const k = Math.min(to, from + Math.floor(tt / 0.15));
+      const done = tt >= (to - from) * 0.15 + 0.3;
+      const row = i === 3 ? st.rowQ : st.rowB, sc = i === 3 ? st.scanQ : st.scan;
+      sc.style.display = done ? 'none' : '';
+      S.attrs(sc, { x: row.X(k) });
+      row.cells.forEach((c, j) => {
+        let cls = 'f-sf s-rule w1';
+        if (done && i === 0) cls = j === 9 ? 'f-x-soft s-x w15' : (j >= 10 && j < 14) ? 'f-d-soft s-rule w1' : cls;   // port は url_parts[0] の [10..]（"/" の手前まで）
+        if (done && i === 2) cls = j >= 15 ? 'f-d-soft s-rule w1' : cls;
+        if (done && i === 3) cls = j === 10 ? 'f-x-soft s-x w15' : j > 10 ? 'f-d-soft s-rule w1' : 'f-in s-rule w1';
+        c.r.setAttribute('class', cls);
+      });
+      if (i === 3) st.rowB.cells.forEach((c) => c.r.setAttribute('class', 'f-sf s-rule w1'));
+      (i === 0 ? st.br1 : i === 2 ? st.br3 : st.brQ).style.opacity = done ? '' : 0;
+      if (i === 3) st.br4.style.opacity = done ? '' : 0;
+      st.lbl.textContent = i === 0 ? (done ? 'find(\':\') ＝ Some(9) → [10..]' : 'find(\':\')：[' + k + '] を見る')
+        : i === 2 ? (done ? 'splitn(2, "?")："?" は無い → 1 つ' : 'splitn(2, "?")：[' + k + '] を見る')
+        : (done ? 'テストの例：[10] の "?" で切る' : 'テストの例：[' + k + '] を見る');   // 走査しているのは下の行（テストの例）
+    }
+  };
+
+  /* ================================================================
+     場面5 要求を組み立てて送る
+     net/wasabi/src/http.rs 19〜64。要求は "GET /test.html HTTP/1.1\n" (24) + "Host: host.test\n" (16) +
+     "Accept: text/html\n" (18) + "Connection: close\n" (18) + "\n" (1) ＝ 77 バイト（CR LF なら 82）。数えた値
+     ================================================================ */
+  const REQ = ['GET /test.html HTTP/1.1', 'Host: host.test', 'Accept: text/html', 'Connection: close', ''];
+  const REQB = [24, 16, 18, 18, 1];
+  const HEX1 = ['47', '45', '54', '20', '2F', '74', '65', '73', '74', '2E', '68', '74', '6D', '6C', '20', '48', '54', '54', '50', '2F', '31', '2E', '31', '0A'];
+  const s5 = {
+    steps: [
+      { title: '名前解決は OS に頼む：lookup_host', text: '`get` は最初に `lookup_host(&host)` を呼ぶ。noli が Wasabi に名前解決を頼み、IP アドレスの列を `Ok(ips)` で返す。`Err` なら `Error::Network`、列が空でも `Err`。[[17-dns.html#s3|第17章 場面3]]でスタブリゾルバが 1 回聞くだけと見た役を、OS 側が担う。' },
+      { title: 'IP とポートで SocketAddr、TcpStream::connect', text: '`(ips[0], port).into()` で IP と 8000 から `SocketAddr` を作り、`TcpStream::connect` で接続。[[19-tcp.html#s2|第19章 場面2]]の 3-way ハンドシェイクは OS の TCP が受け持ち、saba に見えるのは `Ok(stream)` か `Err` だけ。' },
+      { title: '要求行：GET /test.html HTTP/1.1', text: '`String::from("GET /")` に `push_str(&path)` で `test.html`、`push_str(" HTTP/1.1\\n")` で版と改行を足す。path に先頭の `/` が無いので `"GET /"` の `/` が補う。**push_str** は String の末尾に &str を写し足す。' },
+      { title: 'ヘッダ 3 行と空行', text: '`Host: host.test`（HTTP/1.1 では必須。RFC 9112 §3.2）、`Accept: text/html`、`Connection: close`（応答の後に接続を閉じる合図。場面6 で効く）の 3 行と、`push(\'\\n\')` の空行で要求は終わる。[[21-http.html#s1.2|第21章 場面1]]の形と同じで、本文は無い。' },
+      { title: '改行は LF だけ', text: 'RFC 9112 は行の終わりを CR LF（0x0D 0x0A）と定める（§2.1）。saba は `\\n`（0x0A）だけを書くので、要求は 77 バイト（CR LF なら 82）。§2.2 に、受け手は単独の LF を行の終わりと認識してよい（MAY）とある。義務ではないので、断るサーバーもあり得る。' },
+      { title: 'as_bytes で書き、失敗は Error::Network に', text: '`stream.write(request.as_bytes())` がバイト列を TCP に渡す。書けたバイト数は `_bytes_written` に受けるだけで、全部書けたかは確かめない、と読める。`Err` は `Error::Network`。ここまでの 4 つの失敗はどれも `Network(String)` に包まれる。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'net/wasabi/src/http.rs（impl の字下げを詰めた）'],
+        [19, 'pub fn get(&self, host: String, port: u16, path: String)'],
+        [null, '    -> Result<HttpResponse, Error> {'],
+        [20, '    let ips = match lookup_host(&host) {'],
+        [21, '        Ok(ips) => ips,'],
+        [22, '        Err(e) => {'],
+        [23, '            return Err(Error::Network(format!('],
+        [24, '                "Failed to find IP addresses: {:#?}",'],
+        [25, '                e'],
+        [26, '            )))'],
+        [27, '        }'],
+        [28, '    };'],
+        [30, '    if ips.len() < 1 {'],
+        [31, '        return Err(Error::Network('],
+        [null, '            "Failed to find IP addresses".to_string()));'],
+        [32, '    }'],
+        ['', 'noli の net.rs：pub fn lookup_host(host: &str) -> Result<Vec<IpV4Addr>>']
+      ]).hl(3, 11);
+      panel([
+        ['', 'net/wasabi/src/http.rs（impl の字下げを詰めた）'],
+        [34, '    let socket_addr: SocketAddr = (ips[0], port).into();'],
+        [36, '    let mut stream = match TcpStream::connect(socket_addr) {'],
+        [37, '        Ok(stream) => stream,'],
+        [38, '        Err(_) => {'],
+        [39, '            return Err(Error::Network('],
+        [40, '                "Failed to connect to TCP stream"'],
+        [null, '                    .to_string(),'],
+        [41, '            ))'],
+        [42, '        }'],
+        [43, '    };'],
+        ['', 'Rust：(ips[0], port).into() はタプルから SocketAddr への変換（noli が From を実装）'],
+        ['', 'noli::net::TcpStream::connect：OS に接続を頼む。戻りは Result'],
+        ['', 'Err(_)：中身を使わない印。失敗の理由は捨てて、決まった文面にしている']
+      ]).hl(1, 10);
+      panel([
+        ['', 'net/wasabi/src/http.rs（impl の字下げを詰めた）'],
+        [45, '    let mut request = String::from("GET /");'],
+        [46, '    request.push_str(&path);'],
+        [47, '    request.push_str(" HTTP/1.1\\n");'],
+        ['', 'Rust の std の文書から'],
+        ['', 'String::from(&str)：写して新しい String を作る'],
+        ['', 'String::push_str(&str)：末尾に写し足す。容量が足りなければヒープで伸ばす'],
+        ['', '&path：String を &str として貸す（Deref による自動変換）'],
+        ['', '"\\n"：改行 1 文字（LF、0x0A）。文字列リテラルのエスケープ']
+      ]).hl(1, 3);
+      panel([
+        ['', 'net/wasabi/src/http.rs（impl の字下げを詰めた）'],
+        [49, '    // ヘッダの追加'],
+        [50, '    request.push_str("Host: ");'],
+        [51, '    request.push_str(&host);'],
+        [52, '    request.push(\'\\n\');'],
+        [53, '    request.push_str("Accept: text/html\\n");'],
+        [54, '    request.push_str("Connection: close\\n");'],
+        [55, '    request.push(\'\\n\');'],
+        ['', 'RFC 9112（HTTP/1.1。2026 年 11 月に閲覧）'],
+        ['', '§3.2：クライアントは HTTP/1.1 の要求に Host ヘッダを必ず入れる（MUST）'],
+        ['', '§9.6：close を受けたサーバーは、その応答を送った後に接続を閉じる（MUST）'],
+        ['', 'RFC 9110 §12.5.1：Accept は受け取れるメディアタイプの希望'],
+        ['', 'Rust：push(char) は 1 文字、push_str(&str) は文字列を末尾に足す']
+      ]).hl(2, 7);
+      panel([
+        ['', 'RFC 9112 §2.2 Message Parsing（2026 年 11 月に閲覧）'],
+        ['', '行の終わりは CRLF（0x0D 0x0A）。ただし受け手は単独の LF を行の終わりとして'],
+        ['', '認識してよい（MAY）し、その前の CR を無視してよい'],
+        ['', 'saba が書く要求（\\n ＝ 0x0A だけ。数えた値）'],
+        [null, 'GET /test.html HTTP/1.1\\n     24 バイト'],
+        [null, 'Host: host.test\\n             16 バイト'],
+        [null, 'Accept: text/html\\n           18 バイト'],
+        [null, 'Connection: close\\n           18 バイト'],
+        [null, '\\n                             1 バイト'],
+        [null, '                     合わせて 77 バイト'],
+        ['', 'CR LF で書けば 5 バイト増えて 82 バイト'],
+        ['', '第21章 場面1：行の終わりは CR LF の 2 バイト（0x0D 0x0A）']
+      ]).hl(4, 9);
+      panel([
+        ['', 'net/wasabi/src/http.rs（impl の字下げを詰めた）'],
+        [57, '    let _bytes_written ='],
+        [null, '        match stream.write(request.as_bytes()) {'],
+        [58, '        Ok(bytes) => bytes,'],
+        [59, '        Err(_) => {'],
+        [60, '            return Err(Error::Network('],
+        [61, '                "Failed to send a request to TCP stream"'],
+        [null, '                    .to_string(),'],
+        [62, '            ))'],
+        [63, '        }'],
+        [64, '    };'],
+        ['', 'Rust の std の文書から'],
+        ['', 'String::as_bytes() -> &[u8]：中の UTF-8 のバイト列を借りる（写さない）'],
+        ['', '_bytes_written：先頭の _ は「使わない変数」の印（警告を止める）'],
+        ['', 'noli の net.rs：write は書けたバイト数を Result<usize> で返す。saba はその値を見ない']
+      ]).hl(1, 3);
+      st.tr = S.g({}, svg);
+      const g = st.g = S.g({}, svg);
+      // 上: 名前解決と接続
+      S.text(490, 36, 'HttpClient::get(host, port, path)：名前解決と接続は noli を通して OS に頼む', { cls: 't-xs t-dim' }, g);
+      st.bA = box(g, 490, 44, 140, 40, 'lookup_host(&host)', '→ Ok(ips)');
+      st.bB = box(g, 652, 44, 128, 40, 'SocketAddr', '(ips[0], 8000).into()');
+      st.bC = box(g, 802, 44, 142, 40, 'TcpStream::connect', '→ Ok(stream)');
+      S.path('M630,64 H650', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g);
+      S.path('M780,64 H800', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g);
+      st.osBox = box(g, 490, 104, 454, 40, 'noli → Wasabi OS', '名前解決（第17章 場面3）と TCP の接続（第19章 場面2 の 3-way ハンドシェイク）', 'f-none s-dim w1 dash');
+      st.aA = S.path('M560,84 V102', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g);
+      st.aC = S.path('M873,84 V102', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g);
+      st.errT = S.text(490, 162, '', { cls: 't-xs t-x' }, g);
+      // 中: request の String
+      const gr = st.gr = S.g({}, svg);
+      S.text(490, 186, 'request: String（push_str で末尾に伸びる。\\n ＝ LF 1 バイト）', { cls: 't-xs t-dim' }, gr);
+      st.reqBox = S.rect(490, 194, 310, 116, { rx: 5, cls: 'f-sf s-rule w1' }, gr);
+      st.reqLines = REQ.map((s, k) => {
+        const t = S.text(500, 212 + k * 20, '', { cls: 't-xs t-mono pre' }, gr);
+        const a = S.el('tspan', { text: '' }, t);
+        const b = S.el('tspan', { text: '', cls: 't-x t-b' }, t);
+        return { t, a, b };
+      });
+      st.lenT = S.text(810, 212, '', { cls: 't-xs t-mono' }, gr);
+      st.lenN = S.text(810, 230, '', { cls: 't-xs t-dim' }, gr);
+      st.writeT = S.text(810, 266, '', { cls: 't-xs t-mono' }, gr);
+      st.writeT2 = S.text(810, 281, '', { cls: 't-xs t-dim' }, gr);
+      // 書き出しの道（request → stream → OS）
+      st.wpath = S.path('M800,296 H952 V124 H946', { cls: 'f-none s-rule w15', style: { display: 'none' } }, gr);
+      st.wflow = A.flow(st.wpath, { count: 7, speed: 0, r: 3, cls: 'f-d', parent: gr });
+      // 下: 1 行めの 24 バイト（段階5・6）
+      const gh = st.gh = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 334, 'as_bytes()：1 行めの 24 バイト（16 進。0A が LF）', { cls: 't-xs t-dim' }, gh);
+      // 箱の下に元の文字を 1 つずつ（空白は SP、改行は LF）。1 本の文字列で並べると箱の間隔とずれる
+      const CH1 = Array.from(REQ[0]).map((c) => (c === ' ' ? 'SP' : c)).concat(['LF']);
+      st.hex = HEX1.map((h, k) => {
+        const x = 490 + k * 18.9;
+        const r = S.rect(x, 340, 17.5, 20, { rx: 2, cls: h === '0A' ? 'f-x-soft s-x w15' : 'f-d-soft s-d w1' }, gh);
+        S.text(x + 8.75, 354, h, { cls: 't-c t-xs t-mono' + (h === '0A' ? ' t-x t-b' : '') }, gh);
+        S.text(x + 8.75, 376, CH1[k], { cls: 't-c t-xs t-mono t-dim' }, gh);
+        return r;
+      });
+      S.text(490, 402, '続く 53 バイト（Host 16・Accept 18・Connection 18・空行 1）と合わせて 77 バイト', { cls: 't-xs' }, gh);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['lookup_host(&host)：host ＝ "host.test"（&String を &str として渡す）', 'Ok(ips) → IP アドレスの列。ips.len() < 1 なら Err', 'Err(e) → Error::Network("Failed to find IP addresses: …")', 'Wasabi は host.test を DNS に聞かず [10.0.2.2]（QEMU のホスト）を返す'],
+        ['(ips[0], 8000).into() → SocketAddr（IP ＋ ポート 8000）', 'TcpStream::connect(socket_addr) → Ok(stream)', 'SYN・SYN/ACK・ACK（第19章 場面2）は OS の中。saba からは見えない', 'Err(_) → Error::Network("Failed to connect to TCP stream")'],
+        ['request ＝ "GET /"（5 文字）', '+ "test.html" → "GET /test.html"（14 文字）', '+ " HTTP/1.1\\n" → "GET /test.html HTTP/1.1\\n"（24 文字）', 'path に先頭の "/" が無いぶん、"GET /" の "/" が補う'],
+        ['+ "Host: " + "host.test" + \'\\n\' → 16 バイト（HTTP/1.1 では必須）', '+ "Accept: text/html\\n" → 18 バイト', '+ "Connection: close\\n" → 18 バイト（応答の後に閉じる合図。§9.6）', '+ \'\\n\' → 空行 1 バイト。ヘッダの終わり。本文は無い'],
+        ['行の終わり：saba は 0A の 1 バイト、CR LF なら 0D 0A の 2 バイト', '1 行め：… 2E 31 0A（CR LF なら … 2E 31 0D 0A）', 'ヘッダの終わり：0A 0A（CR LF なら 0D 0A 0D 0A）', 'LF を認めない受け手には文法外。サーバーは 400 を返して閉じる（SHOULD）'],
+        ['request.as_bytes() → &[u8]（77 バイト。UTF-8 ＝ ここでは ASCII）', 'stream.write(…) → Ok(bytes)：書けた数 → _bytes_written（使わない）', 'Err(_) → Error::Network("Failed to send a request to TCP stream")', 'ここまでの 4 つの失敗はすべて Error::Network(String) に包まれる']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 352, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+      lit(st.bA, i === 0); lit(st.bB, i === 1); lit(st.bC, i === 1 || i === 5); lit(st.osBox, i <= 1 || i === 5, 'f-none s-dim w1 dash');
+      st.aA.setAttribute('class', i === 0 ? 'f-none s-x w2' : 'f-none s-mid w15');
+      st.aC.setAttribute('class', i === 1 ? 'f-none s-x w2' : 'f-none s-mid w15');
+      st.errT.textContent = i === 0 ? 'Err(e)、または ips が空 → Error::Network("Failed to find IP addresses…")' : i === 1 ? 'Err(_) → Error::Network("Failed to connect to TCP stream")' : i === 5 ? 'Err(_) → Error::Network("Failed to send a request to TCP stream")' : '';
+      op(st.g, i >= 2 && i <= 4 ? 0.45 : '');
+      op(st.gr, i <= 1 ? 0.4 : '');
+      S.fade(st.gh, i >= 4);
+      st.reqBox.setAttribute('class', i === 2 || i === 3 ? 'f-sf s-x w2' : 'f-sf s-rule w1');
+      st.wpath.style.display = i === 5 ? '' : 'none';
+      st.wflow.set('speed', i === 5 ? 80 : 0).show(i === 5).reset();
+      if (i === 5) st.wflow.update(0);
+      st.writeT.textContent = i === 5 ? 'write(…) → Ok(bytes)' : '';
+      st.writeT2.textContent = i === 5 ? '→ noli → OS の TCP' : '';
+    },
+    frame(ctx, t, dt) {
+      const st = ctx.state, i = ctx.step;
+      st.wflow.update(dt);
+      // 段階3: 要求行を 3 回の push で組む（1 秒ずつ、4.5 秒で 1 周）。段階4: ヘッダを 0.8 秒ごとに 1 行。止めている人には組み終えた姿
+      let n = i >= 3 ? 5 : i === 2 ? 1 : 0, part = 3;
+      if (i === 2) { const tt = playing() ? U.mod(ctx.ts, 4.5) : 4; part = Math.min(3, Math.floor(tt / 1) + 1); }
+      if (i === 3) { const tt = playing() ? U.mod(ctx.ts, 5) : 4.5; n = 1 + Math.min(4, Math.floor(tt / 0.8)); }
+      const parts = ['GET /', 'GET /test.html', 'GET /test.html HTTP/1.1'];
+      let bytes = 0;
+      st.reqLines.forEach((l, k) => {
+        let s = '', lf = '';
+        if (k < n) {
+          if (k === 0 && i === 2) { s = parts[part - 1]; lf = part === 3 ? '\\n' : ''; }
+          else { s = REQ[k]; lf = '\\n'; }
+        }
+        l.a.textContent = s;
+        l.b.textContent = lf;
+        bytes += s.length + (lf ? 1 : 0);
+      });
+      st.lenT.textContent = n ? 'len() ＝ ' + bytes + ' バイト' : '';
+      st.lenN.textContent = n >= 5 ? '5 行。終わりは空行（\\n\\n）' : (i === 2 ? 'push_str ' + Math.max(0, part - 1) + ' 回' : '');
+    }
+  };
+
+  /* ================================================================
+     場面6 応答を読む
+     net/wasabi/src/http.rs 66〜87、saba_core/src/http.rs 29〜66・88〜96、main.rs 42〜65。
+     応答の例: "HTTP/1.1 200 OK\r\n" (17) + "Content-Type: text/html\r\n" (25) + "Content-Length: 810\r\n" (21) + "\r\n" (2)
+     ＝ 65 バイト ＋ 本文 810 バイト（test.html の大きさ。wc -c。改行は LF）＝ 875 バイト。read の分かれ方（400・475・0）は例
+     ================================================================ */
+  const BODY_LEN = 810, HEAD_LEN = 65, RAW_LEN = HEAD_LEN + BODY_LEN;
+  const RESP = [['HTTP/1.1 200 OK', '\\r\\n'], ['Content-Type: text/html', '\\r\\n'], ['Content-Length: ' + BODY_LEN, '\\r\\n'], ['', '\\r\\n'], ['<html>', '\\n'], ['  <head>', '\\n'], ['    <style>', '\\n'], ['    …（本文は ' + BODY_LEN + ' 文字）', '']];
+  const RESP302 = [['HTTP/1.1 302 Found', '\\r\\n'], ['Location: http://host.test:8000/test1.html', '\\r\\n'], ['', '\\r\\n']];
+  const READS = [400, RAW_LEN - 400, 0];
+  const s6 = {
+    steps: [
+      { title: '4,096 バイトずつ read、0 で終わり', text: '`loop` で 4,096 バイトの `buf` に `stream.read` し、`bytes_read` が 0 なら `break`、でなければ `extend_from_slice` で received の末尾に写し足す。`Connection: close` を送ったので、サーバーが応答を送って切ると 0 が返る。' },
+      { title: 'UTF-8 として String に', text: '`from_utf8(&received)` は UTF-8 として正しいかを確かめ、`Ok(&str)` か `Err` を返す。`to_string()` で String にして `HttpResponse::new` へ。charset は見ないので、UTF-8 として不正な本文は `Error::Network` になる、と読める。' },
+      { title: '\\r\\n を \\n に、状態行を切る', text: '`trim_start()` で先頭の空白を落とし、`replace("\\r\\n", "\\n")` で CR LF を LF にそろえる。**split_once(\'\\n\')** は最初の `\\n` の前後を `Option<(&str, &str)>` で返し、前が状態行、後ろが残り。`\\n` が無ければ `Err`。' },
+      { title: 'ヘッダと本文：空行で切る', text: '残りを `split_once("\\n\\n")` で切り、前がヘッダの塊、後ろが本文。ヘッダは `split(\'\\n\')` で 1 行ずつ、各行を `splitn(2, \':\')` で名前と値に分け、`trim()` して `Header::new`。空行が無ければヘッダは無しで、残り全部が本文になる。' },
+      { title: '状態行：version・status_code・reason', text: '状態行を `split(\' \')` で分け、`[0]` が version、`[1]` を `parse()` して `unwrap_or(404)` で status_code 200、`[2]` が reason `"OK"`。`"Not Found"` のように空白を含む reason は最初の語だけになる、と読める。' },
+      { title: '302 の分岐と、次の章へ', text: '302 なら `Location` の値で `Url::new(location)` を作るが、`parse()` を呼んでいない。port は `""` のままで、`"".parse::<u16>()` は `Err`、`expect` で止まる、と読める。`response.body()` が HTML の文字列で、[[32-saba-tokenizer.html#s1|第32章]]の入力になる。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'net/wasabi/src/http.rs（字下げを詰めた）'],
+        [66, 'let mut received = Vec::new();'],
+        [67, 'loop {'],
+        [68, '  let mut buf = [0u8; 4096];'],
+        [69, '  let bytes_read = match stream.read(&mut buf) {'],
+        [70, '    Ok(bytes) => bytes,'],
+        [71, '    Err(_) => {'],
+        [72, '      return Err(Error::Network('],
+        [73, '        "Failed to receive a request from TCP stream"'],
+        [null, '          .to_string(),'],
+        [74, '      ))'],
+        [75, '    }'],
+        [76, '  };'],
+        [77, '  if bytes_read == 0 {'],
+        [78, '    break;'],
+        [79, '  }'],
+        [80, '  received.extend_from_slice(&buf[..bytes_read]);'],
+        [81, '}']
+      ]).hl(2, 17);
+      panel([
+        ['', 'net/wasabi/src/http.rs（字下げを詰めた）'],
+        [83, 'match core::str::from_utf8(&received) {'],
+        [84, '  Ok(response) => HttpResponse::new(response.to_string()),'],
+        [85, '  Err(e) => Err(Error::Network(format!('],
+        [null, '    "Invalid received response: {}", e))),'],
+        [86, '}'],
+        ['', 'Rust の std の文書から'],
+        ['', 'core::str::from_utf8(&[u8]) -> Result<&str, Utf8Error>：UTF-8 として正しければ &str'],
+        ['', '（バイト列を写さず、同じメモリを &str として見る）'],
+        ['', 'to_string()：&str を写して String に。HttpResponse::new は String を受け取る'],
+        ['', '関数の最後の式が戻り値。match の両腕が Result<HttpResponse, Error>']
+      ]).hl(1, 5);
+      panel([
+        ['', 'saba_core/src/http.rs（字下げを詰めた）'],
+        [29, 'pub fn new(raw_response: String) -> Result<Self, Error> {'],
+        [30, '  let preprocessed_response = raw_response.trim_start()'],
+        [null, '    .replace("\\r\\n", "\\n");'],
+        [32, '  let (status_line, remaining) ='],
+        [null, '      match preprocessed_response.split_once(\'\\n\') {'],
+        [33, '    Some((s, r)) => (s, r),'],
+        [34, '    None => {'],
+        [35, '      return Err(Error::Network(format!('],
+        [36, '        "invalid http response: {}",'],
+        [37, '        preprocessed_response'],
+        [38, '      )))'],
+        [39, '    }'],
+        [40, '  };'],
+        ['', 'Rust の std の文書から'],
+        ['', 'str::trim_start()：先頭の空白（改行を含む）を除いた &str'],
+        ['', 'str::replace(from, to)：全部置き換えた新しい String'],
+        ['', 'str::split_once(pat) -> Option<(&str, &str)>：最初の pat の前後。無ければ None']
+      ]).hl(2, 5);
+      panel([
+        ['', 'saba_core/src/http.rs（字下げを詰めた）'],
+        [42, 'let (headers, body) = match remaining.split_once("\\n\\n") {'],
+        [43, '  Some((h, b)) => {'],
+        [44, '    let mut headers = Vec::new();'],
+        [45, '    for header in h.split(\'\\n\') {'],
+        [46, '      let splitted_header: Vec<&str> ='],
+        [null, '          header.splitn(2, \':\').collect();'],
+        [47, '      headers.push(Header::new('],
+        [48, '        String::from(splitted_header[0].trim()),'],
+        [49, '        String::from(splitted_header[1].trim()),'],
+        [50, '      ));'],
+        [51, '    }'],
+        [52, '    (headers, b)'],
+        [53, '  }'],
+        [54, '  None => (Vec::new(), remaining),'],
+        [55, '};'],
+        ['', 'Header { name: String, value: String }（8〜11 行）。名前の大文字・小文字はそのまま'],
+        ['', 'splitn(2, \':\')：最初の ":" だけで切る。値の中の ":"（時刻など）は残る']
+      ]).hl(1, 15);
+      panel([
+        ['', 'saba_core/src/http.rs（字下げを詰めた）'],
+        [57, 'let statuses: Vec<&str> = status_line.split(\' \').collect();'],
+        [59, 'Ok(Self {'],
+        [60, '  version: statuses[0].to_string(),'],
+        [61, '  status_code: statuses[1].parse().unwrap_or(404),'],
+        [62, '  reason: statuses[2].to_string(),'],
+        [63, '  headers,'],
+        [64, '  body: body.to_string(),'],
+        [65, '})'],
+        [88, 'pub fn header_value(&self, name: &str)'],
+        [null, '    -> Result<String, String> {'],
+        [89, '  for h in &self.headers {'],
+        [90, '    if h.name == name {'],
+        [91, '      return Ok(h.value.clone());'],
+        [92, '    }'],
+        [93, '  }'],
+        [95, '  Err(format!("failed to find {} in headers", name))'],
+        [96, '}']
+      ]).hl(1, 8);
+      panel([
+        ['', 'src/main.rs（詰めた。302 の分岐。48 行に .parse() が無い）'],
+        [43, 'if res.status_code() == 302 {'],
+        [44, '  let location = match res.header_value("Location") {'],
+        [45, '    Ok(value) => value,'],
+        [46, '    Err(_) => return Ok(res),'],
+        [47, '  };'],
+        [48, '  let redirect_parsed_url = Url::new(location);'],
+        [50, '  let redirect_res = match client.get('],
+        [51, '    redirect_parsed_url.host(),'],
+        [52, '    redirect_parsed_url.port().parse::<u16>()'],
+        [null, '      .expect(&format!('],
+        [53, '      "port number should be u16 but got {}",'],
+        [54, '      parsed_url.port()'],
+        [55, '    )),'],
+        [56, '    redirect_parsed_url.path(),'],
+        [57, '  ) { … };'],
+        [62, '  redirect_res'],
+        [63, '} else { res }']
+      ]).hl(6, 13);
+      st.tr = S.g({}, svg);
+      // 上: 受信の繰り返し
+      const g = st.g = S.g({}, svg);
+      S.text(490, 36, 'read の繰り返し（net/wasabi/src/http.rs 66〜81）。分かれ方は例', { cls: 't-xs t-dim' }, g);
+      st.bS = box(g, 490, 44, 150, 40, 'stream: TcpStream', 'OS が受け取った分を渡す');
+      S.path('M640,64 H658', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g);
+      st.bBuf = box(g, 660, 44, 130, 40, 'buf: [u8; 4096]', 'read → bytes_read');
+      st.readT = S.text(806, 58, '', { cls: 't-xs t-mono t-x t-b' }, g);
+      st.readT2 = S.text(806, 74, '', { cls: 't-xs t-dim' }, g);
+      S.path('M760,84 V98', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g);
+      S.text(490, 104, 'received: Vec<u8>（extend_from_slice で伸びる）', { cls: 't-xs t-dim' }, g);
+      st.bar = S.rect(490, 110, 454, 22, { rx: 3, cls: 'f-in s-rule w1' }, g);
+      st.fill = S.rect(490, 110, 0, 22, { rx: 3, cls: 'f-d-soft s-d w1' }, g);
+      st.lenT = S.text(490, 150, '', { cls: 't-xs t-mono' }, g);
+      st.utfT = S.text(944, 150, '', { cls: 't-end t-xs t-mono t-d t-b' }, g);
+      // 中: 応答の文字列と切る位置
+      const gm = st.gm = S.g({}, svg);
+      st.rawLbl = S.text(490, 172, '', { cls: 't-xs t-dim' }, gm);
+      S.rect(490, 180, 300, 152, { rx: 5, cls: 'f-sf s-rule w1' }, gm);
+      st.rawLines = RESP.map((p, k) => {
+        const t = S.text(500, 198 + k * 18, '', { cls: 't-xs t-mono pre' }, gm);
+        const a = S.el('tspan', { text: '' }, t);
+        const b = S.el('tspan', { text: '', cls: 't-x t-b' }, t);
+        return { t, a, b };
+      });
+      st.rawHl = S.rect(494, 186, 292, 18, { rx: 3, cls: 'f-x-soft', style: { display: 'none' } }, gm);
+      gm.insertBefore(st.rawHl, st.rawLines[0].t);
+      st.cut = RESP.map((p, k) => S.text(800, 198 + k * 18, '', { cls: 't-xs' }, gm));
+      // 302 の例（段階6）
+      const g6 = st.g6 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 172, '302 が来たとき（main.rs 42〜65）。例：test1.html へ転送する応答', { cls: 't-xs t-dim' }, g6);
+      S.rect(490, 180, 454, 70, { rx: 5, cls: 'f-sf s-rule w1' }, g6);
+      RESP302.forEach((p, k) => {
+        const t = S.text(500, 198 + k * 18, '', { cls: 't-xs t-mono pre' }, g6);
+        S.el('tspan', { text: p[0] }, t);
+        S.el('tspan', { text: p[1], cls: 't-x t-b' }, t);
+      });
+      ['header_value("Location") → Ok("http://host.test:8000/test1.html")', 'Url::new(location) → host ""、port ""、path ""（parse() が無い）', '"".parse::<u16>() → Err（Empty）→ expect で止まる、と読める', 'expect の文面は parsed_url.port() ＝ "8000"（元の URL の port）を出す', '301・303・307・308 は見ない → そのまま Ok(res)'].forEach((s, k) => S.text(490, 272 + k * 18, s, { cls: 't-xs' + (k === 2 ? ' t-x t-b' : '') }, g6));
+      // 下: HttpResponse
+      const gh = st.gh = S.g({}, svg);
+      S.rect(490, 364, 454, 142, { rx: 6, cls: 'f-sf s-rule w1' }, gh);
+      S.text(498, 380, 'HttpResponse（saba_core/src/http.rs 20〜26）', { cls: 't-xs t-b' }, gh);
+      st.fields = ['version', 'status_code', 'reason', 'headers', 'body'].map((n, k) => {
+        const y = 398 + k * 18;
+        S.text(498, y, n + ':', { cls: 't-xs t-mono' }, gh);
+        return S.text(590, y, '', { cls: 't-xs t-mono pre' }, gh);
+      });
+      st.nextT = S.text(490, 530, '', { cls: 't-xs t-d t-b' }, gh);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['buf ＝ [0u8; 4096]（スタック上の 4,096 バイト。毎周作り直す）', 'read(&mut buf) → Ok(bytes_read)：例 1 回め 400、2 回め 475、3 回め 0', 'received.extend_from_slice(&buf[..bytes_read]) → 875 バイト（65 ＋ 810）', 'Connection: close → サーバーが応答の後に閉じる（RFC 9112 §9.6）→ read が 0 → break'],
+        ['core::str::from_utf8(&received) → Ok("HTTP/1.1 200 OK\\r\\n…")', 'UTF-8 として不正なバイトがあれば Err(Utf8Error) → Error::Network', 'response.to_string() → String（875 文字。ASCII なら 1 バイト 1 文字）', 'HttpResponse::new(String) → Result<HttpResponse, Error>（saba_core 側）'],
+        ['trim_start()：先頭の空白・改行を落とす（例では無し）', 'replace("\\r\\n", "\\n")：4 か所の CR LF → LF。875 → 871 文字', 'split_once(\'\\n\') → Some(("HTTP/1.1 200 OK", 残り))', '\\n が無ければ None → Err(Error::Network("invalid http response: …"))'],
+        ['remaining.split_once("\\n\\n") → Some((ヘッダの塊, 本文))', 'h.split(\'\\n\') → "Content-Type: text/html"、"Content-Length: 810"', 'splitn(2, \':\') → ["Content-Type", " text/html"] → trim → Header', 'body ＝ "<html>\\n  <head>\\n …"（810 文字）。空行が無ければ全部が本文'],
+        ['"HTTP/1.1 200 OK".split(\' \') → ["HTTP/1.1", "200", "OK"]', 'version "HTTP/1.1"、status_code "200".parse() → 200（u32）、reason "OK"', '"HTTP/1.1 404 Not Found" なら reason は "Not" だけ、と読める', 'header_value は == で比べる。"location" なら Err（RFC 9110 は大小を区別しない）'],
+        ['302 の例：Location: http://host.test:8000/test1.html', 'Url::new(location) → host ""、port ""（parse() を呼んでいない）', '"".parse::<u16>() → Err（Empty）→ expect で止まる、と読める', 'response.body() → "<html>…"（810 文字）→ 第32章 HTML トークナイザへ']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 352, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+      lit(st.bS, i === 0); lit(st.bBuf, i === 0);
+      st.bar.setAttribute('class', i === 1 ? 'f-in s-x w2' : 'f-in s-rule w1');
+      op(st.g, i >= 2 ? 0.4 : '');
+      op(st.gm, i === 0 ? 0.35 : '');
+      S.fade(st.g6, i === 5);
+      st.gm.style.display = i === 5 ? 'none' : '';
+      st.utfT.textContent = i === 1 ? 'from_utf8 → Ok(&str) → to_string()' : '';
+      // 応答の文字列（段階3 からは \r\n → \n）
+      st.rawLbl.textContent = i <= 1 ? 'raw_response（' + RAW_LEN + ' 文字。\\r\\n のまま）' : 'preprocessed_response（replace の後。' + (RAW_LEN - 4) + ' 文字）';
+      st.rawLines.forEach((l, k) => {
+        const [s, lf] = RESP[k];
+        l.a.textContent = s;
+        l.b.textContent = i >= 2 ? lf.replace(/\\r/g, '') : lf;
+        l.t.setAttribute('class', 't-xs t-mono pre' + (i === 3 && k >= 4 ? ' t-d' : ''));
+      });
+      st.rawHl.style.display = i === 2 || i === 4 ? '' : 'none';
+      const cut = ['', '', '', '', '', '', '', ''];
+      if (i === 2) { cut[0] = '← status_line'; cut[1] = '← remaining（残り全部）'; }
+      if (i === 3) { cut[1] = '← headers（1 行ずつ）'; cut[3] = '← 空行（\\n\\n）で切る'; cut[4] = '← body（残り全部）'; }
+      if (i === 4) { cut[0] = '[0] "HTTP/1.1" → version'; cut[1] = '[1] "200" → status_code'; cut[2] = '[2] "OK" → reason'; }
+      st.cut.forEach((t, k) => { t.textContent = cut[k]; t.setAttribute('class', 't-xs' + (i === 4 && k <= 2 ? ' t-mono' : '')); });
+      // HttpResponse の欄
+      const F = i === 5 ? ['"HTTP/1.1"', '302', '"Found"', '[Location: http://host.test:8000/test1.html]', '""'] : [i >= 4 ? '"HTTP/1.1"' : '', i >= 4 ? '200（u32）' : '', i >= 4 ? '"OK"' : '', i >= 3 ? '[Content-Type: text/html, Content-Length: ' + BODY_LEN + ']（2 個）' : '', i >= 3 ? '"<html>\\n  <head>\\n …"（' + BODY_LEN + ' 文字）' : ''];
+      st.fields.forEach((t, k) => { t.textContent = F[k]; t.setAttribute('class', 't-xs t-mono pre' + ((i === 4 && k <= 2) || (i === 3 && k >= 3) ? ' t-d t-b' : '')); });
+      st.nextT.textContent = i === 5 ? '200 の例に戻ると body() ＝ "<html>…"（' + BODY_LEN + ' 文字）→ 第32章で 1 文字ずつトークンに切る' : '';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      // 段階1: 1.5 秒ごとに read（400 → 475 → 0 で break）、6 秒で 1 周。止めている人には読み終えた姿。段階2 以降は読み終えた姿
+      let got = RAW_LEN, k = 3, brk = true;
+      if (i === 0) {
+        const tt = playing() ? U.mod(ctx.ts, 6) : 5;
+        k = Math.min(3, Math.floor(tt / 1.5) + 1);
+        got = READS.slice(0, Math.min(k, 2)).reduce((a, b) => a + b, 0);
+        brk = k >= 3;
+      }
+      st.fill.setAttribute('width', (454 * got / RAW_LEN).toFixed(1));
+      st.lenT.textContent = 'received.len() ＝ ' + U.fmt(got) + (i === 0 && brk ? '　→ read が 0 → break' : '');
+      st.readT.textContent = i === 0 ? 'bytes_read ＝ ' + (k <= 2 ? READS[k - 1] : 0) : '';
+      st.readT2.textContent = i === 0 ? (k <= 2 ? k + ' 回め' : '3 回め → break') : '';
+    }
+  };
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第IX部 ブラウザを読む ／ 第31章',
+      title: 'URL と HTTP',
+      home: '../index.html',
+      prev: { href: '30-gbemu-desktop.html', title: 'エミュレータの外側' },
+      next: { href: '32-saba-tokenizer.html', title: 'HTML トークナイザ', lead: '第31章で応答の本文として受け取った HTML の文字列は、まず 1 文字ずつ読まれてトークンの列になる。' },
+      legend: [{ c: 'd', label: 'データ（URL・要求・応答の文字列）' }, { c: 'x', label: '注目・変化' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>

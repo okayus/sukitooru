@@ -30,7 +30,7 @@
 <!-- ================= 表紙 ================= -->
 <section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
   <div class="a-main">
-    <p class="eyebrow">第VIII部 実物を読む ／ 第30章 ／ 全30章</p>
+    <p class="eyebrow">第VIII部 実物を読む ／ 第30章 ／ 全36章</p>
     <h1 id="h-s0">エミュレータの外側</h1>
     <p class="standfirst">Rust で書かれたゲームボーイのエミュレータ gb-emu のうち、PC で動かす側の 218 行（gb-emu-desktop）を読む。CPU や画面の回路を真似る本体は別のクレート gbemu に任せ、この側は本体の時計を実時間に合わせ、キーボードをボタンに、画素の列を窓に、音のサンプルをスピーカーに、セーブをファイルにつなぐ。つまり第4〜8章の機械をソフトウェアで作り直したものと、第9章の OS との境目である。コードは具体的な値を入れて 1 行ずつ追う。</p>
     <p class="legend" data-auto></p>
@@ -45,7 +45,7 @@
       <li><a href="#s4" data-go="4"><span class="n">4</span>画素の列を窓に</a><p>92,160 バイトの Vec&lt;u8&gt; を、フレームの終わりに 1 回、ピッチ 640 でテクスチャに写し、640×576 に伸ばす。</p></li>
       <li><a href="#s5" data-go="5"><span class="n">5</span>サンプルをスピーカーに</a><p>512 組ごとにクロージャが呼ばれ、SDL のキューに積む。8,192 バイトを超えたら 1 ms 寝る。速さの主導権。</p></li>
       <li><a href="#s6" data-go="6"><span class="n">6</span>セーブとケーブル</a><p>SRAM を「題名.SAV」に書き、起動時に読み戻す。通信ケーブルの相手はいないので 0xFF を返す。</p></li>
-      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。この教材の最後の章。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の部（ブラウザを読む）へ。</p></li>
     </ol>
   </nav>
   <footer class="cover-foot a-foot">
@@ -200,7 +200,7 @@
     </table>
   </div>
   <div class="a-after">
-    <p class="note">この章で教材は終わり。本体のコード（CPU・PPU・APU・カートリッジ）は <a href="https://github.com/take44444/gb-emu">gb-emu のリポジトリ</a>で読める。<a class="xref" href="../index.html">目次</a>の地図から気になる層へ戻るか、<a class="xref" href="01-denshi.html">第1章</a>から通して読み直せる。</p>
+    <p class="note">本体のコード（CPU・PPU・APU・カートリッジ）は <a href="https://github.com/take44444/gb-emu">gb-emu のリポジトリ</a>で読める。次の第IX部「ブラウザを読む」（第31〜36章）では、同じ流儀で Rust の小さなブラウザ saba を、URL から JavaScript まで 1 行ずつ読む。</p>
     <nav class="chnav" data-auto aria-label="章の移動"></nav>
   </div>
 </section>
@@ -1493,6 +1493,7 @@
       title: 'エミュレータの外側',
       home: '../index.html',
       prev: { href: '29-imi.html', title: '型で意味を表す' },
+      next: { href: '31-saba-http.html', title: 'URL と HTTP', lead: '第30章のエミュレータに続いて、今度は Rust で書かれた小さなブラウザ saba を 1 行ずつ読む。' },
       legend: [{ c: 'd', label: 'データ（ROM・画素・サンプル）' }, { c: 'h', label: 'ビットの 1' }, { c: 'e', label: '割り込み' }, { c: 'x', label: '注目・変化' }]
     },
     scenes: { s1, s2, s3, s4, s5, s6 }

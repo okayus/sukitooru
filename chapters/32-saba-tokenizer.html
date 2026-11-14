@@ -1,0 +1,1936 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>HTML トークナイザ — YouTubeが見えるまで</title>
+<meta name="description" content="Rust で書かれた小さなブラウザ saba の HTML トークナイザ（token.rs）を読む。test.html の 810 文字が状態機械で開始タグ・終了タグ・文字のトークンに切られる様子を 1 文字ずつ追い、enum に値を持たせる書き方、Iterator トレイト、reconsume の仕組み、この版が扱わない構文を確かめる。">
+<meta property="og:title" content="HTML トークナイザ — YouTubeが見えるまで">
+<meta property="og:description" content="Rust で書かれた小さなブラウザ saba の HTML トークナイザ（token.rs）を読む。test.html の 810 文字が状態機械でトークンに切られる様子を 1 文字ずつ追う。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+  svg a { cursor: pointer; }
+  svg a:hover text, svg a:focus-visible text { text-decoration: underline; text-underline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第IX部 ブラウザを読む ／ 第32章 ／ 全36章</p>
+    <h1 id="h-s0">HTML トークナイザ</h1>
+    <p class="standfirst">第31章で応答の本文として受け取った HTML の文字列は、まず 1 文字ずつ読まれてトークンの列になる。それをするのが saba_core/src/renderer/html/token.rs の HtmlTokenizer で、HTML Standard の 84 の状態のうち 17 を写した状態機械が、開始タグ・終了タグ・文字のトークンを返す（4 種めの EOF は定義だけ）。この章は test.html の 810 文字がどの状態でどう切られるかを 1 文字ずつ追いながら、enum に値を持たせる書き方、Iterator トレイト、reconsume の仕組みを読む。コメント・DOCTYPE・文字参照をこの版が扱わないことと、script の中身も Data 状態で切られることも確かめる。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>文字の列からトークンの列へ</a><p>HtmlTokenizer::new が String を Vec&lt;char&gt; にし、next() がトークンを 1 つずつ返す。enum HtmlToken の 4 種と Iterator トレイト。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>状態機械 — Data と TagOpen</a><p>enum State の 18 の場合と loop の 1 周。Data と TagOpen の分岐。&lt;!doctype html&gt; が Char の列になる理由。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>タグ名と終了タグ</a><p>TagName が latest_token の中の String に 1 文字ずつ足し、&gt; で取り出して返す。as_mut・ref mut・or パターン。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>属性 — 9 つの状態</a><p>&lt;p class="first"&gt; の 17 文字がたどる道と Attribute { name, value }。引用符の有無、/&gt; と self_closing。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>script と style の中身</a><p>どちらも Data 状態のまま Char の列になる。ScriptData 系の 5 状態は書かれているが入口が無い。中身に &lt; があると壊れる。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>EOF と reconsume</a><p>読み直しの旗、終わりの None、返らない Eof。扱わない構文と、仕様の 84 状態との対比。第28章の字句解析との違い。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の章（HTML パーサと DOM）へ。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードは <a href="https://github.com/d0iasm/sababook">d0iasm/sababook</a>（Asami Doi、MIT ライセンス）の ch7/saba から引用した（2025 年 1 月 6 日のコミット c87dc64。行番号は元のファイルのもので、長い行は折り返し、省いた行は … で示し、板の中では字下げを 2 字に詰めた）。このリポジトリは書籍『［作って学ぶ］ブラウザのしくみ』のサンプルコードだが、この章の説明はコードと、Web で公開されている仕様（HTML Standard のトークン化の節など。2026 年 11 月に閲覧）だけから書き、書籍の文章は使っていない。この教材の担当は saba をビルドも実行もしておらず、図の状態の列や「810 文字 → 543 トークン」などの個数は、token.rs の分岐をこのページのスクリプトに写してたどった値（計算上）。図は模式図。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 文字の列からトークンの列へ ================= -->
+<section class="scene sc-anim" id="s1" data-tab="トークン" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>文字の列からトークンの列へ — new と next</h2>
+    <p class="sh-meta"><span class="chip">token.rs</span><span class="chip">Vec&lt;char&gt;</span><span class="chip">enum HtmlToken</span><span class="chip">Iterator</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">第31章で手に入った HTML の文字列を、saba は <code>HtmlTokenizer::new</code> で <code>Vec&lt;char&gt;</code> に展開し、パーサが <code>next()</code> を呼ぶたびにトークンを 1 つ返す。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">token.rs は 509 行＋テスト 113 行。トークナイザが返すのはトークンだけで、木を作るのは次の章の HtmlParser。パーサは <code>HtmlParser::new(html_tokenizer)</code> で受け取り、欄 <code>t</code> に持つ（parser.rs 37）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="token.rs の struct・enum・impl Iterator のコードと、test.html の先頭 16 文字が HtmlTokenizer を通ってトークンの列になる図"></svg></div>
+    <figcaption>図1　左は段階ごとのコード（token.rs。段階4 からは parser.rs・page.rs の呼ぶ側も）。右は input の先頭 16 文字（↵ は改行、␣ は空白）、HtmlTokenizer の欄、next() が返したトークンの列。段階3 は 4 種の中身、段階6 は 810 文字の内訳。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 状態機械 ================= -->
+<section class="scene sc-anim" id="s2" data-tab="状態機械" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>状態機械 — Data と TagOpen</h2>
+    <p class="sh-meta"><span class="chip">enum State</span><span class="chip">18 の場合</span><span class="chip">loop と continue</span><span class="chip">仕様は 84</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead"><code>next()</code> は文字を 1 つ取り、いまの状態で分岐し、状態を変えて次の文字へ進むか、トークンを 1 つ返して止まる。これを繰り返す。HTML Standard の状態機械を saba は 18 の State で書く。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">doc コメントの <code>///</code> は rustdoc が拾う説明で、ここでは各状態に対応する HTML Standard の節の URL を置いている。同じ名前で引けば、仕様のその状態の定義と、この版が省いた分岐を並べて読める。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="enum State と next() のコード、Data・TagOpen・EndTagOpen・TagName の状態の図、例の文字列を 1 文字ずつ送ったときの状態の列の表"></svg></div>
+    <figcaption>図2　左は段階ごとのコード。右上は状態の図（いまの状態と通った矢印を赤で照らす。属性の 9 状態と ScriptData 系は箱にまとめた）。右下は例の文字列を 1 文字ずつ送ったときの状態の列。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 タグ名と終了タグ ================= -->
+<section class="scene sc-anim" id="s3" data-tab="タグ名" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>タグ名と終了タグ — TagName と latest_token</h2>
+    <p class="sh-meta"><span class="chip">TagName</span><span class="chip">as_mut</span><span class="chip">ref mut と |</span><span class="chip">take</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">タグ名は latest_token の String に 1 文字ずつ足される。終了タグも同じ TagName で名前を集め、<code>&gt;</code> で Data に戻るときに取り出して返す。Option の中身を扱う書き方が 3 つ出る。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">足していく String はヒープに置かれ、<code>push</code> のたびに必要なら伸びる（<a class="xref" href="31-saba-http.html#s3">第31章 場面3</a>の String と &amp;str）。返すときは <code>cloned()</code> の複製が渡り、latest_token は None に戻るので、次のタグは新しい String から始まる。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="TagName の腕と append_tag_name・take_latest_token のコード、例のタグの文字を 1 つずつ送ったときの latest_token の中身と返り値の図"></svg></div>
+    <figcaption>図3　左は段階ごとのコード。右は例のタグの文字の帯、latest_token の中身（名前が 1 文字ずつ伸びる）、&gt; で返るトークン。段階2・3 は Option の中身を書き換える・取り出す道筋。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 属性 ================= -->
+<section class="scene sc-anim" id="s4" data-tab="属性" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>属性 — 9 つの状態と Attribute</h2>
+    <p class="sh-meta"><span class="chip">&lt;p class="first"&gt;</span><span class="chip">attribute.rs</span><span class="chip">add_char</span><span class="chip">self_closing</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead"><code>&lt;p class="first"&gt;</code> の 17 文字は、空白の後 5 つの状態を通って name "class"・value "first" の Attribute になる。属性の状態は 9 つあり、引用符で道が分かれる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">9 つのうち test.html が通るのは、二重引用符の値に至る 5 つだけ。残りの 4 つ（AfterAttributeName・単引用・無引用・SelfClosingStartTag）は、値なし・単引用・無引用・自己終了のために書かれている。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="属性の状態のコードと attribute.rs、例のタグの文字ごとにどの状態で読まれたかを示す表、できていく Attribute の図"></svg></div>
+    <figcaption>図4　左は段階ごとのコード。右上は例のタグの文字（横）と状態（縦）の表で、点が「その文字をその状態で読んだ」こと（同じ列に 2 つあれば読み直し）。右下はできていく attributes と、返るトークン。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 script と style ================= -->
+<section class="scene sc-anim" id="s5" data-tab="script" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>script と style の中身 — 入口の無い ScriptData</h2>
+    <p class="sh-meta"><span class="chip">Data のまま</span><span class="chip">ScriptData 系 5 状態</span><span class="chip">453・465・492 行</span><span class="chip">173 文字</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead"><code>&lt;style&gt;</code> と <code>&lt;script&gt;</code> の中身は、この版ではどちらも Data 状態のまま 1 文字ずつ Char になる。token.rs には script 用の 5 状態が書かれているが、そこへ入る代入が無い。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">HTML Standard の script data の系統は 18 状態あり、<code>&lt;!--</code> の後に <code>&lt;script</code> が書かれていれば、続く <code>&lt;/script&gt;</code> を文字として扱う規則まで持つ。saba の 4 状態は、<code>&lt;/script&gt;</code> を見つける最小限の部分を写したもの。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="ScriptData 系の状態のコードと、test.html の script の中身が Data 状態で Char になる図、ScriptData 系 5 状態の島と入口の無さ、中身に < があるときの例"></svg></div>
+    <figcaption>図5　左は段階ごとのコード。右上は test.html の script の始まりと、その文字が Data 状態で Char になる様子。右下は ScriptData 系 5 状態の島（入ってくる矢印が無い）と、段階4 の <code>if (a &lt; b)</code> の例。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 EOF と reconsume ================= -->
+<section class="scene sc-anim" id="s6" data-tab="EOF" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>EOF と reconsume — この版が扱わないもの</h2>
+    <p class="sh-meta"><span class="chip">reconsume</span><span class="chip">pos &gt; len</span><span class="chip">None</span><span class="chip">84 対 18</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">読み直しの旗 reconsume と、入力の終わりの扱いを確かめ、最後に HTML Standard の 84 状態と並べて、この版が扱わない構文を挙げる。字句解析としての形は第28章のものと同じで、違うのは誤りの扱い。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">次の章では、このトークンの列を HtmlParser が受け取り、挿入モードと「開いている要素のスタック」で DOM の木にする。Text モードが Char をつなぎ、タグの間の改行と空白を捨てるのもパーサの仕事。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="reconsume と is_eof のコード、pos と reconsume の旗の動き、HTML Standard の 84 状態と saba の 18 状態を種類ごとに並べた棒"></svg></div>
+    <figcaption>図6　左は段階ごとのコード。右上は input の帯の上で動く pos と reconsume の旗（段階1〜3）。右下は HTML Standard の 84 状態と saba の 18 状態を種類ごとに並べた棒（段階4〜6）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — HTML トークナイザ</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>HtmlTokenizer::new は String を <code>chars().collect()</code> で Vec&lt;char&gt; にし、Iterator の next() がトークンを 1 つずつ返す。HtmlToken は値を持つ enum の 4 種。810 文字 → 543 トークン（計算上）（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>next() は loop の 1 周で 1 文字を取り、match self.state で分岐する。continue は次の文字へ、return はトークンを返して止まる。Data は &lt; だけを見て TagOpen へ、TagOpen は英字と / 以外なら &lt; を捨てて Data に戻る（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>タグ名は latest_token の String に as_mut と ref mut で 1 文字ずつ足し、&gt; で as_ref().cloned() の複製を返して None に戻す。終了タグは create_tag(false) で同じ道を通る（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>属性は 9 つの状態。start_new_attribute が空の Attribute を push し、add_char(c, is_name) が name か value に足す。引用符の中では " 以外が全部値（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>style・script の中身も Data 状態で Char になる。ScriptData 系の 5 状態は書かれているが入口が無く、中身に &lt; があれば壊れる。仕様の script data 状態との差（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>reconsume は旗を立てて input[pos − 1] を読み直す。終わりは None で、Eof トークンは返らないと読める。コメント・DOCTYPE・文字参照・RCDATA・RAWTEXT は無く、仕様の 84 状態のうち名前があるのは 17（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th>トークナイザ</th><td>文字の列を状態機械でトークンに切る部品。saba では token.rs（509 行）の HtmlTokenizer。木を作るのはパーサ（第33章）。</td></tr>
+        <tr><th><i class="sw d"></i>HtmlToken</th><td>トークンの enum。StartTag { tag, self_closing, attributes }・EndTag { tag }・Char(char)・Eof の 4 種。仕様の DOCTYPE・コメント・処理命令は無い。</td></tr>
+        <tr><th><i class="sw x"></i>状態機械と State</th><td>読んだ文字と「いまの状態」で次の動作が決まる機械。saba の State は 18 の場合（仕様の名前 17 ＋ TemporaryBuffer）。HTML Standard の tokenizer は 84 状態（2026 年 11 月）。</td></tr>
+        <tr><th>reconsume</th><td>いま読んだ文字を次の状態でもう一度読むこと。saba は旗を立て、次の周で input[pos − 1] を返す。test.html では 842 回の消費のうち 32 回。</td></tr>
+        <tr><th>開始タグ・終了タグ・自己終了</th><td>&lt;p&gt;・&lt;/p&gt;・&lt;img /&gt;。名前は小文字に直す。自己終了は self_closing の旗になるが、この版のパーサは読まない。</td></tr>
+        <tr><th>属性（Attribute）</th><td>開始タグの name="value" の組。attribute.rs の struct Attribute { name, value }。名前は小文字化、値はそのまま。引用符は二重・単・無しの 3 通り。</td></tr>
+        <tr><th>Iterator トレイト</th><td>関連型 Item と fn next(&amp;mut self) -&gt; Option&lt;Item&gt; を持つ Rust の標準トレイト。実装すると呼ぶ側は next() を繰り返すだけでよい。</td></tr>
+        <tr><th>Vec&lt;char&gt;</th><td>文字（Unicode のスカラ値、1 つ 4 バイト）の伸びる配列。String（UTF-8 のバイト列）から chars().collect() で作る。添字で 1 文字を引ける。</td></tr>
+        <tr><th>take（Option を取り出して None に）</th><td>Option の中身を出して、元を None に戻す操作。saba は as_ref().cloned() と ＝ None で手書きしている。std の Option::take も同じ。</td></tr>
+        <tr><th>EOF</th><td>入力の終わり。仕様では各状態が EOF を受けて EOF トークンを出す。saba は next() の冒頭で None を返し、Eof トークンは返らないと読める。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <p class="note">token.rs の全文は <a href="https://github.com/d0iasm/sababook/blob/c87dc64/ch7/saba/saba_core/src/renderer/html/token.rs">sababook のリポジトリ</a>で読める。仕様の状態の一覧は <a href="https://html.spec.whatwg.org/multipage/parsing.html#tokenization">HTML Standard 13.2.5 Tokenization</a>。</p>
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg, A = YT.anim;
+
+  /* ---------- この章で使う部品（第30章と同じ作り） ---------- */
+
+  const op = (el, v) => { el.style.opacity = v; };
+  const playing = () => YT.motion.playing;
+  const KW = /\b(fn|let|mut|pub|struct|impl|use|mod|const|match|if|else|for|in|loop|while|break|continue|return|move|self|Self|crate|as|dyn|ref|where|enum|type|true|false)\b/g;
+
+  /* 等幅のコードの 1 行。予約語は太字、// から後ろは薄い色。空白は詰めない（pre） */
+  function codeLine(parent, x, y, s, cls) {
+    const t = S.text(x, y, '', { cls: 't-mono pre ' + (cls || 't-sm') }, parent);
+    const ci = s.indexOf('//');
+    const code = ci >= 0 ? s.slice(0, ci) : s, cm = ci >= 0 ? s.slice(ci) : '';
+    let last = 0, m;
+    KW.lastIndex = 0;
+    while ((m = KW.exec(code))) {
+      if (m.index > last) S.el('tspan', { text: code.slice(last, m.index) }, t);
+      S.el('tspan', { text: m[0], cls: 't-b' }, t);
+      last = m.index + m[0].length;
+    }
+    if (last < code.length) S.el('tspan', { text: code.slice(last) }, t);
+    if (cm) S.el('tspan', { text: cm, cls: 't-dim' }, t);
+    return t;
+  }
+  /* コードの板。lines は [行番号, 文字列]（行番号 null は折り返しの続き、'' は見出しの行）。
+     hl(a, b) で a〜b 行め（0 始まり）を照らす。hl() で消す */
+  function codePanel(parent, x, y, w, lines, opts) {
+    opts = opts || {};
+    const lh = opts.lh || 16, pad = 10;
+    const g = S.g({}, parent);
+    const h = pad * 2 + lines.length * lh + 2;
+    S.rect(x, y, w, h, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+    const band = S.rect(x + 3, y, w - 6, lh, { rx: 3, cls: 'f-x-soft', style: { display: 'none' } }, g);
+    const y0 = y + pad + 11;
+    lines.forEach(([ln, s], k) => {
+      const yy = y0 + k * lh;
+      if (ln === '') { S.text(x + pad, yy, s, { cls: 't-xs t-dim' }, g); return; }
+      if (ln != null) S.text(x + pad + 26, yy, String(ln), { cls: 't-xs t-dim t-mono t-end' }, g);
+      codeLine(g, x + pad + 34, yy, s, opts.cls);
+    });
+    const api = {
+      g, h,
+      hl(a, b) {
+        if (a == null) { band.style.display = 'none'; return api; }
+        if (b == null) b = a;
+        S.attrs(band, { y: y0 + a * lh - 12, height: (b - a + 1) * lh });
+        band.style.display = '';
+        return api;
+      }
+    };
+    return api;
+  }
+  /* 枠と題（と小さな説明）の箱 */
+  function box(parent, x, y, w, h, title, sub, cls, tcls) {
+    const g = S.g({}, parent);
+    const r = S.rect(x, y, w, h, { rx: 5, cls: cls || 'f-sf s-rule w1' }, g);
+    const t = S.text(x + w / 2, y + (sub ? h / 2 - 2 : h / 2 + 4), title, { cls: 't-c ' + (tcls || 't-sm t-b') }, g);
+    const s = sub ? S.text(x + w / 2, y + h / 2 + 12, sub, { cls: 't-c t-xs t-dim' }, g) : null;
+    return { g, r, t, s, x, y, w, h };
+  }
+  /* 他の章の場面へのリンク（SVG の a） */
+  function xlink(parent, x, y, href, label, end) {
+    const a = S.el('a', { href, 'aria-label': label }, parent);
+    S.text(x, y, label + ' ↗', { cls: 't-xs t-mid' + (end ? ' t-end' : '') }, a);
+    return a;
+  }
+  /* 文の列（段階ごとの具体的な値の追跡） */
+  function trace(parent, x, y, lines, lh) {
+    return lines.map((s, k) => {
+      const cls = typeof s === 'string' ? 't-sm' : s[1];
+      return S.text(x, y + k * (lh || 20), typeof s === 'string' ? s : s[0], { cls: cls + ' pre' }, parent);
+    });
+  }
+  /* 4 行の追跡を置く（1 行めは太字） */
+  function putTrace(g, y, lines) {
+    S.clear(g);
+    trace(g, 20, y, lines.map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+  }
+
+  /* ---------- 文字の見せ方 ---------- */
+  const glyph = (c) => c === '\n' ? '↵' : c === ' ' ? '␣' : c === '\t' ? '⇥' : c;
+  /* Rust の char リテラルの書き方（Char('\n') など） */
+  const lit = (c) => "'" + (c === '\n' ? '\\n' : c === '\t' ? '\\t' : c === "'" ? "\\'" : c) + "'";
+
+  /* ---------- token.rs（ch7/saba、c87dc64）の状態機械の写し ----------
+     図の追跡の値を出すためのもので、saba を実行する代わりに、next() の分岐を 1 行ずつ同じ順に書いた。
+     返すもの: init（読む前の欄）、steps（1 文字を 1 回消費するごとの記録。i 添字、c 文字、re 読み直しか、
+     before/after 状態、act continue|return|fall、out 返したトークン、pos・reflag・state・latest は消費の後の欄）、tokens */
+  function tokenize(html) {
+    const input = Array.from(html);
+    let state = 'Data', pos = 0, reconsume = false, latest = null;
+    const steps = [], tokens = [];
+    const isEof = () => pos > input.length;
+    const createTag = (start) => { latest = start ? { t: 'StartTag', tag: '', self_closing: false, attributes: [] } : { t: 'EndTag', tag: '' }; };
+    const appendTagName = (c) => { latest.tag += c; };
+    const takeLatest = () => { const t = latest; latest = null; return t; };
+    const startNewAttribute = () => { latest.attributes.push({ name: '', value: '' }); };
+    const appendAttribute = (c, isName) => { const a = latest.attributes[latest.attributes.length - 1]; if (isName) a.name += c; else a.value += c; };
+    const setSelfClosing = () => { latest.self_closing = true; };
+    const alpha = (c) => /^[A-Za-z]$/.test(c), upper = (c) => /^[A-Z]$/.test(c);
+    function next() {
+      if (pos >= input.length) return null;
+      for (;;) {
+        let c;
+        const re = reconsume;
+        if (reconsume) { reconsume = false; c = input[pos - 1]; } else { if (pos >= input.length) throw new Error('input[' + pos + '] は範囲外（タグの途中で入力が尽きた）'); c = input[pos]; pos++; }
+        const rec = { i: pos - 1, c, re, before: state, after: null, act: null, out: null };
+        steps.push(rec);
+        const done = (act, tok) => { rec.after = state; rec.act = act; rec.out = tok || null; rec.pos = pos; rec.reflag = reconsume; rec.state = state; rec.latest = latest ? JSON.parse(JSON.stringify(latest)) : null; if (tok) tokens.push(tok); return tok; };
+        switch (state) {
+          case 'Data':
+            if (c === '<') { state = 'TagOpen'; done('continue'); continue; }
+            if (isEof()) return done('return', { t: 'Eof' });
+            return done('return', { t: 'Char', c });
+          case 'TagOpen':
+            if (c === '/') { state = 'EndTagOpen'; done('continue'); continue; }
+            if (alpha(c)) { reconsume = true; state = 'TagName'; createTag(true); done('continue'); continue; }
+            if (isEof()) return done('return', { t: 'Eof' });
+            reconsume = true; state = 'Data'; done('fall'); break;
+          case 'EndTagOpen':
+            if (isEof()) return done('return', { t: 'Eof' });
+            if (alpha(c)) { reconsume = true; state = 'TagName'; createTag(false); done('continue'); continue; }
+            done('fall'); break;
+          case 'TagName':
+            if (c === ' ') { state = 'BeforeAttributeName'; done('continue'); continue; }
+            if (c === '/') { state = 'SelfClosingStartTag'; done('continue'); continue; }
+            if (c === '>') { state = 'Data'; return done('return', takeLatest()); }
+            if (upper(c)) { appendTagName(c.toLowerCase()); done('continue'); continue; }
+            if (isEof()) return done('return', { t: 'Eof' });
+            appendTagName(c); done('fall'); break;
+          case 'BeforeAttributeName':
+            if (c === '/' || c === '>' || isEof()) { reconsume = true; state = 'AfterAttributeName'; done('continue'); continue; }
+            reconsume = true; state = 'AttributeName'; startNewAttribute(); done('fall'); break;
+          case 'AttributeName':
+            if (c === ' ' || c === '/' || c === '>' || isEof()) { reconsume = true; state = 'AfterAttributeName'; done('continue'); continue; }
+            if (c === '=') { state = 'BeforeAttributeValue'; done('continue'); continue; }
+            if (upper(c)) { appendAttribute(c.toLowerCase(), true); done('continue'); continue; }
+            appendAttribute(c, true); done('fall'); break;
+          case 'AfterAttributeName':
+            if (c === ' ') { done('continue'); continue; }
+            if (c === '/') { state = 'SelfClosingStartTag'; done('continue'); continue; }
+            if (c === '=') { state = 'BeforeAttributeValue'; done('continue'); continue; }
+            if (c === '>') { state = 'Data'; return done('return', takeLatest()); }
+            if (isEof()) return done('return', { t: 'Eof' });
+            reconsume = true; state = 'AttributeName'; startNewAttribute(); done('fall'); break;
+          case 'BeforeAttributeValue':
+            if (c === ' ') { done('continue'); continue; }
+            if (c === '"') { state = 'AttributeValueDoubleQuoted'; done('continue'); continue; }
+            if (c === "'") { state = 'AttributeValueSingleQuoted'; done('continue'); continue; }
+            reconsume = true; state = 'AttributeValueUnquoted'; done('fall'); break;
+          case 'AttributeValueDoubleQuoted':
+            if (c === '"') { state = 'AfterAttributeValueQuoted'; done('continue'); continue; }
+            if (isEof()) return done('return', { t: 'Eof' });
+            appendAttribute(c, false); done('fall'); break;
+          case 'AttributeValueSingleQuoted':
+            if (c === "'") { state = 'AfterAttributeValueQuoted'; done('continue'); continue; }
+            if (isEof()) return done('return', { t: 'Eof' });
+            appendAttribute(c, false); done('fall'); break;
+          case 'AttributeValueUnquoted':
+            if (c === ' ') { state = 'BeforeAttributeName'; done('continue'); continue; }
+            if (c === '>') { state = 'Data'; return done('return', takeLatest()); }
+            if (isEof()) return done('return', { t: 'Eof' });
+            appendAttribute(c, false); done('fall'); break;
+          case 'AfterAttributeValueQuoted':
+            if (c === ' ') { state = 'BeforeAttributeName'; done('continue'); continue; }
+            if (c === '/') { state = 'SelfClosingStartTag'; done('continue'); continue; }
+            if (c === '>') { state = 'Data'; return done('return', takeLatest()); }
+            if (isEof()) return done('return', { t: 'Eof' });
+            reconsume = true; state = 'BeforeAttributeName'; done('fall'); break;
+          case 'SelfClosingStartTag':
+            if (c === '>') { setSelfClosing(); state = 'Data'; return done('return', takeLatest()); }
+            if (isEof()) return done('return', { t: 'Eof' });
+            done('fall'); break;
+          default: throw new Error('state ' + state);
+        }
+      }
+    }
+    let calls = 0;
+    for (;;) { const t = next(); calls++; if (t === null) break; }
+    return { init: { pos: 0, reflag: false, state: 'Data', latest: null }, steps, tokens, input, calls };
+  }
+  /* トークンの書き方。short なら属性を … に */
+  function fmtTok(t, short) {
+    if (!t) return '';
+    if (t.t === 'Char') return 'Char(' + lit(t.c) + ')';
+    if (t.t === 'Eof') return 'Eof';
+    if (t.t === 'EndTag') return 'EndTag { tag: "' + t.tag + '" }';
+    if (short) return 'StartTag { tag: "' + t.tag + '", … }';
+    return 'StartTag { tag: "' + t.tag + '", self_closing: ' + t.self_closing + ', attributes: [' + t.attributes.map((a) => 'Attribute { name: "' + a.name + '", value: "' + a.value + '" }').join(', ') + '] }';
+  }
+
+  /* ---------- 文字の帯。set(j, mode) で 1 マスの見た目（todo / done / now / now-re） ---------- */
+  function charStrip(parent, x, y, chars, o) {
+    o = Object.assign({ w: 26, h: 30, idx: false, fs: 't-md' }, o || {});
+    const g = S.g({}, parent);
+    const cells = chars.map((c, k) => {
+      const cx = x + k * o.w;
+      const r = S.rect(cx + 1, y, o.w - 2, o.h, { rx: 3, cls: 'f-sf s-rule w1' }, g);
+      const t = S.text(cx + o.w / 2, y + o.h / 2 + 4, glyph(c), { cls: 't-c t-mono t-b ' + o.fs }, g);
+      const n = o.idx ? S.text(cx + o.w / 2, y + o.h + 12, String(k), { cls: 't-c t-xs t-dim t-mono' }, g) : null;
+      return { r, t, n, c, cx };
+    });
+    const api = {
+      g, cells, w: chars.length * o.w,
+      set(j, mode) {
+        const c = cells[j];
+        if (!c) return api;
+        c.r.setAttribute('class', mode === 'now' ? 'f-x-soft s-x w2' : mode === 'now-re' ? 'f-x-soft s-x w2 dash' : mode === 'done' ? 'f-in s-rule w1' : 'f-sf s-rule w1');
+        c.t.setAttribute('class', 't-c t-mono t-b ' + o.fs + (mode === 'now' || mode === 'now-re' ? ' t-x' : mode === 'done' ? ' t-dim' : ''));
+        return api;
+      }
+    };
+    return api;
+  }
+
+  const SCENES = {};
+
+  /* ================================================================
+     場面1 文字の列からトークンの列へ
+     例: test.html の先頭 16 文字 "<html>\n  <head>\n" → 6 トークン（消費 18 回、読み直し 2 回。コードの分岐をたどった値）
+     ================================================================ */
+  const S1_SRC = '<html>\n  <head>\n';
+  const s1 = {
+    steps: [
+      { title: 'String を Vec<char> に展開する：new', text: '`new(html)` は `html.chars().collect()` で文字の列 {d|Vec<char>} を作る。[[10-browser.html#s2.1|第10章 場面2]]の「バイト列を文字に」は、UTF-8 の検査（[[31-saba-http.html#s6.2|第31章 場面6]]）と `chars()` が受け持つ。test.html は ASCII だけで 810 バイト ＝ 810 文字。' },
+      { title: '欄：state・pos・reconsume・latest_token', text: '欄は 6 つ。`input` のほか、`state` はいまの状態（最初は `Data`）、`pos` は次に読む文字の添字、`reconsume` は「いまの文字を読み直す」旗、`latest_token` は作りかけのタグを入れる `Option<HtmlToken>`、`buf` は ScriptData 系だけが使う一時バッファ。' },
+      { title: 'enum に値を持たせる：HtmlToken の 4 種', text: '`HtmlToken` は 4 つの場合を持つ enum。`StartTag` は名前・自己終了の旗・属性の列、`EndTag` は名前だけ、`Char` は `char` 1 つ、`Eof` は何も持たない。[[29-imi.html#s2.3|第29章 場面2]]の直和型で、どの場合かと中身を 1 つの値で運ぶ。仕様の DOCTYPE・コメント・処理命令のトークンは無い。' },
+      { title: 'Iterator トレイト：next が 1 つ返す', text: '`impl Iterator for HtmlTokenizer` は関連型 `Item` を `HtmlToken` と決め、`next` を書くだけ。パーサは `self.t.next()` と呼び、`Some(トークン)` か終わりの `None` を受ける。トークンが 1 つできた所で `return` し、次の呼び出しで続きから進む。' },
+      { title: '先頭 16 文字がトークン 6 個になる', text: '`<html>` の 6 文字は `StartTag { tag: "html", … }` 1 個に、続く改行と空白 2 つは `Char` 3 個に、`<head>` は `StartTag` に、改行は `Char` になる。タグの間の改行や空白も捨てずに `Char` として返し、捨てるかどうかはパーサが決める（[[33-saba-dom.html#s4|第33章 場面4]]）。' },
+      { title: 'test.html 全体：810 文字 → 543 トークン', text: 'コードの分岐をたどって数えると、810 文字から開始タグ 12・終了タグ 12・`Char` 519 の 543 個ができる（計算上）。Chromium は届いた分から順に切る（[[10-browser.html#s2.1|第10章 場面2]]）が、saba は本文が全部そろった String を `new` に渡してから切り始める（page.rs 94）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      st.mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'token.rs（struct と new。字下げを詰めた）'],
+        [64, 'pub struct HtmlTokenizer {'],
+        [65, '  state: State,'],
+        [66, '  pos: usize,'],
+        [67, '  reconsume: bool,'],
+        [68, '  latest_token: Option<HtmlToken>,'],
+        [69, '  input: Vec<char>,'],
+        [70, '  buf: String,'],
+        [71, '}'],
+        [73, 'impl HtmlTokenizer {'],
+        [74, '  pub fn new(html: String) -> Self {'],
+        [75, '    Self {'],
+        [76, '      state: State::Data,'],
+        [77, '      pos: 0,'],
+        [78, '      reconsume: false,'],
+        [79, '      latest_token: None,'],
+        [80, '      input: html.chars().collect(),'],
+        [81, '      buf: String::new(),'],
+        [82, '    }'],
+        [83, '  }']
+      ]);
+      panel([
+        ['', 'token.rs（enum HtmlToken。字下げを詰めた）'],
+        [5, '#[derive(Debug, Clone, PartialEq, Eq)]'],
+        [6, 'pub enum HtmlToken {'],
+        [7, '  // 開始タグ'],
+        [8, '  StartTag {'],
+        [9, '    tag: String,'],
+        [10, '    self_closing: bool,'],
+        [11, '    attributes: Vec<Attribute>,'],
+        [12, '  },'],
+        [13, '  // 終了タグ'],
+        [14, '  EndTag {'],
+        [15, '    tag: String,'],
+        [16, '  },'],
+        [17, '  // 文字'],
+        [18, '  Char(char),'],
+        [19, '  // ファイルの終了（End Of File）'],
+        [20, '  Eof,'],
+        [21, '}']
+      ]).hl(3, 16);
+      panel([
+        ['', 'token.rs（impl Iterator と next の冒頭。詰めた）'],
+        [191, 'impl Iterator for HtmlTokenizer {'],
+        [192, '  type Item = HtmlToken;'],
+        [194, '  fn next(&mut self) -> Option<Self::Item> {'],
+        [195, '    if self.pos >= self.input.len() {'],
+        [196, '      return None;'],
+        [197, '    }'],
+        [199, '    loop {'],
+        [200, '      let c = match self.reconsume {'],
+        [201, '        true => self.reconsume_input(),'],
+        [202, '        false => self.consume_next_input(),'],
+        [203, '      };'],
+        [205, '      match self.state {'],
+        [206, '        State::Data => { … }   // 腕は 18 個。場面2〜5'],
+        [505, '      }'],
+        [506, '    } } }'],
+        ['', 'parser.rs 183 ／ page.rs 94〜95（呼ぶ側）'],
+        [183, 'let mut token = self.t.next();'],
+        [94, 'let html_tokenizer = HtmlTokenizer::new(html);'],
+        [95, 'let frame = HtmlParser::new(html_tokenizer).construct_tree();']
+      ]);
+      st.tr = S.g({}, svg);
+      st.run = tokenize(S1_SRC);
+      // 右上: input の帯
+      const g = st.g = S.g({}, svg);
+      S.text(490, 34, 'input: Vec<char>（810 個のうち先頭の 16 個 ＝ test.html の 1〜2 行め）', { cls: 't-xs t-dim' }, g);
+      st.strip = charStrip(g, 490, 42, Array.from(S1_SRC), { w: 26, h: 30, idx: true });
+      st.now = S.text(490, 106, '', { cls: 't-xs t-mono pre' }, g);
+      // 構造体の欄
+      S.rect(490, 116, 454, 92, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      S.text(500, 134, 'HtmlTokenizer（token.rs 64〜71 の欄）', { cls: 't-sm t-b' }, g);
+      const fld = (x, y) => S.text(x, y, '', { cls: 't-xs t-mono pre' }, g);
+      st.fState = fld(500, 156); st.fPos = fld(500, 176); st.fRe = fld(500, 196);
+      st.fLatest = fld(620, 156); st.fBuf = fld(620, 176); st.fInput = fld(620, 196);
+      st.fInput.textContent = 'input: 810 文字（先頭 16 個が上の帯）';
+      // next() の矢印
+      st.arrow = S.path('M717,208 V234', { cls: 'f-none s-dim w15', 'marker-end': st.mk('dim') }, g);
+      st.arrowLbl = S.text(726, 228, 'next() → Option<HtmlToken>', { cls: 't-xs t-mono t-dim' }, g);
+      // 返したトークン
+      S.text(490, 252, '返したトークン（次の章の HtmlParser が 1 つずつ受け取る）', { cls: 't-xs t-dim' }, g);
+      st.toks = [];
+      for (let k = 0; k < 6; k++) {
+        const r = S.rect(490, 258 + k * 20, 454, 18, { rx: 3, cls: 'f-d-soft s-d w1' }, g);
+        const t = S.text(498, 271 + k * 20, '', { cls: 't-xs t-mono pre' }, g);
+        st.toks.push({ r, t });
+      }
+      // 段階3: 4 種のカード
+      const cards = st.cards = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 396, 'HtmlToken の 4 つの場合と、それぞれが持つ値', { cls: 't-sm t-b' }, cards);
+      [[490, 170, 'StartTag', ['tag: String', 'self_closing: bool', 'attributes: Vec<Attribute>']], [666, 90, 'EndTag', ['tag: String']], [762, 90, 'Char', ['char（1 文字）']], [858, 86, 'Eof', ['（値なし）']]].forEach(([x, w, n, ls]) => {
+        S.rect(x, 406, w, 90, { rx: 5, cls: 'f-d-soft s-d w1' }, cards);
+        S.text(x + 8, 424, n, { cls: 't-sm t-b t-mono' }, cards);
+        ls.forEach((s, k) => S.text(x + 8, 444 + k * 16, s, { cls: 't-xs t-mono' }, cards));
+      });
+      S.text(490, 518, '仕様にはほかに DOCTYPE・コメント・処理命令のトークンがある。この版には無い', { cls: 't-xs t-dim' }, cards);
+      // 段階6: 810 文字と 543 トークンの内訳（コードの分岐をたどった値）
+      const bars = st.bars = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 396, 'test.html 全体（コードの分岐をたどって数えた値）', { cls: 't-sm t-b' }, bars);
+      S.text(490, 416, 'input 810 文字', { cls: 't-xs t-dim' }, bars);
+      const sc1 = 440 / 810;
+      S.rect(490, 422, 291 * sc1, 20, { rx: 3, cls: 'f-in s-rule w1' }, bars);
+      S.text(490 + 291 * sc1 / 2, 436, 'タグの中 291', { cls: 't-c t-xs' }, bars);
+      S.rect(490 + 291 * sc1, 422, 519 * sc1, 20, { rx: 3, cls: 'f-d-soft s-d w1' }, bars);
+      S.text(490 + 291 * sc1 + 519 * sc1 / 2, 436, 'Char になる 519', { cls: 't-c t-xs' }, bars);
+      S.text(490, 468, 'トークン 543 個', { cls: 't-xs t-dim' }, bars);
+      const sc2 = 440 / 543;
+      S.rect(490, 474, 12 * sc2, 20, { rx: 2, cls: 'f-in s-fg w1' }, bars);
+      S.rect(490 + 12 * sc2, 474, 12 * sc2, 20, { rx: 2, cls: 'f-in s-fg w1' }, bars);
+      S.rect(490 + 24 * sc2, 474, 519 * sc2, 20, { rx: 3, cls: 'f-d-soft s-d w1' }, bars);
+      S.text(490 + 24 * sc2 + 519 * sc2 / 2, 488, 'Char 519 ＝ style の中 176 ＋ script の中 173 ＋ ほか 170', { cls: 't-c t-xs' }, bars);
+      S.text(490, 514, '← StartTag 12 と EndTag 12（左端の 2 目盛り）。タグの中の 291 文字がこの 24 個になる', { cls: 't-xs t-dim' }, bars);
+      S.text(490, 532, 'ほか 170 ＝ h1・p・a の中の文字 102 ＋ タグの間の改行・空白 68（パーサが捨てる。第33章）', { cls: 't-xs t-dim' }, bars);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      const which = i <= 1 ? 0 : i === 2 ? 1 : 2;
+      st.C.forEach((c, k) => S.fade(c.g, k === which));
+      if (which === 0) st.C[0].p.hl(...(i === 0 ? [16, 16] : [1, 8]));
+      if (which === 2) st.C[2].p.hl(...(i === 3 ? [1, 3] : i === 4 ? [7, 15] : [17, 19]));
+      const T = [
+        ['html: String ＝ 810 バイト（UTF-8。ASCII だけ）', 'html.chars().collect() → input: Vec<char>、長さ 810', 'char は 1 つ 4 バイト → 810 × 4 ＝ 3,240 バイト（UTF-8 の 4 倍）', "input[0] ＝ '<'　input[1] ＝ 'h'　…　input[809] ＝ '\\n'"],
+        ['state ＝ Data　pos ＝ 0　reconsume ＝ false', 'latest_token ＝ None（作りかけのタグは無い）', 'buf ＝ ""（ScriptData 系の 5 状態だけが使う。場面5）', "input ＝ ['<', 'h', 't', 'm', 'l', '>', '\\n', ' ', ' ', '<', …]"],
+        ['StartTag { tag: "html", self_closing: false, attributes: [] }', 'EndTag { tag: "head" }', "Char('\\n')　Char(' ')　Char('M')　Char('!')", 'Eof（定義だけ。この版では返らない、と読める。場面6）'],
+        ['parser.rs 183: let mut token = self.t.next();', '→ Some(StartTag { tag: "html", … })（1 回め）', 'parser.rs 185: while token.is_some() { … token = self.t.next(); }', '810 文字を読み切った次の呼び出しが None → ループが終わる'],
+        ['<html> 6 文字 → StartTag { tag: "html", … }　1 個', "↵ ␣ ␣ → Char('\\n')、Char(' ')、Char(' ')　3 個", '<head> 6 文字 → StartTag { tag: "head", … }　1 個', "↵ → Char('\\n')　1 個。16 文字 → 6 トークン（next() 6 回、消費 18 回）"],
+        ['810 文字 → next() が Some を 543 回、544 回めに None（計算上）', 'StartTag 12（html head style script body h1 p p a a p p）', 'EndTag 12　Char 519（style の中 176、script の中 173、残り 170）', 'Chromium: 届いた分から切る。saba: 全部そろってから（page.rs 94）']
+      ];
+      putTrace(st.tr, 372, T[i]);
+      S.fade(st.cards, i === 2);
+      S.fade(st.bars, i === 5);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, R = st.run, N = R.steps.length;
+      // 段階4〜5: 0.45 秒に 1 文字。読み終えたら 2.6 秒止まって最初から。止めている人には読み終えた姿
+      const PER = 0.45, T = N * PER + 2.6;
+      let k;
+      if (i <= 1) k = 0;
+      else if (i === 2 || i === 5) k = N;
+      else k = playing() ? Math.min(N, Math.floor(U.mod(ctx.ts, T) / PER)) : N;
+      const cur = k > 0 ? R.steps[k - 1] : null;
+      const snap = cur || R.init;
+      st.strip.cells.forEach((c, j) => {
+        let mode = j < snap.pos ? 'done' : 'todo';
+        if (cur && cur.i === j) mode = cur.re ? 'now-re' : 'now';
+        st.strip.set(j, mode);
+      });
+      st.now.textContent = cur
+        ? k + ' 回め: c = ' + lit(cur.c) + (cur.re ? '（読み直し）' : '') + '   ' + cur.before + (cur.after !== cur.before ? ' → ' + cur.after : '') + (cur.act === 'return' ? '   → return Some(…)' : cur.act === 'continue' ? '   continue' : '')
+        : 'まだ読んでいない（pos ＝ 0）。next() が呼ばれると 1 文字めから';
+      st.now.setAttribute('class', 't-xs t-mono pre' + (cur && cur.act === 'return' ? ' t-x t-b' : ''));
+      st.fState.textContent = 'state: ' + snap.state;
+      st.fPos.textContent = 'pos: ' + snap.pos;
+      st.fRe.textContent = 'reconsume: ' + snap.reflag;
+      st.fLatest.textContent = 'latest_token: ' + (snap.latest ? 'Some(' + fmtTok(snap.latest, true) + ')' : 'None');
+      st.fBuf.textContent = 'buf: ""';
+      const outs = R.steps.slice(0, k).filter((s) => s.out);
+      st.toks.forEach((row, j) => {
+        const o = outs[j];
+        row.r.style.display = o ? '' : 'none';
+        row.t.textContent = o ? 'Some(' + fmtTok(o.out) + ')' : '';
+      });
+      const ret = !!(cur && cur.act === 'return');
+      st.arrow.setAttribute('class', ret ? 'f-none s-x w2' : 'f-none s-dim w15');
+      st.arrow.setAttribute('marker-end', st.mk(ret ? 'x' : 'dim'));
+      st.arrowLbl.setAttribute('class', 't-xs t-mono' + (ret ? ' t-x t-b' : ' t-dim'));
+    }
+  };
+  SCENES.s1 = s1;
+
+  /* ================================================================
+     場面2 状態機械 — Data と TagOpen
+     例: "<html>"（消費 7 回、読み直し 1 回）と test2.html 1 行めの "<!doctype html>"（消費 16 回）。状態の列はコードの分岐をたどった値
+     ================================================================ */
+  const S2_HTML = '<html>', S2_DOC = '<!doctype html>';
+  const s2 = {
+    steps: [
+      { title: 'enum State：仕様の 84 状態のうち 17 ＋ 一時バッファ', text: '`State` は 18 個の場合を持つ enum。17 個は HTML Standard のトークン化の状態の名前で、`TemporaryBuffer` だけは仕様では状態でなく一時バッファ。仕様の状態は 84 個。コメント・DOCTYPE・文字参照・RCDATA・RAWTEXT の状態は写していない。' },
+      { title: 'loop と match：1 文字取って、状態で分岐', text: '`loop` の 1 周が 1 文字。`match self.reconsume` で読み直しか次の文字かを選び、`match self.state` で腕に入る。`continue` は「状態を変えて次の文字へ」、`return Some(…)` は「トークンが 1 つできた」で、`next()` はそこで止まる。末尾に落ちても次の周へ。' },
+      { title: 'Data：< なら TagOpen、それ以外は Char を返す', text: '`Data` は文字を 1 つずつ `Char(c)` として返す状態。`<` だけは `TagOpen` に移って `continue` し、何も返さない。仕様の data state は `&` と NULL も扱うが、この版は `<` だけ。test.html では 810 文字のうち 543 文字を Data で読む（計算上）。' },
+      { title: 'TagOpen：/ か英字か、それ以外か', text: '`/` なら `EndTagOpen`。英字なら `create_tag(true)` で空の `StartTag` を置き、`reconsume = true` にして `TagName` へ。英字はタグ名の 1 文字めなので読み直す。それ以外は読み直して `Data` に戻る。仕様は `!`・`?` 以外は `<` を文字にするが、この版は捨てる。' },
+      { title: '<!doctype html> は Char の列になる（test2.html）', text: '`<` で `TagOpen` に入るが、`!` は英字でないので `Data` に戻り、`Char(\'!\')` から `Char(\'>\')` まで 14 個の `Char` になる。消えるのは `<` だけ。仕様は `<!` から DOCTYPE トークンを作る。パーサの Initial モードは `Char` を無視する（parser.rs 191）。' },
+      { title: '<html> の 6 文字がたどる状態', text: '`<` を Data で、`h` を TagOpen で読み、`h` を TagName で読み直し、`t`・`m`・`l` を足し、`>` で `Data` に戻して `take_latest_token()` を返す。消費は 7 回、`next()` の呼び出しは 1 回。状態が「どこまで読んだか」を覚えているので、途中で止まって再開できる。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      st.mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'token.rs（enum State。doc コメントは 1 つだけ残した。詰めた）'],
+        [23, '#[derive(Debug, Clone, PartialEq, Eq)]'],
+        [24, 'pub enum State {'],
+        [25, '  /// https://html.spec.whatwg.org/multipage/'],
+        [null, '  ///   parsing.html#data-state'],
+        [26, '  Data,'],
+        [28, '  TagOpen,'],
+        [30, '  EndTagOpen,'],
+        [32, '  TagName,'],
+        [34, '  BeforeAttributeName,'],
+        [36, '  AttributeName,'],
+        [38, '  AfterAttributeName,'],
+        [40, '  BeforeAttributeValue,'],
+        [42, '  AttributeValueDoubleQuoted,'],
+        [44, '  AttributeValueSingleQuoted,'],
+        [46, '  AttributeValueUnquoted,'],
+        [48, '  AfterAttributeValueQuoted,'],
+        [50, '  SelfClosingStartTag,'],
+        [52, '  ScriptData,'],
+        [54, '  ScriptDataLessThanSign,'],
+        [56, '  ScriptDataEndTagOpen,'],
+        [58, '  ScriptDataEndTagName,'],
+        [60, '  TemporaryBuffer,'],
+        [61, '}']
+      ]);
+      panel([
+        ['', 'token.rs（next。詰めた）'],
+        [194, 'fn next(&mut self) -> Option<Self::Item> {'],
+        [195, '  if self.pos >= self.input.len() {'],
+        [196, '    return None;'],
+        [197, '  }'],
+        [199, '  loop {'],
+        [200, '    let c = match self.reconsume {'],
+        [201, '      true => self.reconsume_input(),'],
+        [202, '      false => self.consume_next_input(),'],
+        [203, '    };'],
+        [205, '    match self.state {'],
+        [206, '      State::Data => {'],
+        [207, '        if c == \'<\' {'],
+        [208, '          self.state = State::TagOpen;'],
+        [209, '          continue;'],
+        [210, '        }'],
+        [212, '        if self.is_eof() { return Some(HtmlToken::Eof); }'],
+        [216, '        return Some(HtmlToken::Char(c));'],
+        [217, '      }'],
+        [218, '      State::TagOpen => { … }   // 残り 17 の腕'],
+        [505, '    } } }']
+      ]).hl(5, 9);
+      panel([
+        ['', 'token.rs（Data の腕と、文字を取る関数。詰めた）'],
+        [206, 'State::Data => {'],
+        [207, '  if c == \'<\' {'],
+        [208, '    self.state = State::TagOpen;'],
+        [209, '    continue;'],
+        [210, '  }'],
+        [212, '  if self.is_eof() {'],
+        [213, '    return Some(HtmlToken::Eof);'],
+        [214, '  }'],
+        [216, '  return Some(HtmlToken::Char(c));'],
+        [217, '}'],
+        ['', 'token.rs 85〜98'],
+        [85, 'fn is_eof(&self) -> bool {'],
+        [86, '  self.pos > self.input.len()'],
+        [87, '}'],
+        [89, 'fn consume_next_input(&mut self) -> char {'],
+        [90, '  let c = self.input[self.pos];'],
+        [91, '  self.pos += 1;'],
+        [92, '  c'],
+        [93, '}'],
+        [95, 'fn reconsume_input(&mut self) -> char {'],
+        [96, '  self.reconsume = false;'],
+        [97, '  self.input[self.pos - 1]'],
+        [98, '}']
+      ]).hl(1, 10);
+      panel([
+        ['', 'token.rs（TagOpen の腕。詰めた）'],
+        [218, 'State::TagOpen => {'],
+        [219, '  if c == \'/\' {'],
+        [220, '    self.state = State::EndTagOpen;'],
+        [221, '    continue;'],
+        [222, '  }'],
+        [224, '  if c.is_ascii_alphabetic() {'],
+        [225, '    self.reconsume = true;'],
+        [226, '    self.state = State::TagName;'],
+        [227, '    self.create_tag(true);'],
+        [228, '    continue;'],
+        [229, '  }'],
+        [231, '  if self.is_eof() {'],
+        [232, '    return Some(HtmlToken::Eof);'],
+        [233, '  }'],
+        [235, '  self.reconsume = true;'],
+        [236, '  self.state = State::Data;'],
+        [237, '}']
+      ]).hl(6, 11);
+      panel([
+        ['', 'token.rs 231〜237（TagOpen の「その他」。詰めた）'],
+        [231, '  if self.is_eof() { return Some(HtmlToken::Eof); }'],
+        [235, '  self.reconsume = true;'],
+        [236, '  self.state = State::Data;'],
+        [237, '}'],
+        ['', 'parser.rs（construct_tree の Initial モード。詰めた）'],
+        [185, 'while token.is_some() {'],
+        [186, '  match self.mode {'],
+        [187, '    InsertionMode::Initial => {'],
+        [188, '      // 本書では、DOCTYPEトークンをサポートしていないため、'],
+        [189, '      // <!doctype html>のようなトークンは'],
+        [null, '      // 文字トークンとして表される。'],
+        [190, '      // 文字トークンは無視する'],
+        [191, '      if let Some(HtmlToken::Char(_)) = token {'],
+        [192, '        token = self.t.next();'],
+        [193, '        continue;'],
+        [194, '      }'],
+        [196, '      self.mode = InsertionMode::BeforeHtml;'],
+        [197, '      continue;'],
+        [198, '    }']
+      ]).hl(13, 16);
+      panel([
+        ['', 'token.rs（<html> が通る分岐だけを並べた。詰めた）'],
+        [206, 'State::Data => {'],
+        [207, '  if c == \'<\' { self.state = State::TagOpen; continue; }'],
+        [218, 'State::TagOpen => {'],
+        [224, '  if c.is_ascii_alphabetic() {'],
+        [225, '    self.reconsume = true;'],
+        [226, '    self.state = State::TagName;'],
+        [227, '    self.create_tag(true);'],
+        [228, '    continue;'],
+        [229, '  }'],
+        [250, 'State::TagName => {'],
+        [261, '  if c == \'>\' {'],
+        [262, '    self.state = State::Data;'],
+        [263, '    return self.take_latest_token();'],
+        [264, '  }'],
+        [275, '  self.append_tag_name(c);'],
+        [276, '}']
+      ]).hl(11, 14);
+      st.tr = S.g({}, svg);
+      st.runs = { html: tokenize(S2_HTML), doc: tokenize(S2_DOC) };
+      // 右上: 状態の図
+      const g = st.g = S.g({}, svg);
+      S.text(490, 34, '', { cls: 't-xs t-dim' }, g);
+      const nodes = st.nodes = {};
+      const node = (name, x, y, w) => { nodes[name] = box(g, x, y, w, 30, name, null, 'f-sf s-rule w1', 't-xs t-mono t-b'); };
+      node('Data', 516, 56, 88); node('TagOpen', 660, 56, 92); node('EndTagOpen', 812, 56, 128); node('TagName', 660, 150, 92);
+      st.attr = S.rect(812, 136, 128, 92, { rx: 5, cls: 'f-none s-rule w1 dash' }, g);
+      ['BeforeAttributeName', '→ AttributeName …', '属性の 9 状態（場面4）', '> で Data に戻り返す', 'SelfClosingStartTag'].forEach((s, k) => S.text(876, 152 + k * 16, s, { cls: 't-c t-xs' + (k === 0 || k === 4 ? ' t-mono' : ' t-dim') }, g));
+      S.rect(516, 216, 236, 34, { rx: 5, cls: 'f-none s-rule w1 dash' }, g);
+      S.text(634, 237, 'ScriptData 系の 5 状態（入口なし。場面5）', { cls: 't-c t-xs t-dim' }, g);
+      const edges = st.edges = {};
+      const edge = (key, d, label, lx, ly, start) => { edges[key] = { p: S.path(d, { cls: 'f-none s-dim w15', 'marker-end': st.mk('dim') }, g), l: S.text(lx, ly, label, { cls: 't-xs t-dim' + (start ? '' : ' t-c') }, g) }; };
+      edge('Data>TagOpen', 'M604,71 H656', '<', 630, 64);
+      edge('TagOpen>EndTagOpen', 'M752,71 H808', '/', 780, 64);
+      edge('TagOpen>TagName', 'M706,86 V146', '英字（読み直す）', 712, 120, true);
+      edge('EndTagOpen>TagName', 'M870,86 L754,148', '英字（読み直す）', 846, 118, true);
+      edge('TagOpen>Data', 'M686,86 C686,118 580,118 580,90', 'その他（読み直す）', 633, 134);
+      edge('TagName>Data', 'M660,165 H560 V90', '>（返す）', 604, 180);
+      edge('Data>Data', 'M546,56 V44 H574 V52', 'その他 → Char(c) を返す', 560, 38);
+      edge('TagName>TagName', 'M692,180 V194 H720 V184', 'その他 → append_tag_name(c)', 706, 207);
+      edge('TagName>BeforeAttributeName', 'M752,165 H808', '空白', 780, 158);
+      // 右下: 例の文字の帯と、状態の列の表
+      st.exLbl = S.text(490, 268, '', { cls: 't-xs t-dim' }, g);
+      st.strips = { html: charStrip(g, 490, 276, Array.from(S2_HTML), { w: 30, h: 28 }), doc: charStrip(g, 490, 276, Array.from(S2_DOC), { w: 30, h: 28 }) };
+      [['#', 496], ['c', 516], ['読んだ状態', 574], ['→ 次の状態', 652], ['したこと', 730]].forEach(([s, x]) => S.text(x, 322, s, { cls: 't-xs t-dim' }, g));
+      S.line(490, 327, 944, 327, { cls: 's-rule w1' }, g);
+      st.rows = [];
+      for (let k = 0; k < 16; k++) {
+        const y = 340 + k * 13.4;
+        const bg = S.rect(490, y - 10, 454, 13, { rx: 2, cls: 'f-x-soft', style: { display: 'none' } }, g);
+        const cols = [496, 516, 574, 652, 730].map((x) => S.text(x, y, '', { cls: 't-xs t-mono pre' }, g));
+        st.rows.push({ bg, cols });
+      }
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['enum State: 18 の場合。17 は仕様の状態の名前、TemporaryBuffer は仕様では一時バッファ', '仕様 13.2.5 は 84 状態: Data・タグ 4、属性 9、script data 18、RCDATA・RAWTEXT・PLAINTEXT 9、', '　コメント 12、DOCTYPE 16、CDATA 3、処理命令 5、文字参照 8（2026 年 11 月に数えた）', 'saba: Data・タグ 4 ＋ 属性 9 ＋ script data 4 ＋ TemporaryBuffer 1 ＝ 18'],
+        ['1 周 ＝ 1 文字: c ＝ reconsume なら input[pos − 1]、でなければ input[pos]（pos += 1）', 'continue → 状態を変えて次の周へ（トークンはまだ返さない）', 'return Some(トークン) → next() が終わる。次の呼び出しは loop の最初から', '腕の末尾まで落ちても次の周へ（TagOpen の「その他」など）'],
+        ["Data で '<' → state ＝ TagOpen、continue（何も返さない）", "Data で 'M' → return Some(Char('M'))　　'\\n' → Char('\\n')", '捨てるかどうかはパーサが決める（タグの間の改行・空白。第33章）', '仕様の data state: & は文字参照へ、NULL は parse error。この版は < だけ'],
+        ["TagOpen で '/' → EndTagOpen（終了タグ。場面3）", "TagOpen で 'h' → create_tag(true): latest_token ＝ Some(StartTag { tag: \"\", … })", "　reconsume ＝ true、state ＝ TagName → 次の周で 'h' を読み直す", "TagOpen で ' '・'1'・'=' → reconsume、Data（'<' は返らない。仕様は Char('<') を出す）"],
+        ["test2.html の 1 行め <!doctype html>: '<' → TagOpen", "'!' → 英字でない → reconsume、Data → Char('!')", "'d' 'o' 'c' 't' 'y' 'p' 'e' ' ' 'h' 't' 'm' 'l' '>' → Char × 13", 'parser.rs 191: Initial モードは Char を無視 → 14 個とも捨てられる'],
+        ["消費 7 回（'h' は 2 回）、next() 1 回、return 1 回", 'latest_token: None → Some(StartTag { tag: "" }) → "h" → "ht" → "htm" → "html"', "'>' → state ＝ Data、take_latest_token() → Some(StartTag { tag: \"html\", … })", "pos ＝ 6 で止まる。次の next() は '\\n' から（state は Data のまま）"]
+      ];
+      putTrace(st.tr, 436, T[i]);
+      const ex = i === 4 ? 'doc' : 'html';
+      st.strips.html.g.style.display = ex === 'html' ? '' : 'none';
+      st.strips.doc.g.style.display = ex === 'doc' ? '' : 'none';
+      st.exLbl.textContent = ex === 'doc' ? '例: test2.html の 1 行め <!doctype html>（15 文字 → 消費 16 回 → Char 14 個）' : '例: test.html の 1 行め <html>（6 文字 → 消費 7 回 → StartTag 1 個）';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      const ex = i === 4 ? 'doc' : 'html';
+      const R = st.runs[ex], N = R.steps.length;
+      // 0.55 秒に 1 文字。読み終えたら 2.6 秒止まって最初から。止めている人には読み終えた姿
+      const PER = 0.55, T = N * PER + 2.6;
+      const k = playing() ? Math.min(N, Math.floor(U.mod(ctx.ts, T) / PER)) : N;
+      const cur = k > 0 ? R.steps[k - 1] : null;
+      const snap = cur || R.init;
+      // 状態の図: いまの状態と、いま通った矢印
+      const now = snap.state;
+      for (const n in st.nodes) {
+        const on = n === now;
+        st.nodes[n].r.setAttribute('class', on ? 'f-x-soft s-x w2' : 'f-sf s-rule w1');
+        st.nodes[n].t.setAttribute('class', 't-c t-xs t-mono t-b' + (on ? ' t-x' : ''));
+      }
+      st.attr.setAttribute('class', /Attribute|SelfClosing/.test(now) ? 'f-x-soft s-x w2' : 'f-none s-rule w1 dash');
+      const key = cur ? (cur.before + '>' + cur.after) : null;
+      for (const e in st.edges) {
+        const on = e === key;
+        st.edges[e].p.setAttribute('class', on ? 'f-none s-x w2' : 'f-none s-dim w15');
+        st.edges[e].p.setAttribute('marker-end', st.mk(on ? 'x' : 'dim'));
+        st.edges[e].l.setAttribute('class', (on ? 't-xs t-x t-b' : 't-xs t-dim') + (/^(TagOpen>TagName|EndTagOpen>TagName)$/.test(e) ? '' : ' t-c'));
+      }
+      // 文字の帯
+      const strip = st.strips[ex];
+      strip.cells.forEach((c, j) => {
+        let mode = j < snap.pos ? 'done' : 'todo';
+        if (cur && cur.i === j) mode = cur.re ? 'now-re' : 'now';
+        strip.set(j, mode);
+      });
+      // 表
+      st.rows.forEach((row, j) => {
+        const s = R.steps[j];
+        const show = j < k;
+        row.bg.style.display = show && j === k - 1 ? '' : 'none';
+        if (!show) { row.cols.forEach((t) => { t.textContent = ''; }); return; }
+        let did;
+        if (s.out) did = '⇒ ' + fmtTok(s.out, true);
+        else if (s.before === 'TagOpen' && s.after === 'TagName') did = 'create_tag(true)、読み直す';
+        else if (s.before === 'EndTagOpen' && s.after === 'TagName') did = 'create_tag(false)、読み直す';
+        else if (s.before === 'TagName' && s.after === 'TagName') did = 'tag ＝ "' + (s.latest ? s.latest.tag : '') + '"';
+        else if (s.before === 'TagOpen' && s.after === 'Data') did = "読み直す（'<' は捨てる）";
+        else did = s.act === 'continue' ? 'continue' : '';
+        const vals = [String(j + 1), lit(s.c) + (s.re ? '（再）' : ''), s.before, s.after !== s.before ? '→ ' + s.after : '（同じ）', did];
+        row.cols.forEach((t, c) => { t.textContent = vals[c]; t.setAttribute('class', 't-xs t-mono pre' + (j === k - 1 ? ' t-x t-b' : '') + (c === 3 && s.after === s.before ? ' t-dim' : '')); });
+      });
+    }
+  };
+  SCENES.s2 = s2;
+
+  /* ================================================================
+     場面3 タグ名と終了タグ
+     例: "<html>"（消費 7 回）、"</head>"（消費 8 回）、"<H1 ID=\"title\">"（消費 17 回）。コードの分岐をたどった値
+     ================================================================ */
+  const S3_EX = { html: '<html>', head: '</head>', h1: '<H1 ID="title">' };
+  const s3 = {
+    steps: [
+      { title: 'TagName：5 つの分岐', text: '`\' \'` なら `BeforeAttributeName`、`/` なら `SelfClosingStartTag`、`>` なら `Data` に戻り `take_latest_token()` を返す。大文字は小文字にして、それ以外はそのまま `append_tag_name(c)` で足す。仕様はタブ・改行も区切りにするが、この版は空白だけ。' },
+      { title: 'append_tag_name：as_mut と ref mut と or パターン', text: '`as_mut()` で `Option<&mut HtmlToken>` を得て、中身を動かさずに書き換える。`match` の腕は `StartTag { … } | EndTag { … }` の or パターンで、どちらでも `ref mut tag` が `&mut String` に束縛され、`tag.push(c)` で足す。' },
+      { title: 'take_latest_token：取り出して None に戻す', text: '`>` で呼ぶ。`as_ref().cloned()` で中身の複製 `Option<HtmlToken>` を作り、`self.latest_token = None` にして返す。前後の `assert!` は「入っている」「空になった」を実行時に確かめる。std の `Option::take` は同じ動き。' },
+      { title: '終了タグ：EndTagOpen → create_tag(false)', text: '`</head>`: `TagOpen` が `/` で `EndTagOpen` へ。英字なら `create_tag(false)` で空の `EndTag` を置き、読み直して `TagName` へ。以後は開始タグと同じ道で、`>` で `EndTag { tag: "head" }` を返す。`EndTagOpen` に英字以外の分岐は無い。' },
+      { title: '大文字：<H1 ID="title"> → h1', text: 'タグ名と属性名の大文字は `is_ascii_uppercase()` で見て `to_ascii_lowercase()` して足す。`<H1>` は `h1`、属性名 `ID` は `id` になる。属性の値は大文字のまま。test.html は全部小文字なので例。ASCII 以外は `is_ascii_*` が偽で、そのまま入る。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      st.mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'token.rs（TagName の腕。詰めた）'],
+        [250, 'State::TagName => {'],
+        [251, '  if c == \' \' {'],
+        [252, '    self.state = State::BeforeAttributeName;'],
+        [253, '    continue;'],
+        [254, '  }'],
+        [256, '  if c == \'/\' {'],
+        [257, '    self.state = State::SelfClosingStartTag;'],
+        [258, '    continue;'],
+        [259, '  }'],
+        [261, '  if c == \'>\' {'],
+        [262, '    self.state = State::Data;'],
+        [263, '    return self.take_latest_token();'],
+        [264, '  }'],
+        [266, '  if c.is_ascii_uppercase() {'],
+        [267, '    self.append_tag_name(c.to_ascii_lowercase());'],
+        [268, '    continue;'],
+        [269, '  }'],
+        [271, '  if self.is_eof() { return Some(HtmlToken::Eof); }'],
+        [275, '  self.append_tag_name(c);'],
+        [276, '}']
+      ]);
+      panel([
+        ['', 'token.rs（append_tag_name。詰めた）'],
+        [112, 'fn append_tag_name(&mut self, c: char) {'],
+        [113, '  assert!(self.latest_token.is_some());'],
+        [115, '  if let Some(t) = self.latest_token.as_mut() {'],
+        [116, '    match t {'],
+        [117, '      HtmlToken::StartTag {'],
+        [118, '        ref mut tag,'],
+        [119, '        self_closing: _,'],
+        [120, '        attributes: _,'],
+        [121, '      }'],
+        [122, '      | HtmlToken::EndTag { ref mut tag } => tag.push(c),'],
+        [123, '      _ => panic!("`latest_token` should be'],
+        [null, '                 either StartTag or EndTag"),'],
+        [124, '    }'],
+        [125, '  }'],
+        [126, '}']
+      ]).hl(3, 10);
+      panel([
+        ['', 'token.rs（take_latest_token と、呼ぶ所。詰めた）'],
+        [128, 'fn take_latest_token(&mut self) -> Option<HtmlToken> {'],
+        [129, '  assert!(self.latest_token.is_some());'],
+        [131, '  let t = self.latest_token.as_ref().cloned();'],
+        [132, '  self.latest_token = None;'],
+        [133, '  assert!(self.latest_token.is_none());'],
+        [135, '  t'],
+        [136, '}'],
+        ['', 'token.rs 261〜264（TagName の腕）'],
+        [261, '  if c == \'>\' {'],
+        [262, '    self.state = State::Data;'],
+        [263, '    return self.take_latest_token();'],
+        [264, '  }'],
+        ['', 'std の Option::take（中身を出して None を残す。同じ動きを 1 回でする）'],
+        [null, 'pub const fn take(&mut self) -> Option<T>']
+      ]).hl(3, 4);
+      panel([
+        ['', 'token.rs（EndTagOpen の腕と create_tag。詰めた）'],
+        [238, 'State::EndTagOpen => {'],
+        [239, '  if self.is_eof() { return Some(HtmlToken::Eof); }'],
+        [243, '  if c.is_ascii_alphabetic() {'],
+        [244, '    self.reconsume = true;'],
+        [245, '    self.state = State::TagName;'],
+        [246, '    self.create_tag(false);'],
+        [247, '    continue;'],
+        [248, '  }'],
+        [249, '}'],
+        [100, 'fn create_tag(&mut self, start_tag_token: bool) {'],
+        [101, '  if start_tag_token {'],
+        [102, '    self.latest_token = Some(HtmlToken::StartTag {'],
+        [103, '      tag: String::new(),'],
+        [104, '      self_closing: false,'],
+        [105, '      attributes: Vec::new(),'],
+        [106, '    });'],
+        [107, '  } else {'],
+        [108, '    self.latest_token ='],
+        [null, '      Some(HtmlToken::EndTag { tag: String::new() });'],
+        [109, '  }'],
+        [110, '}']
+      ]).hl(3, 8);
+      panel([
+        ['', 'token.rs 266〜269（TagName の腕。詰めた）'],
+        [266, '  if c.is_ascii_uppercase() {'],
+        [267, '    self.append_tag_name(c.to_ascii_lowercase());'],
+        [268, '    continue;'],
+        [269, '  }'],
+        ['', 'token.rs 301〜304（AttributeName の腕。場面4）'],
+        [301, '  if c.is_ascii_uppercase() {'],
+        [302, '    self.append_attribute(c.to_ascii_lowercase(),'],
+        [null, '                          /*is_name*/ true);'],
+        [303, '    continue;'],
+        [304, '  }'],
+        ['', 'token.rs 366（AttributeValueDoubleQuoted の腕。値は小文字にしない）'],
+        [366, '  self.append_attribute(c, /*is_name*/ false);']
+      ]).hl(1, 4);
+      st.tr = S.g({}, svg);
+      st.runs = {}; for (const k in S3_EX) st.runs[k] = tokenize(S3_EX[k]);
+      const g = st.g = S.g({}, svg);
+      st.exLbl = S.text(490, 34, '', { cls: 't-xs t-dim' }, g);
+      st.strips = {}; for (const k in S3_EX) st.strips[k] = charStrip(g, 490, 42, Array.from(S3_EX[k]), { w: 28, h: 30 });
+      // push(c) の矢印（いまの文字 → latest_token）
+      st.pushArrow = S.path('M0,0', { cls: 'f-none s-d w2', 'marker-end': st.mk('d'), style: { display: 'none' } }, g);
+      st.pushLbl = S.text(0, 0, '', { cls: 't-xs t-d t-b' }, g);
+      // latest_token の箱
+      S.rect(490, 116, 454, 60, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      S.text(500, 134, 'latest_token: Option<HtmlToken>（作りかけのタグ）', { cls: 't-xs t-dim' }, g);
+      st.latest = S.text(500, 156, '', { cls: 't-sm t-mono pre t-b' }, g);
+      st.latestAttr = S.text(500, 170, '', { cls: 't-xs t-mono pre t-dim' }, g);
+      st.now = S.text(490, 196, '', { cls: 't-xs t-mono pre' }, g);
+      // 返り値
+      S.text(490, 216, 'next() の返り値（> を読んだ周で return）', { cls: 't-xs t-dim' }, g);
+      st.retBox = S.rect(490, 222, 454, 26, { rx: 4, cls: 'f-in s-rule w1' }, g);
+      st.ret = S.text(500, 239, '', { cls: 't-sm t-mono pre' }, g);
+      // 段階2・3: Option の中身への道筋
+      const chain = (rows) => {
+        const cg = S.g({ cls: 'fade hide' }, svg);
+        rows.forEach(([lbl, val, cls], k) => {
+          const y = 262 + k * 34;
+          S.text(490, y + 16, lbl, { cls: 't-xs t-mono t-dim' }, cg);
+          S.rect(650, y, 294, 24, { rx: 4, cls: cls || 'f-sf s-rule w1' }, cg);
+          S.text(658, y + 16, val, { cls: 't-xs t-mono pre' }, cg);
+          if (k) S.path('M797,' + (y - 10) + ' V' + (y - 1), { cls: 'f-none s-dim w15', 'marker-end': st.mk('dim') }, cg);
+        });
+        return cg;
+      };
+      st.chainA = chain([['self.latest_token', 'Some(StartTag { tag: "h", … })'], ['.as_mut()', 'Option<&mut HtmlToken>（中身への可変の参照）'], ['if let Some(t) = …', 't: &mut HtmlToken'], ['match t { … | … }', 'tag: &mut String → tag.push(\'t\') → "ht"', 'f-d-soft s-d w1']]);
+      st.chainB = chain([['self.latest_token', 'Some(StartTag { tag: "html", … })'], ['.as_ref()', 'Option<&HtmlToken>（中身への参照）'], ['.cloned()', 'Option<HtmlToken>（複製。これが返り値 t）', 'f-d-soft s-d w1'], ['= None', 'self.latest_token ＝ None（次のタグのために空にする）']]);
+      S.text(490, 412, '欄の中身を動かさず、参照だけを取り出して書き換える', { cls: 't-xs t-dim' }, st.chainA);
+      S.text(490, 412, '複製を返し、欄は None に戻す。std の Option::take は 1 回で同じことをする', { cls: 't-xs t-dim' }, st.chainB);
+      // 段階5: 読んだ文字と、足した文字
+      const up = st.up = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 268, '読んだ文字 c と、名前に足した文字（is_ascii_uppercase() なら to_ascii_lowercase()）', { cls: 't-xs t-dim' }, up);
+      [['H', 'h', 'tag'], ['1', '1', 'tag'], ['I', 'i', 'name'], ['D', 'd', 'name'], ['t', 't', 'value'], ['i', 'i', 'value'], ['t', 't', 'value'], ['l', 'l', 'value'], ['e', 'e', 'value']].forEach(([a, b, kind], k) => {
+        const x = 490 + k * 50;
+        S.rect(x, 276, 44, 24, { rx: 3, cls: 'f-sf s-rule w1' }, up);
+        S.text(x + 22, 293, a, { cls: 't-c t-mono t-b t-md' }, up);
+        S.path('M' + (x + 22) + ',302 V314', { cls: 'f-none s-dim w1', 'marker-end': st.mk('dim') }, up);
+        S.rect(x, 316, 44, 24, { rx: 3, cls: a !== b ? 'f-x-soft s-x w15' : 'f-in s-rule w1' }, up);
+        S.text(x + 22, 333, b, { cls: 't-c t-mono t-b t-md' + (a !== b ? ' t-x' : '') }, up);
+        S.text(x + 22, 356, kind, { cls: 't-c t-xs t-dim t-mono' }, up);
+      });
+      S.text(490, 382, 'value の中は小文字にしない（AttributeValueDoubleQuoted は append_attribute(c, false) だけ）', { cls: 't-xs t-dim' }, up);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      if (i === 0) st.C[0].p.hl(10, 13);
+      const T = [
+        ["TagName で 'h' 't' 'm' 'l' → append_tag_name → tag ＝ \"html\"", "TagName で ' ' → BeforeAttributeName（<p class=\"first\"> の 3 文字め）", "TagName で '/' → SelfClosingStartTag（<br/> のように名前に続く /）", "TagName で '>' → state ＝ Data、return take_latest_token()"],
+        ['latest_token: Option<HtmlToken> ＝ Some(StartTag { tag: "h", … })', 'as_mut() → Option<&mut HtmlToken>。if let Some(t) で t: &mut HtmlToken', 'StartTag { ref mut tag, … } | EndTag { ref mut tag } → tag: &mut String', "tag.push('t') → \"ht\"。Char や None なら panic!（ここには来ない）"],
+        ["'>' → self.state = State::Data", 'take_latest_token(): as_ref() → Option<&HtmlToken> → cloned() → 複製', 'self.latest_token = None → 返り値 Some(StartTag { tag: "html", … })', 'std の Option::take(&mut self) -> Option<T> も、中身を出して None を残す'],
+        ["</head>: '<' Data → TagOpen、'/' → EndTagOpen", "'h' → create_tag(false): latest_token ＝ Some(EndTag { tag: \"\" })、reconsume", "TagName で h e a d → tag ＝ \"head\"、'>' → EndTag { tag: \"head\" }", 'EndTagOpen は英字以外を読み飛ばす（</> は次の英字まで進む、と読める）'],
+        ["<H1 ID=\"title\">: 'H' は is_ascii_uppercase() → to_ascii_lowercase() → 'h'", "tag ＝ \"h1\"（'1' はそのまま）", "属性名 'I' 'D' → \"id\"。値 \"title\" はそのまま（AttributeValueDoubleQuoted）", "ASCII 以外（例 'あ'）は is_ascii_uppercase() が偽 → そのまま足す"]
+      ];
+      putTrace(st.tr, 404, T[i]);
+      const ex = i === 3 ? 'head' : i === 4 ? 'h1' : 'html';
+      for (const k in st.strips) st.strips[k].g.style.display = k === ex ? '' : 'none';
+      st.exLbl.textContent = ex === 'head' ? '例: </head>（test.html の 25 行め。7 文字 → 消費 8 回 → EndTag 1 個）' : ex === 'h1' ? '例: <H1 ID="title">（大文字の例。test.html には無い。15 文字 → 消費 17 回）' : '例: <html>（6 文字 → 消費 7 回 → StartTag 1 個）';
+      S.fade(st.chainA, i === 1);
+      S.fade(st.chainB, i === 2);
+      S.fade(st.up, i === 4);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      const ex = i === 3 ? 'head' : i === 4 ? 'h1' : 'html';
+      const R = st.runs[ex], N = R.steps.length;
+      // 0.5 秒に 1 文字。読み終えたら 2.4 秒止まって最初から。止めている人には読み終えた姿
+      const PER = 0.5, T = N * PER + 2.4;
+      const k = playing() ? Math.min(N, Math.floor(U.mod(ctx.ts, T) / PER)) : N;
+      const cur = k > 0 ? R.steps[k - 1] : null;
+      const snap = cur || R.init;
+      const strip = st.strips[ex];
+      strip.cells.forEach((c, j) => {
+        let mode = j < snap.pos ? 'done' : 'todo';
+        if (cur && cur.i === j) mode = cur.re ? 'now-re' : 'now';
+        strip.set(j, mode);
+      });
+      st.now.textContent = cur
+        ? k + ' 回め: c = ' + lit(cur.c) + (cur.re ? '（読み直し）' : '') + '   ' + cur.before + (cur.after !== cur.before ? ' → ' + cur.after : '') + (cur.act === 'return' ? '   → return' : '')
+        : 'まだ読んでいない';
+      st.now.setAttribute('class', 't-xs t-mono pre' + (cur && cur.act === 'return' ? ' t-x t-b' : ''));
+      // latest_token
+      const L = snap.latest;
+      st.latest.textContent = L ? 'Some(' + fmtTok(L, true) + ')' : 'None';
+      st.latest.setAttribute('class', 't-sm t-mono pre' + (L ? ' t-b' : ' t-dim'));
+      st.latestAttr.textContent = L && L.t === 'StartTag' ? 'attributes: [' + L.attributes.map((a) => 'Attribute { name: "' + a.name + '", value: "' + a.value + '" }').join(', ') + ']' : '';
+      // push の矢印: タグ名か属性に 1 文字足した周
+      const grew = !!(cur && cur.latest && !cur.out && ((cur.before === 'TagName' && cur.after === 'TagName') || (/^Attribute(Name|Value)/.test(cur.before) && cur.after === cur.before)));
+      if (grew) {
+        const cell = strip.cells[cur.i];
+        const x = cell.cx + 14;
+        st.pushArrow.setAttribute('d', 'M' + x + ',74 V112');
+        st.pushArrow.style.display = '';
+        st.pushLbl.textContent = cur.before === 'TagName' ? 'append_tag_name' : 'append_attribute';
+        S.attrs(st.pushLbl, { x: x > 820 ? x - 6 : x + 6, y: 96 });
+        st.pushLbl.setAttribute('class', 't-xs t-d t-b' + (x > 820 ? ' t-end' : ''));
+        st.pushLbl.style.display = '';
+      } else { st.pushArrow.style.display = 'none'; st.pushLbl.style.display = 'none'; }
+      // 返り値
+      const ret = cur && cur.out;
+      st.ret.textContent = ret ? 'Some(' + fmtTok(ret, true) + ')' + (ret.t === 'StartTag' && ret.attributes.length ? '   attributes: [' + ret.attributes.map((a) => a.name + '="' + a.value + '"').join(', ') + ']' : '') : '（まだ返していない）';
+      st.ret.setAttribute('class', 't-sm t-mono pre' + (ret ? ' t-b' : ' t-dim'));
+      st.retBox.setAttribute('class', ret ? 'f-d-soft s-d w15' : 'f-in s-rule w1');
+    }
+  };
+  SCENES.s3 = s3;
+
+  /* ================================================================
+     場面4 属性 — 9 つの状態
+     例: "<p class=\"first\">"（17 文字、消費 19 回）、テストの "<p class=\"A\" id='B' foo=bar>"（28 文字、消費 33 回）、"<img />"（7 文字、消費 9 回）
+     ================================================================ */
+  const S4_EX = { p: '<p class="first">', t: '<p class="A" id=\'B\' foo=bar>', img: '<img />' };
+  const S4_STATES = ['Data', 'TagOpen', 'TagName', 'BeforeAttributeName', 'AttributeName', 'AfterAttributeName', 'BeforeAttributeValue', 'AttributeValueDoubleQuoted', 'AttributeValueSingleQuoted', 'AttributeValueUnquoted', 'AfterAttributeValueQuoted', 'SelfClosingStartTag'];
+  const s4 = {
+    steps: [
+      { title: '17 文字 × 状態：<p class="first">', text: '`␣` で `BeforeAttributeName` へ、`c` を読み直して `AttributeName` へ入り `class` が名前に。`=` で `BeforeAttributeValue`、`"` で `AttributeValueDoubleQuoted` に入り `first` が値に。`>` で `Data` に戻って返す。消費は 19 回。' },
+      { title: 'Attribute と add_char(c, is_name)', text: '`start_new_attribute()` が空の `Attribute` を `attributes` に `push` する。`append_attribute(c, is_name)` は末尾の要素を取り、`add_char` が `is_name` の真偽で `name` か `value` に `push`。' },
+      { title: 'AttributeName と BeforeAttributeValue', text: '`AttributeName` は `=` で `BeforeAttributeValue` へ、空白・`/`・`>` なら読み直して `AfterAttributeName` へ。`BeforeAttributeValue` は空白を飛ばし、`"` と `\'` で 2 状態へ、それ以外は読み直して `AttributeValueUnquoted` へ。' },
+      { title: '引用符の中：" と EOF しか見ない', text: '`AttributeValueDoubleQuoted` は閉じる `"` 以外の文字を全部値に足す。`>`・空白・`/` も値の一部で、`href="…/test1.html"` の `:`・`/` も入る。仕様は `&` と NULL も見る。`AfterAttributeValueQuoted` は、空白なら次の属性、`>` なら返す。' },
+      { title: '単引用・無引用：token.rs のテストの例', text: 'テスト（543〜580 行）の `<p class="A" id=\'B\' foo=bar>` は 3 つの属性になる。`\'B\'` は `AttributeValueSingleQuoted`、`bar` は `AttributeValueUnquoted` で、空白か `>` で終わる。値 `A`・`B` は大文字のまま。' },
+      { title: '/> と self_closing', text: '`<img />`: `␣` で `BeforeAttributeName`、`/` で読み直して `AfterAttributeName`、`/` で `SelfClosingStartTag`、`>` で `set_self_closing_flag()` して返す。パーサは `self_closing: _` と書いて旗を読まない。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      st.mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'token.rs（<p class="first"> が通る分岐だけを並べた。詰めた）'],
+        [250, 'State::TagName => {'],
+        [251, '  if c == \' \' {'],
+        [252, '    self.state = State::BeforeAttributeName; continue; }'],
+        [278, 'State::BeforeAttributeName => {'],
+        [285, '  self.reconsume = true;'],
+        [286, '  self.state = State::AttributeName;'],
+        [287, '  self.start_new_attribute(); }'],
+        [289, 'State::AttributeName => {'],
+        [296, '  if c == \'=\' {'],
+        [297, '    self.state = State::BeforeAttributeValue; continue; }'],
+        [306, '  self.append_attribute(c, /*is_name*/ true); }'],
+        [337, 'State::BeforeAttributeValue => {'],
+        [343, '  if c == \'"\' {'],
+        [344, '    self.state = State::AttributeValueDoubleQuoted;'],
+        [345, '    continue; }'],
+        [356, 'State::AttributeValueDoubleQuoted => {'],
+        [357, '  if c == \'"\' {'],
+        [358, '    self.state = State::AfterAttributeValueQuoted;'],
+        [359, '    continue; }'],
+        [366, '  self.append_attribute(c, /*is_name*/ false); }'],
+        [397, 'State::AfterAttributeValueQuoted => {'],
+        [408, '  if c == \'>\' {'],
+        [409, '    self.state = State::Data;'],
+        [410, '    return self.take_latest_token(); }']
+      ]);
+      panel([
+        ['', 'attribute.rs（全 32 行のうち 3〜23。詰めた）'],
+        [3, '#[derive(Debug, Clone, PartialEq, Eq)]'],
+        [4, 'pub struct Attribute {'],
+        [5, '  name: String,'],
+        [6, '  value: String,'],
+        [7, '}'],
+        [9, 'impl Attribute {'],
+        [10, '  pub fn new() -> Self {'],
+        [11, '    Self { name: String::new(), value: String::new(), }'],
+        [15, '  }'],
+        [17, '  pub fn add_char(&mut self, c: char, is_name: bool) {'],
+        [18, '    if is_name {'],
+        [19, '      self.name.push(c);'],
+        [20, '    } else {'],
+        [21, '      self.value.push(c);'],
+        [22, '    }'],
+        [23, '  }'],
+        ['', 'token.rs（start_new_attribute と append_attribute の要点）'],
+        [148, '  attributes.push(Attribute::new());'],
+        [165, '  let len = attributes.len();'],
+        [168, '  attributes[len - 1].add_char(c, is_name);']
+      ]).hl(10, 16);
+      panel([
+        ['', 'token.rs（AttributeName と BeforeAttributeValue。詰めた）'],
+        [289, 'State::AttributeName => {'],
+        [290, '  if c == \' \' || c == \'/\' || c == \'>\' || self.is_eof() {'],
+        [291, '    self.reconsume = true;'],
+        [292, '    self.state = State::AfterAttributeName;'],
+        [293, '    continue; }'],
+        [296, '  if c == \'=\' {'],
+        [297, '    self.state = State::BeforeAttributeValue;'],
+        [298, '    continue; }'],
+        [306, '  self.append_attribute(c, /*is_name*/ true); }'],
+        [337, 'State::BeforeAttributeValue => {'],
+        [338, '  if c == \' \' { continue; }   // 空白文字は無視する'],
+        [343, '  if c == \'"\' {'],
+        [344, '    self.state = State::AttributeValueDoubleQuoted;'],
+        [345, '    continue; }'],
+        [348, '  if c == \'\\\'\' {'],
+        [349, '    self.state = State::AttributeValueSingleQuoted;'],
+        [350, '    continue; }'],
+        [353, '  self.reconsume = true;'],
+        [354, '  self.state = State::AttributeValueUnquoted; }']
+      ]).hl(6, 8);
+      panel([
+        ['', 'token.rs（引用符の中と、閉じた後。詰めた）'],
+        [356, 'State::AttributeValueDoubleQuoted => {'],
+        [357, '  if c == \'"\' {'],
+        [358, '    self.state = State::AfterAttributeValueQuoted;'],
+        [359, '    continue; }'],
+        [362, '  if self.is_eof() { return Some(HtmlToken::Eof); }'],
+        [366, '  self.append_attribute(c, /*is_name*/ false); }'],
+        [397, 'State::AfterAttributeValueQuoted => {'],
+        [398, '  if c == \' \' {'],
+        [399, '    self.state = State::BeforeAttributeName; continue; }'],
+        [403, '  if c == \'/\' {'],
+        [404, '    self.state = State::SelfClosingStartTag; continue; }'],
+        [408, '  if c == \'>\' {'],
+        [409, '    self.state = State::Data;'],
+        [410, '    return self.take_latest_token(); }'],
+        [413, '  if self.is_eof() { return Some(HtmlToken::Eof); }'],
+        [417, '  self.reconsume = true;'],
+        [418, '  self.state = State::BeforeAttributeName; }']
+      ]).hl(1, 6);
+      panel([
+        ['', 'token.rs（単引用と無引用。詰めた）'],
+        [368, 'State::AttributeValueSingleQuoted => {'],
+        [369, '  if c == \'\\\'\' {'],
+        [370, '    self.state = State::AfterAttributeValueQuoted;'],
+        [371, '    continue; }'],
+        [378, '  self.append_attribute(c, /*is_name*/ false); }'],
+        [380, 'State::AttributeValueUnquoted => {'],
+        [381, '  if c == \' \' {'],
+        [382, '    self.state = State::BeforeAttributeName; continue; }'],
+        [386, '  if c == \'>\' {'],
+        [387, '    self.state = State::Data;'],
+        [388, '    return self.take_latest_token(); }'],
+        [395, '  self.append_attribute(c, /*is_name*/ false); }'],
+        ['', 'token.rs（テスト test_attributes の要点。詰めた）'],
+        [544, 'let html = "<p class=\\"A\\" id=\'B\' foo=bar></p>".to_string();'],
+        [567, 'let expected = ['],
+        [568, '  HtmlToken::StartTag {'],
+        [569, '    tag: "p".to_string(),'],
+        [570, '    self_closing: false,'],
+        [571, '    attributes: vec![attr1, attr2, attr3],'],
+        [572, '  },'],
+        [577, 'for e in expected {'],
+        [578, '  assert_eq!(Some(e), tokenizer.next());'],
+        [579, '}']
+      ]).hl(6, 12);
+      panel([
+        ['', 'token.rs（SelfClosingStartTag と set_self_closing_flag。詰めた）'],
+        [420, 'State::SelfClosingStartTag => {'],
+        [421, '  if c == \'>\' {'],
+        [422, '    self.set_self_closing_flag();'],
+        [423, '    self.state = State::Data;'],
+        [424, '    return self.take_latest_token(); }'],
+        [427, '  if self.is_eof() { return Some(HtmlToken::Eof); } }'],
+        [175, 'fn set_self_closing_flag(&mut self) {'],
+        [178, '  if let Some(t) = self.latest_token.as_mut() {'],
+        [179, '    match t {'],
+        [180, '      HtmlToken::StartTag { tag: _, ref mut self_closing,'],
+        [183, '        attributes: _, } => *self_closing = true,'],
+        [185, '      _ => panic!("`latest_token` should be'],
+        [null, '                   either StartTag"),'],
+        [186, '    } } }'],
+        ['', 'parser.rs 207〜211（旗は読まない。ほかの腕も同じ）'],
+        [207, 'Some(HtmlToken::StartTag {'],
+        [208, '  ref tag,'],
+        [209, '  self_closing: _,'],
+        [210, '  ref attributes,'],
+        [211, '}) => {']
+      ]).hl(1, 6);
+      st.tr = S.g({}, svg);
+      st.runs = {}; for (const k in S4_EX) st.runs[k] = tokenize(S4_EX[k]);
+      const g = st.g = S.g({}, svg);
+      st.exLbl = S.text(490, 22, '', { cls: 't-xs t-dim' }, g);
+      // 状態の行（縦）
+      const X0 = 656, CW = 288;
+      st.rowY = {}; st.rowLbl = {};
+      S4_STATES.forEach((s, k) => {
+        const y = 60 + k * 17;
+        st.rowY[s] = y;
+        S.line(X0, y - 3.5, X0 + CW, y - 3.5, { cls: 's-soft w1' }, g);
+        st.rowLbl[s] = S.text(646, y, s, { cls: 't-end t-xs t-mono' }, g);
+      });
+      // 例ごとの帯（文字の箱・点・折れ線）
+      st.lanes = {};
+      for (const k in S4_EX) {
+        const R = st.runs[k], n = R.input.length, cw = Math.min(24, Math.floor(CW / n));
+        const lg = S.g({}, g);
+        const cells = R.input.map((c, j) => {
+          const x = X0 + j * cw;
+          const r = S.rect(x + 0.5, 28, cw - 1, 18, { rx: 2, cls: 'f-sf s-rule w1' }, lg);
+          const t = S.text(x + cw / 2, 41, glyph(c), { cls: 't-c t-xs t-mono t-b' }, lg);
+          return { r, t, x };
+        });
+        const path = S.path('', { cls: 'f-none s-mid w1' }, lg);
+        const dots = R.steps.map((s) => S.circle(X0 + s.i * cw + cw / 2, st.rowY[s.before] - 3.5, 3.5, { cls: 'f-mid', style: { display: 'none' } }, lg));
+        st.lanes[k] = { g: lg, cells, dots, path, cw };
+      }
+      st.now = S.text(490, 272, '', { cls: 't-xs t-mono pre' }, g);
+      // attributes と返り値
+      st.attrLbl = S.text(490, 292, '', { cls: 't-xs t-dim' }, g);
+      st.attrBox = S.rect(490, 298, 454, 70, { rx: 5, cls: 'f-sf s-rule w1' }, g);
+      st.attrLines = [0, 1, 2, 3, 4].map((m) => S.text(500, 312 + m * 13, '', { cls: 't-xs t-mono pre' }, g));
+      S.text(490, 386, 'next() の返り値', { cls: 't-xs t-dim' }, g);
+      st.retBox = S.rect(490, 392, 454, 26, { rx: 4, cls: 'f-in s-rule w1' }, g);
+      st.ret = S.text(500, 409, '', { cls: 't-xs t-mono pre' }, g);
+      // 段階2: add_char の道筋
+      const ad = st.ad = S.g({ cls: 'fade hide' }, svg);
+      ['Attribute::new() → Attribute { name: "", value: "" }（attributes の末尾に push）', 'add_char(c, true)  → self.name.push(c)   （AttributeName の腕から）', 'add_char(c, false) → self.value.push(c)  （AttributeValue… の 3 つの腕から）', '欄は非公開。読むときは name()・value() が複製を返す（attribute.rs 25〜31）'].forEach((s, m) => S.text(490, 440 + m * 18, s, { cls: 't-xs t-mono pre' + (m === 3 ? ' t-dim' : '') }, ad));
+      // 段階6: 旗
+      const sc = st.sc = S.g({ cls: 'fade hide' }, svg);
+      ['set_self_closing_flag(): *self_closing = true（latest_token の中の bool）', 'テスト test_self_closing_tag（583〜594）の期待値:', '  StartTag { tag: "img", self_closing: true, attributes: [] }', 'パーサ（parser.rs）は 5 か所とも self_closing: _ で受け、旗を見ない'].forEach((s, m) => S.text(490, 440 + m * 18, s, { cls: 't-xs t-mono pre' + (m === 3 ? ' t-dim' : '') }, sc));
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ["␣ → BeforeAttributeName → 'c' を読み直して AttributeName", 'c l a s s → name ＝ "class"、\'=\' → BeforeAttributeValue', '\'"\' → AttributeValueDoubleQuoted、f i r s t → value ＝ "first"', '\'"\' → AfterAttributeValueQuoted、\'>\' → Data、StartTag を返す（消費 19 回）'],
+        ['start_new_attribute(): attributes.push(Attribute::new())', '→ attributes ＝ [Attribute { name: "", value: "" }]', "append_attribute('c', true) → attributes[0].add_char('c', true) → name ＝ \"c\"", "append_attribute('f', false) → value ＝ \"f\"（is_name が偽）"],
+        ["AttributeName で '=' → BeforeAttributeValue", "AttributeName で ' ' '/' '>' → reconsume、AfterAttributeName（値なし）", "BeforeAttributeValue で '\"' → DoubleQuoted、'\\'' → SingleQuoted", 'BeforeAttributeValue でそれ以外 → reconsume、Unquoted'],
+        ['href="http://host.test:8000/test1.html" → value 32 文字（: / も値）', "AttributeValueDoubleQuoted: '\"' 以外は全部 append_attribute(c, false)", '仕様: & は文字参照へ、NULL は U+FFFD。この版は見ない', "AfterAttributeValueQuoted: ' ' → 次の属性、'/' → 自己終了、'>' → 返す"],
+        ['<p class="A" id=\'B\' foo=bar> → 属性 3 つ（token.rs 543〜580 のテスト）', "\"A\" → DoubleQuoted、'B' → SingleQuoted、bar → Unquoted（' ' か '>' で終わる）", 'name は小文字化、value はそのまま（A・B）。消費 33 回（読み直し 5 回）', 'expected と next() を assert_eq! で比べる（derive(PartialEq) が要る）'],
+        ["<img />: ' ' → BeforeAttributeName、'/' → reconsume → AfterAttributeName", "'/' → SelfClosingStartTag、'>' → set_self_closing_flag()", '→ StartTag { tag: "img", self_closing: true, attributes: [] }', 'parser.rs: self_closing: _ → 旗は読まれない（この版では立つだけ）']
+      ];
+      putTrace(st.tr, 458, T[i]);
+      const ex = i === 4 ? 't' : i === 5 ? 'img' : 'p';
+      for (const k in st.lanes) st.lanes[k].g.style.display = k === ex ? '' : 'none';
+      st.exLbl.textContent = ex === 't' ? '例: <p class="A" id=\'B\' foo=bar>（token.rs のテスト。28 文字 → 消費 33 回）' : ex === 'img' ? '例: <img />（token.rs のテスト。7 文字 → 消費 9 回）' : '例: <p class="first">（test.html の 28 行め。17 文字 → 消費 19 回）';
+      S.fade(st.ad, i === 1);
+      S.fade(st.sc, i === 5);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      const ex = i === 4 ? 't' : i === 5 ? 'img' : 'p';
+      const R = st.runs[ex], N = R.steps.length, L = st.lanes[ex];
+      // 0.4 秒に 1 文字。読み終えたら 2.6 秒止まって最初から。止めている人には読み終えた姿
+      const PER = 0.4, T = N * PER + 2.6;
+      const k = playing() ? Math.min(N, Math.floor(U.mod(ctx.ts, T) / PER)) : N;
+      const cur = k > 0 ? R.steps[k - 1] : null;
+      const snap = cur || R.init;
+      L.cells.forEach((c, j) => {
+        const now = cur && cur.i === j;
+        c.r.setAttribute('class', now ? 'f-x-soft s-x w15' : j < snap.pos ? 'f-in s-rule w1' : 'f-sf s-rule w1');
+        c.t.setAttribute('class', 't-c t-xs t-mono t-b' + (now ? ' t-x' : j < snap.pos ? ' t-dim' : ''));
+      });
+      let d = '';
+      L.dots.forEach((dot, j) => {
+        const on = j < k;
+        dot.style.display = on ? '' : 'none';
+        dot.setAttribute('class', j === k - 1 ? 'f-x' : 'f-mid');
+        dot.setAttribute('r', j === k - 1 ? 5 : 3.5);
+        if (on) d += (d ? 'L' : 'M') + dot.getAttribute('cx') + ',' + dot.getAttribute('cy');
+      });
+      L.path.setAttribute('d', d);
+      for (const s in st.rowLbl) st.rowLbl[s].setAttribute('class', 't-end t-xs t-mono' + (cur && cur.before === s ? ' t-x t-b' : ''));
+      st.now.textContent = cur
+        ? k + ' 回め: c = ' + lit(cur.c) + (cur.re ? '（読み直し）' : '') + '   ' + cur.before + (cur.after !== cur.before ? ' → ' + cur.after : '') + (cur.act === 'return' ? '   → return' : '')
+        : 'まだ読んでいない';
+      st.now.setAttribute('class', 't-xs t-mono pre' + (cur && cur.act === 'return' ? ' t-x t-b' : ''));
+      // attributes（返した周は latest_token が None に戻るので、返した StartTag の attributes を見せる）
+      const ret = cur && cur.out;
+      const done = !snap.latest && ret && ret.t === 'StartTag';
+      const holder = snap.latest && snap.latest.t === 'StartTag' ? snap.latest : done ? ret : null;
+      const A = holder ? holder.attributes : null;
+      st.attrLbl.textContent = done ? '返した StartTag の attributes（latest_token は None に戻った）' : 'latest_token の attributes: Vec<Attribute>';
+      const lines = A ? (A.length ? ['['].concat(A.map((a, m) => '  Attribute { name: "' + a.name + '", value: "' + a.value + '" }' + (m < A.length - 1 ? ',' : '')), [']']) : [done ? '[]（属性は無い）' : '[]（まだ属性は無い）']) : ['（latest_token は None）'];
+      st.attrLines.forEach((t, m) => { t.textContent = lines[m] || ''; t.setAttribute('class', 't-xs t-mono pre' + (!done && A && A.length && m > 0 && m <= A.length && cur && /Attribute/.test(cur.before) && m === A.length ? ' t-b' : '')); });
+      st.ret.textContent = ret ? 'Some(StartTag { tag: "' + ret.tag + '", self_closing: ' + ret.self_closing + ', attributes: [' + (ret.attributes.length ? '上の ' + ret.attributes.length + ' 個' : '') + '] })' : '（まだ返していない）';
+      st.ret.setAttribute('class', 't-xs t-mono pre' + (ret ? ' t-b' : ' t-dim'));
+      st.retBox.setAttribute('class', ret ? 'f-d-soft s-d w15' : 'f-in s-rule w1');
+    }
+  };
+  SCENES.s4 = s4;
+
+  /* ================================================================
+     場面5 script と style の中身
+     例: test.html 18 行め "function add(a, b) {"（20 文字 → Char 20 個）、24 行めの "<\/script>"（9 文字、消費 10 回 → EndTag）、
+         テスト test_script_tag の "<script>js code;<\/script>"、架空の "if (a < b)"（test.html には無い）。コードの分岐をたどった値
+     ================================================================ */
+  const S5_A = 'function add(a, b) {', S5_B = '<\/script>', S5_IF = 'if (a < b)', S5_AB = 'a<b>c', S5_T = '<script>js code;<\/script>';
+  const s5 = {
+    steps: [
+      { title: 'style・script の中身も Char の列', text: '`<style>` の中の 176 文字と `<script>` の中の 173 文字は、`Data` が `Char` にして返す（計算上）。パーサは開始タグで Text モードに入り、`Char` を 1 つの Text ノードにつなぐ（[[33-saba-dom.html#s3|第33章 場面3]]）。仕様では木を作る側が RAWTEXT・script data に切り替える。' },
+      { title: 'ScriptData 系の 5 状態は書かれているが、入口が無い', text: 'token.rs 432〜504 に ScriptData 系の 5 つの腕がある。`self.state = State::ScriptData` は 453・465・492 行だけで、どれも ScriptData 系の腕の中。`Data` や `TagName` からの代入は無く、パーサが `state` を変える手段も無い。' },
+      { title: '<\/script> は普通の終了タグとして切れる', text: '中身が `Data` で切られるので、`<\/script>` は普通の終了タグの道で `EndTag { tag: "script" }` になる。中身に `<` が無ければこれで通り、test.html の JS にも CSS にも無い。テスト（597〜621 行）も `Char` 8 個と `EndTag` を期待する。' },
+      { title: '中身に < があると壊れる', text: '`if (a < b)` があれば `<` で `TagOpen` に入り、続く空白は英字でないので `Data` に戻るが、`<` 自体は捨てられて `a  b` になる。`a<b` なら `b` で開始タグが始まり、次の `>` まで飲み込まれる。仕様の script data state は `<\/script>` 以外を文字として出す。' },
+      { title: 'もし入れたら：TemporaryBuffer の工夫', text: '`ScriptDataEndTagName` は英字を `buf` とタグ名に足す。英字以外が来たら `"</" + buf` を `TemporaryBuffer` から 1 文字ずつ返す。コメント（466〜468 行）のとおり `next()` は 1 トークンしか返せず、仕様が `<` と `/` の 2 つを出す所で `<` だけを返す。' },
+      { title: '第10章との対比', text: 'Chromium は同期の `<script>` でパーサを止め、取得して実行してから先へ進む（[[10-browser.html#s2.4|第10章 場面2]]）。saba のトークナイザは script を特別扱いせず、パーサも止まらない。JS は木が全部できた後に `execute_js` で動く（page.rs 67〜75、[[36-saba-js.html#s6|第36章 場面6]]）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      st.mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'parser.rs（InHead の style・script と、Text モード。詰めた）'],
+        [271, 'Some(HtmlToken::StartTag {'],
+        [272, '  ref tag, self_closing: _, ref attributes, }) => {'],
+        [276, '  if tag == "style" || tag == "script" {'],
+        [277, '    self.insert_element(tag, attributes.to_vec());'],
+        [278, '    self.original_insertion_mode = self.mode;'],
+        [279, '    self.mode = InsertionMode::Text;'],
+        [280, '    token = self.t.next();'],
+        [281, '    continue; }'],
+        [426, 'InsertionMode::Text => {'],
+        [427, '  match token {'],
+        [431, '    Some(HtmlToken::EndTag { ref tag }) => {'],
+        [432, '      if tag == "style" { … }'],
+        [438, '      if tag == "script" {'],
+        [439, '        self.pop_until(ElementKind::Script);'],
+        [440, '        self.mode = self.original_insertion_mode;'],
+        [441, '        token = self.t.next();'],
+        [442, '        continue; } }'],
+        [445, '    Some(HtmlToken::Char(c)) => {'],
+        [446, '      self.insert_char(c);'],
+        [447, '      token = self.t.next();'],
+        [448, '      continue; }']
+      ]).hl(3, 8);
+      panel([
+        ['', 'token.rs（State::ScriptData への代入は 3 か所。詰めた）'],
+        [444, 'State::ScriptDataLessThanSign => {'],
+        [445, '  if c == \'/\' {'],
+        [446, '    // 一時的なバッファを空文字でリセットする'],
+        [447, '    self.buf = String::new();'],
+        [448, '    self.state = State::ScriptDataEndTagOpen; continue; }'],
+        [452, '  self.reconsume = true;'],
+        [453, '  self.state = State::ScriptData;            // 1 か所め'],
+        [454, '  return Some(HtmlToken::Char(\'<\')); }'],
+        [456, 'State::ScriptDataEndTagOpen => {'],
+        [457, '  if c.is_ascii_alphabetic() { … }'],
+        [464, '  self.reconsume = true;'],
+        [465, '  self.state = State::ScriptData;            // 2 か所め'],
+        [469, '  return Some(HtmlToken::Char(\'<\')); }'],
+        [488, 'State::TemporaryBuffer => {'],
+        [489, '  self.reconsume = true;'],
+        [491, '  if self.buf.chars().count() == 0 {'],
+        [492, '    self.state = State::ScriptData;          // 3 か所め'],
+        [493, '    continue; }'],
+        ['', 'Data（206〜217）・TagOpen（218〜237）・TagName（250〜276）に ScriptData は無い']
+      ]);
+      panel([
+        ['', 'token.rs（テスト test_script_tag。詰めた）'],
+        [598, 'let html = "<script>js code;<\/script>".to_string();'],
+        [600, 'let expected = ['],
+        [601, '  HtmlToken::StartTag {'],
+        [602, '    tag: "script".to_string(),'],
+        [603, '    self_closing: false,'],
+        [604, '    attributes: Vec::new(),'],
+        [605, '  },'],
+        [606, '  HtmlToken::Char(\'j\'),'],
+        [607, '  HtmlToken::Char(\'s\'),'],
+        [608, '  HtmlToken::Char(\' \'),'],
+        [609, '  HtmlToken::Char(\'c\'),'],
+        [610, '  HtmlToken::Char(\'o\'),'],
+        [611, '  HtmlToken::Char(\'d\'),'],
+        [612, '  HtmlToken::Char(\'e\'),'],
+        [613, '  HtmlToken::Char(\';\'),'],
+        [614, '  HtmlToken::EndTag {'],
+        [615, '    tag: "script".to_string(),'],
+        [616, '  },'],
+        [617, '];']
+      ]).hl(8, 18);
+      panel([
+        ['', 'token.rs（a < b の \'<\' が通る分岐。詰めた）'],
+        [206, 'State::Data => {'],
+        [207, '  if c == \'<\' {'],
+        [208, '    self.state = State::TagOpen;'],
+        [209, '    continue; }'],
+        [216, '  return Some(HtmlToken::Char(c)); }'],
+        [218, 'State::TagOpen => {'],
+        [219, '  if c == \'/\' { … }'],
+        [224, '  if c.is_ascii_alphabetic() {   // a<b なら \'b\' でここ'],
+        [225, '    self.reconsume = true;'],
+        [226, '    self.state = State::TagName;'],
+        [227, '    self.create_tag(true); continue; }'],
+        [235, '  self.reconsume = true;           // \' \' ならここ'],
+        [236, '  self.state = State::Data;        // \'<\' は返さない'],
+        [237, '}'],
+        ['', 'HTML Standard 13.2.5.4 script data state（2026 年 11 月に閲覧）'],
+        ['', '< → script data less-than sign state へ。</ の後が終了タグ名でなければ'],
+        ['', '<・/・溜めた文字を文字トークンとして出し、script data state に戻る']
+      ]).hl(12, 13);
+      panel([
+        ['', 'token.rs（ScriptDataEndTagName と TemporaryBuffer。詰めた）'],
+        [466, '  // 仕様では、"<"と"/"の2つの文字トークンを返すとなっているが、'],
+        [467, '  // 私たちの実装ではnextメソッドからは一つのトークンしか返せない'],
+        [468, '  // ため、"<"のトークンのみを返す'],
+        [469, '  return Some(HtmlToken::Char(\'<\'));'],
+        [471, 'State::ScriptDataEndTagName => {'],
+        [472, '  if c == \'>\' {'],
+        [473, '    self.state = State::Data;'],
+        [474, '    return self.take_latest_token(); }'],
+        [477, '  if c.is_ascii_alphabetic() {'],
+        [478, '    self.buf.push(c);'],
+        [479, '    self.append_tag_name(c.to_ascii_lowercase());'],
+        [480, '    continue; }'],
+        [483, '  self.state = State::TemporaryBuffer;'],
+        [484, '  self.buf = String::from("</") + &self.buf;'],
+        [485, '  self.buf.push(c); continue; }'],
+        [488, 'State::TemporaryBuffer => {'],
+        [491, '  if self.buf.chars().count() == 0 {'],
+        [492, '    self.state = State::ScriptData; continue; }'],
+        [497, '  let c = self.buf.chars().nth(0)'],
+        [501, '    .expect("self.buf should have at least 1 char");'],
+        [502, '  self.buf.remove(0);'],
+        [503, '  return Some(HtmlToken::Char(c)); }']
+      ]).hl(13, 15);
+      panel([
+        ['', 'page.rs（受け取った応答の処理の順。詰めた）'],
+        [67, 'pub fn receive_response(&mut self, response: HttpResponse) {'],
+        [68, '  self.create_frame(response.body());   // DOM と CSSOM を作る'],
+        [70, '  self.execute_js();                    // ここで初めて JS'],
+        [72, '  self.set_layout_view();'],
+        [74, '  self.paint_tree();'],
+        [75, '}'],
+        [93, 'fn create_frame(&mut self, html: String) {'],
+        [94, '  let html_tokenizer = HtmlTokenizer::new(html);'],
+        [95, '  let frame ='],
+        [null, '    HtmlParser::new(html_tokenizer).construct_tree();'],
+        [96, '  let dom = frame.borrow().document();'],
+        [98, '  let style = get_style_content(dom);'],
+        [99, '  let css_tokenizer = CssTokenizer::new(style);'],
+        [100, '  let cssom ='],
+        [null, '    CssParser::new(css_tokenizer).parse_stylesheet();'],
+        [102, '  self.frame = Some(frame);'],
+        [103, '  self.style = Some(cssom);'],
+        [104, '}']
+      ]).hl(2, 3);
+      st.tr = S.g({}, svg);
+      st.runs = { a: tokenize(S5_A), b: tokenize(S5_B), if: tokenize(S5_IF), ab: tokenize(S5_AB), t: tokenize(S5_T) };
+      const g = st.g = S.g({}, svg);
+      // 上: script の中身の 1 行めと <\/script>
+      S.text(490, 22, 'test.html 18 行め（script の中身の 1 行め。20 文字。Data のまま Char × 20）', { cls: 't-xs t-dim' }, g);
+      st.stripA = charStrip(g, 490, 28, Array.from(S5_A), { w: 22, h: 26, fs: 't-sm' });
+      st.nowA = S.text(490, 70, '', { cls: 't-xs t-mono pre' }, g);
+      S.text(490, 92, 'test.html 24 行めの <\/script>（9 文字 → 消費 10 回 → EndTag { tag: "script" }）', { cls: 't-xs t-dim' }, g);
+      st.stripB = charStrip(g, 490, 98, Array.from(S5_B), { w: 30, h: 26, fs: 't-sm' });
+      st.nowB = S.text(490, 134, '', { cls: 't-xs t-mono pre' }, g);
+      // 中: ScriptData 系の島と、外の Data・TagName
+      const isl = st.isl = S.g({}, svg);
+      st.outer = { Data: box(isl, 496, 144, 60, 24, 'Data', null, 'f-sf s-rule w1', 't-xs t-mono t-b'), TagName: box(isl, 568, 144, 76, 24, 'TagName', null, 'f-sf s-rule w1', 't-xs t-mono t-b') };
+      S.line(526, 168, 526, 190, { cls: 's-x w15 dash' }, isl);
+      S.line(606, 168, 606, 190, { cls: 's-x w15 dash' }, isl);
+      S.text(518, 183, '×', { cls: 't-x t-b t-md' }, isl);
+      S.text(598, 183, '×', { cls: 't-x t-b t-md' }, isl);
+      S.text(660, 184, '← ここから ScriptData へ移る代入が無い（入口なし）', { cls: 't-xs t-x' }, isl);
+      st.island = S.rect(490, 192, 454, 136, { rx: 6, cls: 'f-none s-rule w1 dash' }, isl);
+      const nb = (name, x, y, w) => box(isl, x, y, w, 26, name, null, 'f-sf s-rule w1', 't-xs t-mono t-b');
+      st.nodes = { ScriptData: nb('ScriptData', 498, 206, 84), ScriptDataLessThanSign: nb('ScriptDataLessThanSign', 606, 206, 142), ScriptDataEndTagOpen: nb('ScriptDataEndTagOpen', 772, 206, 132), TemporaryBuffer: nb('TemporaryBuffer', 498, 282, 110), ScriptDataEndTagName: nb('ScriptDataEndTagName', 664, 282, 142) };
+      const ar = (d, color) => S.path(d, { cls: 'f-none s-' + (color || 'dim') + ' w15', 'marker-end': st.mk(color || 'dim') }, isl);
+      ar('M582,219 H604'); S.text(593, 213, '<', { cls: 't-c t-xs t-mono t-dim' }, isl);
+      ar('M748,219 H770'); S.text(759, 213, '/', { cls: 't-c t-xs t-mono t-dim' }, isl);
+      st.a453 = ar('M660,232 C660,260 560,260 560,234'); S.text(612, 268, '453', { cls: 't-c t-xs t-mono t-dim' }, isl);
+      st.a465 = ar('M838,206 V200 H540 V204'); S.text(843, 204, '465', { cls: 't-xs t-mono t-dim' }, isl);
+      ar('M838,232 L748,280'); S.text(822, 264, '英字', { cls: 't-xs t-dim' }, isl);
+      ar('M664,295 H610'); S.text(637, 288, '英字以外', { cls: 't-c t-xs t-dim' }, isl);
+      st.a492 = ar('M553,282 V234'); S.text(547, 262, '492', { cls: 't-end t-xs t-mono t-dim' }, isl);
+      ar('M806,295 H838'); S.text(844, 299, '> → Data で返す', { cls: 't-xs t-dim' }, isl);
+      ar('M540,308 V316 H562 V310'); S.text(568, 321, 'buf から 1 文字ずつ Char', { cls: 't-xs t-dim' }, isl);
+      S.text(490, 342, '453・465・492 行: State::ScriptData への代入。3 つとも島の中にあり、外から入る道が無い', { cls: 't-xs t-dim' }, isl);
+      // 下: 段階ごとの図
+      const g3 = st.g3 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 358, 'テスト test_script_tag（token.rs 597〜621）の入力 25 文字と、期待するトークン', { cls: 't-xs t-dim' }, g3);
+      st.stripT = charStrip(g3, 490, 364, Array.from(S5_T), { w: 18, h: 22, fs: 't-xs' });
+      [[0, 8, 'StartTag { tag: "script" }'], [8, 16, 'Char × 8（js code;）'], [16, 25, 'EndTag { tag: "script" }']].forEach(([a, b, s]) => {
+        S.rect(490 + a * 18 + 1, 390, (b - a) * 18 - 2, 4, { rx: 1, cls: 'f-d' }, g3);
+        S.text(490 + (a + b) * 9, 408, s, { cls: 't-c t-xs t-mono' }, g3);
+      });
+      const g4 = st.g4 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 358, 'もし JS の中に if (a < b) があったら（test.html には無い。計算上）', { cls: 't-xs t-dim' }, g4);
+      st.stripIf = charStrip(g4, 490, 364, Array.from(S5_IF), { w: 30, h: 26, fs: 't-sm' });
+      st.ifMarks = Array.from(S5_IF).map((c, j) => S.text(490 + j * 30 + 15, 408, '', { cls: 't-c t-xs t-mono' }, g4));
+      st.ifNote = S.text(490, 430, '', { cls: 't-xs t-mono pre' }, g4);
+      S.text(490, 456, 'a<b>c なら:', { cls: 't-xs t-dim' }, g4);
+      const sAB = charStrip(g4, 560, 440, Array.from(S5_AB), { w: 30, h: 26, fs: 't-sm' });
+      sAB.cells.forEach((c, j) => sAB.set(j, 'done'));
+      [[0, 1], [1, 4], [4, 5]].forEach(([a, b]) => S.rect(560 + a * 30 + 1, 468, (b - a) * 30 - 2, 4, { rx: 1, cls: a === 1 ? 'f-x' : 'f-d' }, g4));
+      S.text(560, 486, 'Char(\'a\')、StartTag { tag: "b" }、Char(\'c\')（計算上）', { cls: 't-xs t-mono' }, g4);
+      S.text(730, 456, '← \'b\' で開始タグが始まり \'>\' まで飲み込む', { cls: 't-xs t-x' }, g4);
+      const g5 = st.g5 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 358, '入口があったとして、script の中の "</s " を送ったら（コードの分岐から。実行はしていない）', { cls: 't-xs t-dim' }, g5);
+      st.g5rows = ["'<'  ScriptData → ScriptDataLessThanSign", "'/'  → buf ＝ \"\"、ScriptDataEndTagOpen", "'s'  英字 → create_tag(false)、ScriptDataEndTagName（読み直し）", "'s'  → buf ＝ \"s\"、tag ＝ \"s\"", "' '  英字以外 → buf ＝ \"</s \"、TemporaryBuffer", "TemporaryBuffer: Char('<')、Char('/')、Char('s')、Char(' ') を 1 回に 1 個ずつ", '仕様の script data end tag name state: < と / と溜めた文字を一度に出す'].map((s, m) => S.text(490, 376 + m * 16, s, { cls: 't-xs t-mono pre' }, g5));
+      st.g5states = ['ScriptDataLessThanSign', 'ScriptDataEndTagOpen', 'ScriptDataEndTagName', 'ScriptDataEndTagName', 'TemporaryBuffer', 'TemporaryBuffer', null];
+      const g6 = st.g6 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 358, 'Page::receive_response（page.rs 67〜75）の順。JS は木が全部できてから', { cls: 't-xs t-dim' }, g6);
+      [['create_frame', 'DOM・CSSOM を作る'], ['execute_js', 'JS（第36章）'], ['set_layout_view', 'レイアウト（第35章）'], ['paint_tree', '描画（第35章）']].forEach(([n, s], k) => {
+        const x = 490 + k * 116;
+        box(g6, x, 366, 104, 26, n, null, k === 1 ? 'f-x-soft s-x w15' : 'f-sf s-rule w1', 't-xs t-mono t-b');
+        S.text(x + 52, 408, s, { cls: 't-c t-xs t-dim' }, g6);
+        if (k < 3) S.path('M' + (x + 104) + ',379 H' + (x + 114), { cls: 'f-none s-dim w15', 'marker-end': st.mk('dim') }, g6);
+      });
+      S.text(490, 440, 'Chromium: <script> の所でパーサを止め、JS を実行してから続きを読む', { cls: 't-xs' }, g6);
+      xlink(g6, 490, 458, '10-browser.html#s2.4', '第10章 場面2 段階4「<script> で止まる」');
+      S.text(490, 484, 'saba: トークナイザもパーサも script で止まらない。中身はこの章では Char の列、', { cls: 't-xs' }, g6);
+      S.text(490, 500, '次の章で Text ノードになり、第36章の JsLexer が改めて字句に切る', { cls: 't-xs' }, g6);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['<style> の中 176 文字 → Char × 176（計算上）', '<script type="text/javascript"> の中 173 文字 → Char × 173', 'パーサ: style・script の開始タグで Text モード → insert_char でつなぐ', '仕様: style は RAWTEXT state、script は script data state に切り替える'],
+        ['State::ScriptData への代入: 453 行（ScriptDataLessThanSign の中）', '　465 行（ScriptDataEndTagOpen の中）、492 行（TemporaryBuffer の中）', 'Data・TagOpen・TagName の腕に ScriptData は出てこない', 'parser.rs は t.next() を呼ぶだけ。state は非公開の欄（token.rs 65）'],
+        ["24 行め <\/script>: '<' → TagOpen、'/' → EndTagOpen", "'s' → create_tag(false)、TagName で s c r i p t → \"script\"", "'>' → EndTag { tag: \"script\" }（test_script_tag の期待値と同じ）", "test.html の JS 173 文字・CSS 176 文字に '<' は無い → 通る"],
+        ["if (a < b): 'a' Char、' ' Char、'<' → TagOpen", "' ' は英字でない → reconsume、Data → Char(' ')。'<' は返らない", '→ Char の列は "if (a  b)"（\'<\' が消える。計算上）', "a<b>c なら 'b' で StartTag { tag: \"b\" } が始まり、'>' まで飲み込む"],
+        ["（入口があれば）'<' → LessThanSign、'/' → buf ＝ \"\"、EndTagOpen", "'s' → create_tag(false)、EndTagName で buf ＝ \"s\"、tag ＝ \"s\"", "英字以外 ' ' → buf ＝ \"</s \"、TemporaryBuffer → Char('<')、Char('/')、…", '仕様: 「< と / の 2 トークン」を一度に出す。saba: next() は 1 個ずつ'],
+        ['Chromium: 同期の <script> でパーサ停止 → 取得 → 実行 → 再開（第10章 場面2 段階4）', 'saba: トークナイザもパーサも止まらない。script の中身は Text ノードに', 'receive_response: create_frame → execute_js → set_layout_view → paint_tree', 'JS が DOM を書き換えるのは木が全部できた後（第36章 場面6）']
+      ];
+      putTrace(st.tr, 420, T[i]);
+      S.fade(st.g3, i === 2); S.fade(st.g4, i === 3); S.fade(st.g5, i === 4); S.fade(st.g6, i === 5);
+      op(st.isl, i === 1 || i === 4 ? '' : 0.45);
+      op(st.g, i === 0 || i === 2 ? '' : 0.55);
+      const hot = i === 1;
+      [st.a453, st.a465, st.a492].forEach((a) => { a.setAttribute('class', hot ? 'f-none s-x w2' : 'f-none s-dim w15'); a.setAttribute('marker-end', st.mk(hot ? 'x' : 'dim')); });
+      st.island.setAttribute('class', i === 1 || i === 4 ? 'f-none s-x w15 dash' : 'f-none s-rule w1 dash');
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      const RA = st.runs.a, RB = st.runs.b, NA = RA.steps.length, NB = RB.steps.length;
+      // 段階1: A を 0.3 秒に 1 文字、少し置いて B を 0.4 秒に 1 文字。段階3: B だけ。ほかは読み終えた姿
+      let ka = NA, kb = NB;
+      if (playing()) {
+        if (i === 0) {
+          const tt = U.mod(ctx.ts, NA * 0.3 + 0.8 + NB * 0.4 + 2.4);
+          ka = Math.min(NA, Math.floor(tt / 0.3));
+          kb = tt < NA * 0.3 + 0.8 ? 0 : Math.min(NB, Math.floor((tt - NA * 0.3 - 0.8) / 0.4));
+        } else if (i === 2) {
+          kb = Math.min(NB, Math.floor(U.mod(ctx.ts, NB * 0.45 + 2.4) / 0.45));
+        }
+      }
+      const feed = (strip, R, k, now, prefix) => {
+        const cur = k > 0 ? R.steps[k - 1] : null, snap = cur || R.init;
+        strip.cells.forEach((c, j) => { let m = j < snap.pos ? 'done' : 'todo'; if (cur && cur.i === j) m = cur.re ? 'now-re' : 'now'; strip.set(j, m); });
+        const outs = R.steps.slice(0, k).filter((s) => s.out);
+        now.textContent = cur ? prefix + lit(cur.c) + (cur.re ? '（読み直し）' : '') + '  ' + cur.before + (cur.after !== cur.before ? ' → ' + cur.after : '') + (cur.out ? '  ⇒ ' + fmtTok(cur.out, true) : '') + (outs.length ? '   （' + outs.length + ' 個め）' : '') : '';
+        now.setAttribute('class', 't-xs t-mono pre' + (cur && cur.out ? ' t-x t-b' : ''));
+      };
+      feed(st.stripA, RA, ka, st.nowA, 'c = ');
+      feed(st.stripB, RB, kb, st.nowB, 'c = ');
+      // 段階4: if (a < b) を 0.5 秒に 1 文字
+      if (i === 3) {
+        const R = st.runs.if, N = R.steps.length;
+        const k = playing() ? Math.min(N, Math.floor(U.mod(ctx.ts, N * 0.5 + 3) / 0.5)) : N;
+        const cur = k > 0 ? R.steps[k - 1] : null, snap = cur || R.init;
+        st.stripIf.cells.forEach((c, j) => { let m = j < snap.pos ? 'done' : 'todo'; if (cur && cur.i === j) m = cur.re ? 'now-re' : 'now'; st.stripIf.set(j, m); });
+        const done = R.steps.slice(0, k);
+        st.ifMarks.forEach((t, j) => {
+          const emitted = done.find((s) => s.i === j && s.out);
+          const dropped = done.find((s) => s.i === j && s.before === 'Data' && s.after === 'TagOpen');
+          t.textContent = emitted ? 'Char' : dropped ? '×' : '';
+          t.setAttribute('class', 't-c t-xs t-mono' + (dropped ? ' t-x t-b' : ' t-d'));
+        });
+        st.ifNote.textContent = k >= N ? '→ Char の列は "if (a  b)"。\'<\' が消えて JS の意味が変わる' : '';
+      }
+      // 段階5: 島の中を 1 行ずつ
+      if (i === 4) {
+        const rows = st.g5rows, n = rows.length;
+        const m = playing() ? Math.floor(U.mod(ctx.ts, n * 1.3 + 1.5) / 1.3) : n - 2;
+        rows.forEach((t, j) => t.setAttribute('class', 't-xs t-mono pre' + (j === m ? ' t-x t-b' : j < m ? '' : ' t-dim')));
+        const now = m < n ? st.g5states[m] : null;
+        for (const s in st.nodes) {
+          const on = s === now;
+          st.nodes[s].r.setAttribute('class', on ? 'f-x-soft s-x w2' : 'f-sf s-rule w1');
+          st.nodes[s].t.setAttribute('class', 't-c t-xs t-mono t-b' + (on ? ' t-x' : ''));
+        }
+      } else {
+        for (const s in st.nodes) { st.nodes[s].r.setAttribute('class', 'f-sf s-rule w1'); st.nodes[s].t.setAttribute('class', 't-c t-xs t-mono t-b'); }
+      }
+    }
+  };
+  SCENES.s5 = s5;
+
+  /* ================================================================
+     場面6 EOF・reconsume・この版が扱わないもの
+     例: test.html の末尾 8 文字 "</html>\n"（添字 802〜809。消費 9 回、読み直し 1 回、その次の next() が None）。
+         "<p\nclass=\"x\">"・"<p  class=\"x\">"（test.html には無い）。仕様の状態の数は HTML Standard 13.2.5 の見出しを数えた値（84）
+     ================================================================ */
+  const S6_END = '</html>\n', S6_NL = '<p\nclass="x">', S6_SP = '<p  class="x">', S6_CUT = '<html';
+  const S6_CATS = [['Data・タグ', 4, 4], ['属性', 9, 9], ['script data', 18, 4], ['RCDATA・RAWTEXT・PLAINTEXT', 9, 0], ['コメント', 12, 0], ['DOCTYPE', 16, 0], ['CDATA', 3, 0], ['処理命令', 5, 0], ['文字参照', 8, 0], ['TemporaryBuffer（saba だけ）', 0, 1]];
+  const s6 = {
+    steps: [
+      { title: 'reconsume：1 文字戻す代わりに旗を立てる', text: '`pos` は `consume_next_input` で進むだけで戻らない。読み直すときは旗を立てて状態を変え、次の周の `reconsume_input()` が `input[pos - 1]` を返して旗を下ろす。test.html では 842 回の消費のうち 32 回が読み直し（計算上）。' },
+      { title: '終わりは None：next の冒頭の if', text: '`next()` は最初に `pos >= input.len()` なら `None` を返す。810 文字を読み切った次の呼び出しがこれで、パーサの `while token.is_some()` が終わる。パーサは `Some(HtmlToken::Eof) | None` を同じ腕で受けるので、どちらが来ても同じに動く。' },
+      { title: 'is_eof と Eof トークン：返らないと読める', text: '`is_eof()` は `pos > len` だが、`pos` は `input[pos]` を読むときにしか増えず、`pos == len` で `input[pos]` を読めば範囲外で止まる。`pos > len` になる道は無く、`Eof` を返す 11 か所は通らないと読める。`<html` のように途中で尽きる入力は範囲外になる。' },
+      { title: '扱わない構文：コメント・DOCTYPE・文字参照', text: '`<!-- -->` は `<` が捨てられ `!-- -->` が `Char` に、`&amp;` は 5 文字の `Char` のまま（仕様は `&` で文字参照へ）。DOCTYPE は[[2|場面2]]のとおり。CDATA・RCDATA・RAWTEXT も無い。仕様の 84 状態のうち、この版に名前があるのは 17。' },
+      { title: '区切りの空白：\' \' だけを見る', text: '仕様は空白とタブ・改行・改ページを区切りにするが、`TagName` は `\' \'` だけを見る。`<p\\nclass="x">` は名前が `p\\nclass="x"` になると読める。`BeforeAttributeName` は空白を飛ばさず、空白が 2 つ続くと空の `Attribute` が残ると読める。' },
+      { title: '字句解析としての形と、誤りの扱い', text: '状態機械で切る形は[[28-compiler.html#s1.2|第28章 場面1]]の字句解析と同じ。違いは誤りの扱いで、HTML Standard は parse error の後の処理を定めて続け、rustc は止まる。saba は数えず、`assert!`・`panic!`・範囲外でだけ止まる。[[10-browser.html#s2.2|第10章 場面2]]の 4 種と比べ、コメントが無く `Eof` がある。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      st.mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'token.rs（読み直しの仕組み。詰めた）'],
+        [89, 'fn consume_next_input(&mut self) -> char {'],
+        [90, '  let c = self.input[self.pos];'],
+        [91, '  self.pos += 1;'],
+        [92, '  c'],
+        [93, '}'],
+        [95, 'fn reconsume_input(&mut self) -> char {'],
+        [96, '  self.reconsume = false;'],
+        [97, '  self.input[self.pos - 1]'],
+        [98, '}'],
+        ['', 'token.rs 200〜203（next の loop の先頭）'],
+        [200, 'let c = match self.reconsume {'],
+        [201, '  true => self.reconsume_input(),'],
+        [202, '  false => self.consume_next_input(),'],
+        [203, '};'],
+        ['', 'token.rs 243〜247（EndTagOpen。旗を立てる例）'],
+        [243, 'if c.is_ascii_alphabetic() {'],
+        [244, '  self.reconsume = true;'],
+        [245, '  self.state = State::TagName;'],
+        [246, '  self.create_tag(false);'],
+        [247, '  continue;']
+      ]).hl(6, 8);
+      panel([
+        ['', 'token.rs 194〜197 ／ parser.rs（呼ぶ側）。詰めた'],
+        [194, 'fn next(&mut self) -> Option<Self::Item> {'],
+        [195, '  if self.pos >= self.input.len() {'],
+        [196, '    return None;'],
+        [197, '  }'],
+        ['', 'parser.rs（construct_tree。詰めた）'],
+        [182, 'pub fn construct_tree(&mut self) -> Rc<RefCell<Window>> {'],
+        [183, '  let mut token = self.t.next();'],
+        [185, '  while token.is_some() {'],
+        [186, '    match self.mode {'],
+        [199, '      InsertionMode::BeforeHtml => {'],
+        [200, '        match token {'],
+        [225, '          Some(HtmlToken::Eof) | None => {'],
+        [226, '            return self.window.clone();'],
+        [227, '          }'],
+        [494, '  self.window.clone()   // while を抜けたとき'],
+        [495, '}']
+      ]).hl(1, 4);
+      panel([
+        ['', 'token.rs（is_eof と、Eof を返す 11 か所のうち 3 つ。詰めた）'],
+        [85, 'fn is_eof(&self) -> bool {'],
+        [86, '  self.pos > self.input.len()'],
+        [87, '}'],
+        [89, 'fn consume_next_input(&mut self) -> char {'],
+        [90, '  let c = self.input[self.pos];   // pos == len なら範囲外'],
+        [91, '  self.pos += 1;                  // だから pos は len まで'],
+        [92, '  c'],
+        [93, '}'],
+        [212, '  if self.is_eof() {              // Data の腕'],
+        [213, '    return Some(HtmlToken::Eof);'],
+        [214, '  }'],
+        [231, '  if self.is_eof() {              // TagOpen の腕'],
+        [232, '    return Some(HtmlToken::Eof);'],
+        [233, '  }'],
+        [271, '  if self.is_eof() {              // TagName の腕'],
+        [272, '    return Some(HtmlToken::Eof);'],
+        [273, '  }'],
+        ['', 'ほかに 240・330・363・375・392・414・429・439 行（全部で 11 か所）']
+      ]).hl(1, 7);
+      panel([
+        ['', 'token.rs（Data と TagOpen に無い分岐。詰めた）'],
+        [206, 'State::Data => {'],
+        [207, '  if c == \'<\' { self.state = State::TagOpen; continue; }'],
+        [216, '  return Some(HtmlToken::Char(c));   // \'&\' もここ'],
+        [217, '}'],
+        [218, 'State::TagOpen => {'],
+        [219, '  if c == \'/\' { self.state = State::EndTagOpen; continue; }'],
+        [224, '  if c.is_ascii_alphabetic() { … }'],
+        [235, '  self.reconsume = true;               // \'!\' も \'?\' もここ'],
+        [236, '  self.state = State::Data;'],
+        [237, '}'],
+        ['', 'HTML Standard 13.2.5（2026 年 11 月に閲覧）の対応する分岐'],
+        ['', 'data state: & → character reference state（77〜84 の 8 状態）'],
+        ['', 'tag open state: ! → markup declaration open state（コメント 41〜52、'],
+        ['', '  DOCTYPE 53〜68、CDATA 69〜71）、? → processing instruction（72〜76）'],
+        ['', 'RCDATA 2・9〜11、RAWTEXT 3・12〜14、PLAINTEXT 5: 木を作る側が切り替える']
+      ]).hl(3, 3);
+      panel([
+        ['', 'token.rs（空白を見る所。詰めた）'],
+        [250, 'State::TagName => {'],
+        [251, '  if c == \' \' {                  // \'\\t\' \'\\n\' は見ない'],
+        [252, '    self.state = State::BeforeAttributeName; continue; }'],
+        [275, '  self.append_tag_name(c);         // \'\\n\' は名前に入る'],
+        [278, 'State::BeforeAttributeName => {'],
+        [279, '  if c == \'/\' || c == \'>\' || self.is_eof() { … }'],
+        [285, '  self.reconsume = true;           // \' \' でもここに来る'],
+        [286, '  self.state = State::AttributeName;'],
+        [287, '  self.start_new_attribute(); }  // 空の Attribute が増える'],
+        [289, 'State::AttributeName => {'],
+        [290, '  if c == \' \' || c == \'/\' || c == \'>\' || self.is_eof() {'],
+        [291, '    self.reconsume = true;'],
+        [292, '    self.state = State::AfterAttributeName; continue; }'],
+        [308, 'State::AfterAttributeName => {'],
+        [309, '  if c == \' \' { continue; }      // 空白文字は無視する'],
+        ['', 'HTML Standard: tag name state・before attribute name state は'],
+        ['', 'tab・LF・FF・空白の 4 つを区切り／無視の文字にしている']
+      ]).hl(2, 4);
+      panel([
+        ['', '第28章 場面1 の字句解析（rustc）と、この章（形は同じ。違いは誤りの扱い）'],
+        ['', '  入力: 文字の列 ／ 出力: トークンの列 ／ 次の段: 木を組む'],
+        ['', '  rustc: 誤りを知らせて止まる ／ HTML: 定められた処理で続ける'],
+        ['', 'token.rs で止まる所（コードから数えた）'],
+        [113, 'assert!(self.latest_token.is_some());  // 同じ形がほか 4 か所'],
+        [166, 'assert!(len > 0);'],
+        [123, '_ => panic!("`latest_token` should be either'],
+        [null, '             StartTag or EndTag"),   // ほか 3 か所'],
+        [90, 'let c = self.input[self.pos];           // 範囲外なら panic'],
+        ['', '例: </p class="x"> は start_new_attribute の panic!（150 行）で止まる、と読める'],
+        ['', 'parse error を数える欄も、知らせる所も無い'],
+        ['', 'HTML Standard 13.2.2 Parse errors（2026 年 11 月に閲覧）: parse error の'],
+        ['', '  後の処理を定める。最初の parse error で止めてもよい、とも書く']
+      ]);
+      st.tr = S.g({}, svg);
+      st.runs = { end: tokenize(S6_END), nl: tokenize(S6_NL), sp: tokenize(S6_SP) };
+      // 上（段階1〜3）: 末尾 8 文字と pos・reconsume
+      const gt = st.gt = S.g({}, svg);
+      S.text(490, 22, 'input の末尾 8 文字（添字 802〜809）: </html>↵　　input.len() ＝ 810', { cls: 't-xs t-dim' }, gt);
+      st.strip = charStrip(gt, 490, 28, Array.from(S6_END), { w: 36, h: 30 });
+      st.strip.cells.forEach((c, j) => S.text(c.cx + 18, 72, String(802 + j), { cls: 't-c t-xs t-dim t-mono' }, gt));
+      st.posMark = S.path('M0,0', { cls: 'f-x' }, gt);
+      st.posLbl = S.text(0, 0, '', { cls: 't-c t-xs t-mono t-b t-x' }, gt);
+      st.lamp = box(gt, 812, 28, 128, 30, 'reconsume: false', null, 'f-sf s-rule w1', 't-xs t-mono t-b');
+      st.now = S.text(490, 122, '', { cls: 't-xs t-mono pre' }, gt);
+      S.rect(490, 132, 454, 60, { rx: 5, cls: 'f-sf s-rule w1' }, gt);
+      st.j1 = S.text(500, 152, '', { cls: 't-xs t-mono pre' }, gt);
+      st.j2 = S.text(500, 174, '', { cls: 't-xs t-mono pre' }, gt);
+      // 段階3: タグの途中で尽きる入力
+      const g3 = st.g3 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 214, 'タグの途中で尽きる入力 <html（5 文字。例）', { cls: 't-xs t-dim' }, g3);
+      const sc = charStrip(g3, 490, 220, Array.from(S6_CUT), { w: 36, h: 30 });
+      sc.cells.forEach((c, j) => sc.set(j, 'done'));
+      S.rect(671, 220, 34, 30, { rx: 3, cls: 'f-x-soft s-x w15 dash' }, g3);
+      S.text(688, 239, '?', { cls: 't-c t-mono t-b t-md t-x' }, g3);
+      S.text(688, 264, 'input[5]', { cls: 't-c t-xs t-mono t-x' }, g3);
+      S.text(490, 286, "TagName で 'l' を足した後、次の周の consume_next_input が input[5] を読む → 範囲外", { cls: 't-xs' }, g3);
+      S.text(490, 302, 'None でも Eof でもなく、Rust の実行時の検査で止まる（と読める。実行はしていない）', { cls: 't-xs t-dim' }, g3);
+      // 段階4: 扱わない構文
+      const g4 = st.g4 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 22, '扱わない構文（コードの分岐から。計算上）', { cls: 't-xs t-dim' }, g4);
+      const sA = charStrip(g4, 490, 30, Array.from('<!-- a -->'), { w: 22, h: 24, fs: 't-sm' });
+      sA.cells.forEach((c, j) => sA.set(j, j === 0 ? 'now' : 'done'));
+      S.text(722, 46, "→ '<' が消え Char × 9（!-- a -->）", { cls: 't-xs t-mono pre' }, g4);
+      const sB = charStrip(g4, 490, 66, Array.from('&amp;'), { w: 22, h: 24, fs: 't-sm' });
+      sB.cells.forEach((c, j) => sB.set(j, 'done'));
+      S.text(612, 82, '→ Char × 5。仕様は & で文字参照へ → "&" 1 文字', { cls: 't-xs t-mono pre' }, g4);
+      ['<title> の中身: 仕様は RCDATA state。saba は Data（title タグ自体はパーサが捨てる。第33章）', '<style> の中身: 仕様は RAWTEXT state。saba は Data（場面5）', "CDATA（<![CDATA[ …）、処理命令（<? …）: '<' が消えて Char の列", 'トークンの種類: saba は 4。仕様にある DOCTYPE・コメント・処理命令のトークンが無い'].forEach((s, m) => S.text(490, 112 + m * 18, s, { cls: 't-xs' }, g4));
+      // 段階5: 区切りの空白
+      const g5 = st.g5 = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 22, '区切りの文字: 仕様はタブ・LF・FF・空白の 4 つ。saba の TagName は空白だけ', { cls: 't-xs t-dim' }, g5);
+      const sN = charStrip(g5, 490, 30, Array.from(S6_NL), { w: 28, h: 26, fs: 't-sm' });
+      st.runs.nl.steps.forEach((s) => sN.set(s.i, s.before === 'TagName' ? 'now' : 'done'));
+      S.text(490, 74, '赤: TagName で読んだ文字 → tag ＝ "p\\nclass=\\"x\\""（と読める）', { cls: 't-xs t-mono pre' }, g5);
+      S.text(490, 104, '<p␣␣class="x">（空白が 2 つ）', { cls: 't-xs t-dim' }, g5);
+      const sS = charStrip(g5, 490, 110, Array.from(S6_SP), { w: 28, h: 26, fs: 't-sm' });
+      sS.cells.forEach((c, j) => sS.set(j, j === 3 ? 'now' : 'done'));
+      S.text(490, 154, '赤: 3 回読まれる 2 つめの空白。BeforeAttributeName に空白の分岐が無く、', { cls: 't-xs' }, g5);
+      S.text(490, 170, 'start_new_attribute → AttributeName → AfterAttributeName（ここで無視）と進む', { cls: 't-xs' }, g5);
+      S.text(490, 190, '→ [{ name: "", value: "" }, { name: "class", value: "x" }]（略記）', { cls: 't-xs t-mono pre' }, g5);
+      // 段階6: 第28章との対比
+      const g6 = st.g6 = S.g({ cls: 'fade hide' }, svg);
+      [['', '第28章 場面1（rustc の字句解析）', 'この章（saba の HtmlTokenizer）'], ['入力', 'ソースの文字の列（UTF-8）', 'HTML の文字の列（Vec<char>）'], ['出力', 'トークン（例の 2 行で 34 個）', 'HtmlToken（810 文字で 543 個）'], ['誤り', '知らせて止まる', '数えない。仕様は続ける規則を定める'], ['止まる所', '構文の誤り', 'assert!・panic!・範囲外だけ'], ['次の段', '構文解析 → 構文木', 'HtmlParser → DOM（第33章）']].forEach((r, k) => {
+        const y = 30 + k * 22;
+        S.text(490, y, r[0], { cls: 't-xs t-b' }, g6);
+        S.text(560, y, r[1], { cls: 't-xs' + (k ? '' : ' t-dim') }, g6);
+        S.text(750, y, r[2], { cls: 't-xs' + (k ? '' : ' t-dim') }, g6);
+        if (k === 0) S.line(490, y + 6, 944, y + 6, { cls: 's-rule w1' }, g6);
+      });
+      xlink(g6, 490, 170, '28-compiler.html#s1.2', '第28章 場面1 字句解析');
+      xlink(g6, 700, 170, '10-browser.html#s2.2', '第10章 場面2 トークンに切る');
+      S.text(490, 194, 'HTML Standard 13.2.2 Parse errors: 誤りの後の処理を定める（最初の誤りで止めてもよい、とも書く）', { cls: 't-xs t-dim' }, g6);
+      // 下（段階4〜6）: 仕様の 84 状態と saba の 18
+      const gb = st.gb = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 280, '仕様 13.2.5 の 84 状態（白抜きの棒）と saba の State 18（塗った棒）を種類ごとに', { cls: 't-sm t-b' }, gb);
+      S6_CATS.forEach(([name, n, m], k) => {
+        const y = 292 + k * 24, x0 = 668, sc1 = 12;
+        S.text(490, y + 12, name, { cls: 't-xs' }, gb);
+        if (n) S.rect(x0, y, n * sc1, 8, { rx: 2, cls: 'f-none s-mid w1' }, gb);
+        if (m) S.rect(x0, y + 10, m * sc1, 8, { rx: 2, cls: 'f-mid' }, gb);
+        S.text(940, y + 13, n + ' ／ ' + m, { cls: 't-end t-xs t-mono' }, gb);
+      });
+      S.text(490, 540, '合計 84 対 18。名前が共通なのは 17（TemporaryBuffer は仕様では状態でなく一時バッファ）', { cls: 't-xs t-dim' }, gb);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ["EndTagOpen で 'h'（pos ＝ 805 に進む）→ reconsume ＝ true、state ＝ TagName", '次の周: match self.reconsume → true → reconsume_input()', "　reconsume ＝ false、input[pos − 1] ＝ input[804] ＝ 'h'", 'test.html: 消費 842 回 ＝ 810 文字 ＋ 読み直し 32 回（計算上）'],
+        ["543 回めの next(): '\\n'（input[809]）→ Char('\\n')、pos ＝ 810", '544 回め: pos 810 >= len 810 → return None', 'parser.rs 185: while token.is_some() → 抜けて 494 行の window を返す', 'parser.rs 225 ほか 7 か所: Some(HtmlToken::Eof) | None => 同じ腕'],
+        ['is_eof(): self.pos > self.input.len()', 'consume_next_input(): let c = self.input[self.pos]; self.pos += 1;', 'pos ＝ len で input[pos] → 範囲外（Rust は panic）→ pos は len ＋ 1 に届かない', '→ Eof を return する 11 か所は通らない、と読める（実行はしていない）'],
+        ["<!-- a --> → '<' が消え、'!' '-' '-' ' ' 'a' ' ' '-' '-' '>' の Char 9 個", "&amp; → Char('&') Char('a') Char('m') Char('p') Char(';')（仕様: '&' 1 文字）", '<title> の中身: 仕様は RCDATA、saba は Data（title 自体はパーサが捨てる。第33章）', '仕様 84 状態 ＝ 4 ＋ 9 ＋ 18 ＋ 9 ＋ 12 ＋ 16 ＋ 3 ＋ 5 ＋ 8。saba に名前があるのは 17'],
+        ['仕様の tag name state: tab・LF・FF・空白 → before attribute name state', "saba の TagName: c == ' ' だけ → <p\\nclass=\"x\"> の名前は \"p\\nclass=\\\"x\\\"\"", '仕様の before attribute name state: 空白は無視。saba: 分岐なし', '→ <p  class="x"> は [{ name: "", value: "" }, { class, x }] になる、と読める'],
+        ['第28章 場面1: 文字 → トークン（予約語・識別子・記号）→ 構文木', 'この章: 文字 → HtmlToken（StartTag・EndTag・Char）→ 木（第33章）', 'HTML Standard 13.2.2: parse error の後の処理を定める（止めてもよい、とも書く）', '第10章 場面2 段階2 の 4 種（開始タグ・文字・終了タグ・コメント）↔ saba の 4 種']
+      ];
+      putTrace(st.tr, 390, T[i]);
+      S.fade(st.gt, i <= 2); S.fade(st.g3, i === 2);
+      S.fade(st.g4, i === 3); S.fade(st.g5, i === 4); S.fade(st.g6, i === 5);
+      S.fade(st.gb, i >= 3);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      if (i > 2) return;
+      const R = st.runs.end, N = R.steps.length;   // 9 回の消費 ＋ 1 回の None
+      // 0.6 秒に 1 歩。止めている人には、段階1 は 'h' を読み直した所、段階2・3 は None が返った所
+      const PER = 0.6, T = (N + 1) * PER + 2.6;
+      const k = playing() ? Math.min(N + 1, Math.floor(U.mod(ctx.ts, T) / PER)) : (i === 0 ? 3 : N + 1);
+      const cur = k > 0 && k <= N ? R.steps[k - 1] : null;
+      const snap = k === 0 ? R.init : R.steps[Math.min(k, N) - 1];
+      st.strip.cells.forEach((c, j) => { let m = j < snap.pos ? 'done' : 'todo'; if (cur && cur.i === j) m = cur.re ? 'now-re' : 'now'; st.strip.set(j, m); });
+      const px = 490 + snap.pos * 36 + 18;
+      st.posMark.setAttribute('d', 'M' + (px - 6) + ',96 L' + px + ',84 L' + (px + 6) + ',96 Z');
+      S.attrs(st.posLbl, { x: px, y: 110 });
+      st.posLbl.textContent = 'pos ＝ ' + (802 + snap.pos) + (snap.pos === 8 ? '（＝ len）' : '');
+      st.lamp.t.textContent = 'reconsume: ' + snap.reflag;
+      st.lamp.r.setAttribute('class', snap.reflag ? 'f-x-soft s-x w2' : 'f-sf s-rule w1');
+      st.lamp.t.setAttribute('class', 't-c t-xs t-mono t-b' + (snap.reflag ? ' t-x' : ''));
+      const p = 802 + snap.pos;
+      if (k === 0) st.now.textContent = 'next() を呼ぶ前';
+      else if (cur) st.now.textContent = k + ' 回め: c = ' + lit(cur.c) + (cur.re ? '（読み直し: input[' + (802 + cur.i) + '] をもう一度）' : '（input[' + (802 + cur.i) + ']）') + '  ' + cur.before + (cur.after !== cur.before ? ' → ' + cur.after : '') + (cur.out ? '  ⇒ ' + fmtTok(cur.out, true) : '');
+      else st.now.textContent = '次の next(): pos ' + p + ' >= len 810 → return None（パーサの while が終わる）';
+      st.now.setAttribute('class', 't-xs t-mono pre' + (k > N ? ' t-x t-b' : ''));
+      const atEnd = k > N;
+      st.j1.textContent = 'next() の冒頭  pos >= input.len() ?   ' + p + ' >= 810 → ' + (p >= 810 ? '真 → return None' : '偽 → loop へ');
+      st.j1.setAttribute('class', 't-xs t-mono pre' + (atEnd ? ' t-x t-b' : ''));
+      st.j2.textContent = 'is_eof()       pos > input.len() ?    ' + p + ' > 810 → 偽（真になる pos は無い）';
+    }
+  };
+  SCENES.s6 = s6;
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第IX部 ブラウザを読む ／ 第32章',
+      title: 'HTML トークナイザ',
+      home: '../index.html',
+      prev: { href: '31-saba-http.html', title: 'URL と HTTP' },
+      next: { href: '33-saba-dom.html', title: 'HTML パーサと DOM', lead: '前の章でトークンの列になった test.html を、saba のパーサが読み、ノード 21 個の木（DOM）に組み立てる。' },
+      legend: [{ c: 'd', label: 'データ（文字・トークン）' }, { c: 'x', label: '注目・いまの状態' }]
+    },
+    scenes: SCENES
+  });
+})();
+</script>
+</body>
+</html>

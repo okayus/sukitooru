@@ -30,7 +30,7 @@
 <!-- ================= 表紙 ================= -->
 <section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
   <div class="a-main">
-    <p class="eyebrow">第VII部 横断 ／ 第28章 ／ 全30章</p>
+    <p class="eyebrow">第VII部 横断 ／ 第28章 ／ 全36章</p>
     <h1 id="h-s0">コンパイラ</h1>
     <p class="standfirst">コンパイラは、人が書いたソースの文字の列を、CPU が読む命令のバイト列に変えるプログラムである。その途中で、プログラムはトークンの列・構文木・中間表現・機械の命令と形を何度も変え、型はそのいくつかの段で確かめられ、使われ、最後には捨てられる。この章では、ミリ秒を表す型 Ms と、その引き算をする 2 行の Rust を rustc と LLVM に通し、型が働く段と消える段を順に追う。第26章が見せた型の行き着く先（並び・命令・ABI）の、途中の段にあたる。</p>
     <p class="legend" data-auto></p>
@@ -64,7 +64,7 @@
     <p class="prose a-lead">第27章の配列・ハッシュ表・木・スタックは、コンパイラ自身の部品でもある。コンパイラの最初の 2 段は、ソースの文字の列をトークンに切り、文法の規則で木に組み立てる。ここではまだ、型の名前もただの文字の並びである。</p>
     <div class="narr-slot a-panel"></div>
     <div class="prose a-after">
-      <p class="note">HTML の構文解析（<a class="xref" href="10-browser.html#s2">第10章 場面2</a>）も、バイトを文字にし、トークンに切り、開いている要素のスタックで木を組む同じ順で進む。違うのは誤りの扱いで、HTML は決まった規則で直して最後まで木を作り、rustc は誤りを知らせてプログラムを作らない。</p>
+      <p class="note">HTML の構文解析（<a class="xref" href="10-browser.html#s2">第10章 場面2</a>）も、バイトを文字にし、トークンに切り、開いている要素のスタックで木を組む同じ順で進む。違うのは誤りの扱いで、主要なブラウザは仕様の決めた規則で直して最後まで木を作り、rustc は誤りを知らせてプログラムを作らない。</p>
     </div>
   </div>
   <figure class="anim-fig a-fig">

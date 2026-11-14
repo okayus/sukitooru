@@ -24,6 +24,9 @@ for (const f of process.argv.slice(2)) {
     if (after) for (const p of after[1].matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)) if (len(strip(p[1])) > 140) out.push(`${id} 補足 ${len(strip(p[1]))} 字（目安 140）`);
   }
   const blocks = [...html.matchAll(/const\s+(s\d+)\s*=\s*\{[\s\S]*?steps:\s*\[([\s\S]*?)\n\s*\],?/g)];
+  // 動く場面なのに段階の本文を数えられないときは黙って通さない（2026-11-14、SC.s1 = { の形の章が 34 段階とも超過を見逃した）
+  const counted = new Set(blocks.map((b) => b[1]));
+  for (const s of secs) if (/\bsc-anim\b/.test(s[1]) && !counted.has(s[2])) out.push(`${s[2]} 段階の本文を数えられない（const ${s[2]} = { steps: [ … ] } の形で書く）`);
   for (const b of blocks) {
     let k = 0;
     for (const ln of b[2].split('\n')) {

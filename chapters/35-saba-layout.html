@@ -1,0 +1,1660 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>レイアウトと描画 — YouTubeが見えるまで</title>
+<meta name="description" content="Rust で書かれた小さなブラウザ saba のレイアウトと描画を読む。DOM から計算済みスタイル付きのレイアウトの木を作り、文字の升目（8×16）で大きさと位置を決め、表示項目の列にして noli の窓に描き、クリックを箱に当てるまでを、test.html の具体的な値で 1 行ずつ追う。">
+<meta property="og:title" content="レイアウトと描画 — YouTubeが見えるまで">
+<meta property="og:description" content="Rust で書かれた小さなブラウザ saba のレイアウトと描画を読む。レイアウトの木、文字の升目、表示項目、noli の窓、クリックの当たり判定。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+  svg a { cursor: pointer; }
+  svg a:hover text, svg a:focus-visible text { text-decoration: underline; text-underline-offset: 2px; }
+  svg text.halo { paint-order: stroke; stroke: var(--surface); stroke-width: 2px; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第IX部 ブラウザを読む ／ 第35章 ／ 全36章</p>
+    <h1 id="h-s0">レイアウトと描画</h1>
+    <p class="standfirst">前の章で、計算済みスタイルを持つ LayoutObject を作る関数を読んだ。この章は、それを呼んでレイアウトの木を作り、文字の升目で大きさと位置を決め、表示項目の列にして窓に描き、クリックを箱に当てるまでを saba のコードで追う。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>レイアウトの木を作る</a><p>body から下だけ。display: none の p は while で飛ばす。test.html では LayoutObject 12 個。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>定数と文字の升目</a><p>窓 600×400、内容領域 590×340、字は 8×16（行 20）。Text の幅は 8 × 倍率 × バイト数。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>大きさを決める</a><p>木を 1 回なぞる。下りで Block の幅、上りで高さ。body は 590 × 120。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>位置を決める</a><p>タプルの match。Block は兄の下へ、Inline は兄の右へ。a は (0, 80) と (88, 80)。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>表示項目と、窓に描く</a><p>Rect 5 個と Text 5 個の列。x ＋ 5・y ＋ 31 ずらして noli の窓に描き、flush で画面へ。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>操作</a><p>OS を poll するループ。アドレスバーの編集と、クリックの当たり判定（ヒットテスト）。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の章（JavaScript エンジン）へ。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードは <a href="https://github.com/d0iasm/sababook">d0iasm/sababook</a>（Asami Doi、MIT ライセンス）の ch7/saba から引用した（2025 年 1 月 6 日のコミット c87dc64。行番号は元のファイルのもので、長い行は折り返し、省いた行は … で示した）。このリポジトリは書籍『［作って学ぶ］ブラウザのしくみ』のサンプルコードだが、この章の説明はコードと、Web で公開されている仕様とソース（CSS Display 3・CSS Fonts 4・Rust の標準ライブラリの文書・hikalium/wasabi の for_saba ブランチの noli・Chromium のソース。2026 年 11 月に閲覧）だけから書き、書籍の文章は使っていない。saba は Wasabi OS の上で動く。この章の担当は saba をビルドも実行もしておらず、動きはコードを読んで追ったもの。窓の絵は、コードの数値から描いた模式図（文字は noli のビットマップの字ではなく、この教材の書体で幅だけ合わせた）。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 レイアウトの木を作る ================= -->
+<section class="scene sc-anim" id="s1" data-tab="木を作る" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>レイアウトの木を作る — body から下だけ</h2>
+    <p class="sh-meta"><span class="chip">LayoutView::new</span><span class="chip">build_layout_tree</span><span class="chip">display: none</span><span class="chip">12 個</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">前の章の関数 create_layout_object を body から下のノードに当てて、レイアウトの木を作る。display が none のノードは入らず、木は応答のたびに作り直す。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note"><code>Option&lt;Rc&lt;RefCell&lt;T&gt;&gt;&gt;</code> の木を歩く再帰は、<code>first_child</code> → <code>next_sibling</code> の 2 方向で全ノードを 1 回ずつ訪れる。親への参照だけ Weak なのは、親子で Rc を持ち合うと数が 0 にならず解放されないため（<a class="xref" href="33-saba-dom.html#s2">第33章 場面2</a>）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="page.rs・layout_view.rs・layout_object.rs のコードと、test.html の DOM の木の横に LayoutObject が作られていく図"></svg></div>
+    <figcaption>図1　左は段階ごとのコード。右は test.html の DOM（薄い箱。head の中は 1 行にまとめた）と、その横に作られる LayoutObject（Block・Inline・Text）。p.hidden と head の中は作られない。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 定数と文字の升目 ================= -->
+<section class="scene sc-anim" id="s2" data-tab="単位" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>定数と文字の升目 — 590×340 と 8×16</h2>
+    <p class="sh-meta"><span class="chip">constants.rs</span><span class="chip">600×400</span><span class="chip">CHAR_WIDTH 8</span><span class="chip">ratio 1・2・3</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">文字の大きさは書体から測らず、固定幅のビットマップの字の升目で数える。窓 600×400 からタイトルバー・ツールバー・余白を引いた 590×340 が内容領域で、字は 8×16（行 20）、見出しは 2 倍・3 倍。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note"><code>wrapping_div</code>・<code>wrapping_rem</code> は、i64::MIN ÷ −1 のときも止まらずに折り返す割り算と余り（<code>/</code>・<code>%</code> はそこで panic する）。ここには正の小さな値しか来ないので、どちらを使っても結果は同じ。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="constants.rs と compute_size のコード、窓 600×400 の内訳、字の升目と倍率、文字の幅の計算の図"></svg></div>
+    <figcaption>図2　右上は窓 600×400 の内訳（コードの定数から描いた模式図）。右下は字の升目 8×16 と 1 倍・2 倍・3 倍、"My Browser!" と p.first の文字の幅の計算。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 大きさを決める ================= -->
+<section class="scene sc-anim" id="s3" data-tab="大きさ" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>大きさを決める — compute_size</h2>
+    <p class="sh-meta"><span class="chip">calculate_node_size</span><span class="chip">下りで幅</span><span class="chip">上りで高さ</span><span class="chip">590×120</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">大きさは木を 1 回なぞる再帰で決まる。下りながら Block の幅を親の幅にし、葉の Text で字数から大きさを出し、戻りながら Block の高さを子の高さの和にする。body は 590 × 120 になる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">2 回めの <code>compute_size</code> は幅も計算し直すが、Block の幅は親から来るので変わらない。横に並ぶインラインの 2 つめ以降が 1 つめより高い場合や、インラインの列が折り返す場合には、この高さの近似は合わない。test.html にそのような所は無い。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="calculate_node_size と compute_size のコード、レイアウトの木 12 個の表に再帰の順で埋まる幅と高さ、body の高さの足し算の図"></svg></div>
+    <figcaption>図3　右上はレイアウトの木の 12 個と、再帰が訪れる順（印が下りて上る）に埋まる幅と高さ。右下は段階ごとの補足（訪れる順、body の高さの内訳など）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 位置を決める ================= -->
+<section class="scene sc-anim" id="s4" data-tab="位置" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>位置を決める — compute_position</h2>
+    <p class="sh-meta"><span class="chip">calculate_node_position</span><span class="chip">タプルの match</span><span class="chip">(88, 80)</span><span class="chip">毎回作り直す</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">位置も同じ木を 1 回なぞって決める。渡されるのは親の位置と、前の兄弟の種類・位置・大きさ。Block が絡めば前の兄弟の下へ、Inline どうしなら右へ、最初の子は親の位置に置く。再レイアウトは無い。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">LayoutPoint の <code>x</code>・<code>y</code> は <code>i64</code>。負の座標も型の上では許すが、この版は 0 以上の小さな値しか作らない。Chromium は 1/64 px 単位の固定小数（LayoutUnit）で位置を持ち、サブピクセルの配置ができる（2026 年時点）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="calculate_node_position と compute_position のコード、内容領域 590×340 に順に置かれる箱、match の 3 つの腕の図"></svg></div>
+    <figcaption>図4　右上は内容領域 590×340 を縮めた模式図に、計算の順に置かれる箱（Block は実線、Inline は破線、Text は点線）。右下は compute_position の 3 つの腕と、いま使われている腕。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 表示項目と、窓に描く ================= -->
+<section class="scene sc-anim" id="s5" data-tab="描く" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>表示項目と、窓に描く — DisplayItem と noli の Window</h2>
+    <p class="sh-meta"><span class="chip">paint</span><span class="chip">Rect・Text</span><span class="chip">fill_rect・draw_string</span><span class="chip">＋5・＋31</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">描く前に、木を「矩形を塗れ」「文字を描け」の列（表示項目）にする。Block は Rect、Text は行ごとの Text、Inline は何も出さない。UI は列を noli の窓へ描き、flush で画面へ出す。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">noli の <code>Result</code> は saba の <code>Result</code> と Error の型が違い、<code>?</code> で混ぜられない。<code>update_ui</code> は <code>.is_err()</code> で見て <code>Error::InvalidUI</code> に包み直す（<a class="xref" href="30-gbemu-desktop.html#s6">第30章 場面6</a>の型合わせ）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="paint と update_ui のコード、表示項目 10 個の列、窓 600×400 に描かれた結果の図"></svg></div>
+    <figcaption>図5　右上は paint が作る表示項目の列（10 個。見本の色は実際の値）。右下は窓 600×400 を 7/10 に縮めた模式図で、列を順に描いた結果（文字は教材の書体で、幅だけ合わせた）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 操作 ================= -->
+<section class="scene sc-anim" id="s6" data-tab="操作" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>操作 — poll するループとヒットテスト</h2>
+    <p class="sh-meta"><span class="chip">run_app</span><span class="chip">InputMode</span><span class="chip">find_node_by_position</span><span class="chip">start_navigation</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">UI は loop で OS に「マウスは動いたか」「キーは押されたか」を毎周たずねる。ツールバーを押せば URL の編集、内容領域を押せば当たり判定（ヒットテスト）で a を探し、Enter か a で読み込む。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note"><code>fn(String) -&gt; Result&lt;HttpResponse, Error&gt;</code> の <code>handle_url</code> は main.rs の関数で、UI は型だけを知る（<a class="xref" href="31-saba-http.html#s2">第31章 場面2</a>）。<code>InputMode</code> は値が 2 つの enum で、<a class="xref" href="29-imi.html#s4">第29章 場面4</a>の「状態を型で持つ」の例。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="run_app・handle_mouse_input・handle_key_input・clicked・find_node_by_position・start_navigation のコード、画面に置かれた窓とクリックの座標の変換、ループと InputMode と読み込みの 4 段の図"></svg></div>
+    <figcaption>図6　右上は画面（例）に置かれた窓と、クリックの座標が画面 → 窓 → 内容領域と変わり、"Test page1 " の箱に当たるまで。右下はループと InputMode、読み込みの 4 段。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — レイアウトと描画</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>レイアウトの木は body から下の、display が none でないノードだけ。first_child と next_sibling の再帰で DOM と同じ形に作り、p.hidden は while で飛ばす。test.html では 12 個（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>文字は書体を見ず、字の升目で数える。内容領域 590×340、字 8×16（行 20）、Text の幅は 8 × 倍率 × バイト数。"My Browser!" は 264×60（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>大きさは 1 回の再帰で決まる。下りで Block の幅（親の幅）、上りで高さ（子の和。横並びのインラインは最初だけ）。body は 590×120（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>位置はタプルの match。Block が絡めば兄の下、Inline どうしは兄の右、最初の子は親の位置。a は (0, 80) と (88, 80)。再レイアウトは無く、応答のたびに作り直す（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>表示項目は Rect（Block の要素の背景）と Text（行ごと）の列で 10 個。UI は x ＋ 5・y ＋ 31 で noli の窓に描き、flush で画面へ（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>UI は OS を poll するループ。ツールバーで Editing、内容領域ではヒットテスト（子・兄弟を先に探す）で a を見つけ、start_navigation の 4 段で描き直す（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th><i class="sw d"></i>LayoutObject</th><td>レイアウトの木の節。kind（Block・Inline・Text）、DOM ノードへの Rc、子・兄弟・親（Weak）、計算済みスタイル、位置、大きさを持つ。</td></tr>
+        <tr><th>レイアウトツリー</th><td>描くノードだけの木。saba では body から下で display が none でないもの。test.html で 12 個。Chromium のレイアウトツリー（第10章）に相当。</td></tr>
+        <tr><th>CONTENT_AREA</th><td>内容領域。幅 600 − 5 × 2 ＝ 590、高さ 400 − 24 − 26 − 5 × 2 ＝ 340。レイアウト座標の原点はその左上。</td></tr>
+        <tr><th>CHAR_WIDTH・CHAR_HEIGHT_WITH_PADDING</th><td>字の升目 8 × 16 と、行の高さ 20（16 ＋ 4）。XLarge は 2 倍、XXLarge は 3 倍。幅は 8 × 倍率 × バイト数。</td></tr>
+        <tr><th>compute_size</th><td>大きさを決める。Block は幅 ＝ 親の幅、高さ ＝ 子の和（横並びは最初だけ）。Inline は子の和。Text はバイト数から、590 を超えたら行を増やす。</td></tr>
+        <tr><th>compute_position</th><td>位置を決める。(自分の kind, 前の兄弟の kind) の match で、Block が絡めば兄の下へ、Inline どうしは兄の右へ、最初の子は親の位置。</td></tr>
+        <tr><th><i class="sw d"></i>DisplayItem</th><td>描画命令の enum。Rect { style, layout_point, layout_size }（Block の要素の背景）と Text { text, style, layout_point }（折り返し行ごと）。test.html で 10 個。</td></tr>
+        <tr><th>noli の Window</th><td>Wasabi OS の窓。fill_rect・draw_string・draw_line で窓のシートに描き、flush で画面へ。タイトルバー 24 は noli が描き、座標をその分ずらす。</td></tr>
+        <tr><th>InputMode</th><td>UI の状態。Normal（キーを捨てる）と Editing（ツールバーをクリックした後。キーで URL を編み、Enter で読み込む）。</td></tr>
+        <tr><th>find_node_by_position</th><td>ヒットテスト。内容領域の座標が入る箱を、子・兄弟を先に探して最も奥のものを返す。親が a なら href へ。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <p class="note">次の第36章は、receive_response の 2 段め execute_js を読む。字句解析・構文木・評価で "Answer? 1 + 2 = 3" が作られ、p#target の Text が差し替わってから、この章のレイアウトが走る。</p>
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg, A = YT.anim;
+
+  /* ---------- この章で使う部品（第30章と同じ作り） ---------- */
+
+  const op = (el, v) => { el.style.opacity = v; };
+  const playing = () => YT.motion.playing;
+  const KW = /\b(fn|let|mut|pub|struct|impl|use|mod|const|static|match|if|else|for|in|loop|while|break|return|move|self|Self|crate|as|dyn|ref|where|enum|type)\b/g;
+
+  /* 等幅のコードの 1 行。予約語は太字、// から後ろは薄い色。空白は詰めない（pre） */
+  function codeLine(parent, x, y, s, cls) {
+    const t = S.text(x, y, '', { cls: 't-mono pre ' + (cls || 't-sm') }, parent);
+    const ci = s.indexOf('//');
+    const code = ci >= 0 ? s.slice(0, ci) : s, cm = ci >= 0 ? s.slice(ci) : '';
+    let last = 0, m;
+    KW.lastIndex = 0;
+    while ((m = KW.exec(code))) {
+      if (m.index > last) S.el('tspan', { text: code.slice(last, m.index) }, t);
+      S.el('tspan', { text: m[0], cls: 't-b' }, t);
+      last = m.index + m[0].length;
+    }
+    if (last < code.length) S.el('tspan', { text: code.slice(last) }, t);
+    if (cm) S.el('tspan', { text: cm, cls: 't-dim' }, t);
+    return t;
+  }
+  /* コードの板。lines は [行番号, 文字列]（行番号 null は折り返しの続き、'' は見出しの行）。
+     hl(a, b) で a〜b 行め（0 始まり）を照らす。hl() で消す */
+  function codePanel(parent, x, y, w, lines, opts) {
+    opts = opts || {};
+    const lh = opts.lh || 16, pad = 10;
+    const g = S.g({}, parent);
+    const h = pad * 2 + lines.length * lh + 2;
+    S.rect(x, y, w, h, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+    const band = S.rect(x + 3, y, w - 6, lh, { rx: 3, cls: 'f-x-soft', style: { display: 'none' } }, g);
+    const y0 = y + pad + 11;
+    lines.forEach(([ln, s], k) => {
+      const yy = y0 + k * lh;
+      if (ln === '') { S.text(x + pad, yy, s, { cls: 't-xs t-dim' }, g); return; }
+      if (ln != null) S.text(x + pad + 26, yy, String(ln), { cls: 't-xs t-dim t-mono t-end' }, g);
+      codeLine(g, x + pad + 34, yy, s, opts.cls);
+    });
+    const api = {
+      g, h,
+      hl(a, b) {
+        if (a == null) { band.style.display = 'none'; return api; }
+        if (b == null) b = a;
+        S.attrs(band, { y: y0 + a * lh - 12, height: (b - a + 1) * lh });
+        band.style.display = '';
+        return api;
+      }
+    };
+    return api;
+  }
+  /* 枠と題（と小さな説明）の箱 */
+  function box(parent, x, y, w, h, title, sub, cls, tcls) {
+    const g = S.g({}, parent);
+    const r = S.rect(x, y, w, h, { rx: 5, cls: cls || 'f-sf s-rule w1' }, g);
+    const t = S.text(x + w / 2, y + (sub ? h / 2 - 2 : h / 2 + 4), title, { cls: 't-c ' + (tcls || 't-sm t-b') }, g);
+    const s = sub ? S.text(x + w / 2, y + h / 2 + 12, sub, { cls: 't-c t-xs t-dim' }, g) : null;
+    return { g, r, t, s, x, y, w, h };
+  }
+  /* 他の章の場面へのリンク（SVG の a） */
+  function xlink(parent, x, y, href, label, end) {
+    const a = S.el('a', { href, 'aria-label': label }, parent);
+    S.text(x, y, label + ' ↗', { cls: 't-xs t-mid' + (end ? ' t-end' : '') }, a);
+    return a;
+  }
+  /* 文の列（段階ごとの具体的な値の追跡） */
+  function trace(parent, x, y, lines, lh) {
+    return lines.map((s, k) => {
+      const cls = typeof s === 'string' ? 't-sm' : s[1];
+      return S.text(x, y + k * (lh || 20), typeof s === 'string' ? s : s[0], { cls: cls + ' pre' }, parent);
+    });
+  }
+  /* 段階ごとのコードの板を作る共通の形。panel(lines) で 1 枚足す。show(k) で k 枚めだけ見せる */
+  function panels(svg) {
+    const C = [];
+    return {
+      add(lines) { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; },
+      show(k) { C.forEach((c, j) => S.fade(c.g, j === k)); return C[k] ? C[k].p : null; }
+    };
+  }
+  /* 段階ごとの「具体的な値の追跡」（左下。1 行めは太字） */
+  function traceStep(g, y, lines) {
+    S.clear(g);
+    trace(g, 20, y, lines.map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+  }
+
+  /* ================================================================
+     共通の例の値（test.html。common.md §4.6）。数は全部ここの式から出す。
+     compute_size・compute_position・paint の規則をそのまま書き写した（scratchpad の layout-calc.mjs で検算）
+     ================================================================ */
+  const CW = 8, CH = 16, CHP = 20, WIN_W = 600, WIN_H = 400, PAD = 5, TITLE = 24, TOOL = 26, ADDR = 20;
+  const CA_W = WIN_W - PAD * 2, CA_H = WIN_H - TITLE - TOOL - PAD * 2;          // 590 × 340
+  const TXT = { h1: 'My Browser!', first: 'HTML, CSS and JavaScript are working on my browser :)', a1: 'Test page1 ', a2: 'Test page2', target: 'Answer? 1 + 2 = 3' };
+  /* 実際の色（ComputedStyle の値）。模式図の窓の中だけ、固定の色で塗る */
+  const C_WHITE = '#ffffff', C_RED = '#ff0000', C_BLUE = '#0000ff', C_AQUA = '#00ffff', C_BLACK = '#000000';
+  const NODE = {
+    body: { kind: 'Block', ch: ['h1', 'p1', 'pl', 'pt'], name: 'body', bg: C_WHITE },
+    h1: { kind: 'Block', ch: ['t_h1'], name: 'h1', bg: C_WHITE }, t_h1: { kind: 'Text', text: TXT.h1, ratio: 3, color: C_RED },
+    p1: { kind: 'Block', ch: ['t_p1'], name: 'p.first', bg: C_WHITE }, t_p1: { kind: 'Text', text: TXT.first, ratio: 1, color: C_BLUE },
+    pl: { kind: 'Block', ch: ['a1', 'a2'], name: 'p.links', bg: C_AQUA },
+    a1: { kind: 'Inline', ch: ['t_a1'], name: 'a' }, t_a1: { kind: 'Text', text: TXT.a1, ratio: 1, color: C_BLACK, ul: true },
+    a2: { kind: 'Inline', ch: ['t_a2'], name: 'a' }, t_a2: { kind: 'Text', text: TXT.a2, ratio: 1, color: C_BLACK, ul: true },
+    pt: { kind: 'Block', ch: ['t_pt'], name: 'p#target', bg: C_WHITE }, t_pt: { kind: 'Text', text: TXT.target, ratio: 1, color: C_BLACK }
+  };
+  const bytesOf = (s) => new TextEncoder().encode(s).length;   // t.len() は UTF-8 のバイト数
+  const L = {};                                                  // id → { w, h, x, y }
+  (function size(id, pw) {
+    const n = NODE[id]; let w = 0, h = 0;
+    if (n.kind === 'Block') {
+      w = pw; n.ch.forEach((c) => size(c, w));
+      let prev = 'Block';
+      for (const c of n.ch) { if (prev === 'Block' || NODE[c].kind === 'Block') h += L[c].h; prev = NODE[c].kind; }
+    } else if (n.kind === 'Inline') {
+      n.ch.forEach((c) => size(c, pw)); for (const c of n.ch) { w += L[c].w; h += L[c].h; }
+    } else {
+      w = CW * n.ratio * bytesOf(n.text);
+      if (w > CA_W) { const lines = Math.floor(w / CA_W) + (w % CA_W === 0 ? 0 : 1); w = CA_W; h = CHP * n.ratio * lines; }
+      else h = CHP * n.ratio;
+    }
+    L[id] = { w, h, x: 0, y: 0 };
+  })('body', CA_W);
+  (function pos(id, px, py, pk, pp, ps) {
+    const n = NODE[id]; let x = 0, y = 0;
+    if (n.kind === 'Block' || pk === 'Block') { y = pp ? pp.y + ps.h : py; x = px; }
+    else if (n.kind === 'Inline' && pk === 'Inline') { if (pp) { x = pp.x + ps.w; y = pp.y; } else { x = px; y = py; } }
+    else { x = px; y = py; }
+    L[id].x = x; L[id].y = y;
+    let prevK = 'Block', prevP = null, prevS = null;
+    for (const c of n.ch || []) { pos(c, x, y, prevK, prevP, prevS); prevK = NODE[c].kind; prevP = { x: L[c].x, y: L[c].y }; prevS = { w: L[c].w, h: L[c].h }; }
+  })('body', 0, 0, 'Block', null, null);
+  /* paint が作る表示項目の列（前順。Inline は何も出さない。Text は空白を整えた文字列） */
+  const norm = (t) => t.replace(/\n/g, ' ').split(' ').filter((s) => s).join(' ');
+  const DL = [];
+  (function paint(id) {
+    const n = NODE[id], r = L[id];
+    if (n.kind === 'Block') DL.push({ kind: 'Rect', id, bg: n.bg, x: r.x, y: r.y, w: r.w, h: r.h });
+    else if (n.kind === 'Text') DL.push({ kind: 'Text', id, text: norm(n.text), color: n.color, x: r.x, y: r.y, ratio: n.ratio, ul: !!n.ul });
+    (n.ch || []).forEach(paint);
+  })('body');
+  const PRE = ['body', 'h1', 't_h1', 'p1', 't_p1', 'pl', 'a1', 't_a1', 'a2', 't_a2', 'pt', 't_pt'];   // 前順
+
+  /* ================================================================
+     場面1 レイアウトの木を作る
+     行は test.html の DOM（head の中は 1 行にまとめた）。LayoutObject は body から下の 12 個
+     ================================================================ */
+  const S1ROWS = [
+    { d: 0, label: 'Document', dom: 1 },
+    { d: 1, label: 'html', dom: 1 },
+    { d: 2, label: 'head（style・script）', dom: 1, head: 1 },
+    { d: 2, label: 'body', id: 'body' },
+    { d: 3, label: 'h1 id="title"', id: 'h1' },
+    { d: 4, label: '"My Browser!"', id: 't_h1' },
+    { d: 3, label: 'p class="first"', id: 'p1' },
+    { d: 4, label: '"HTML, CSS and …"', id: 't_p1' },
+    { d: 3, label: 'p class="links"', id: 'pl' },
+    { d: 4, label: 'a href="…/test1.html"', id: 'a1' },
+    { d: 5, label: '"Test page1 "', id: 't_a1' },
+    { d: 4, label: 'a href="…/test2.html"', id: 'a2' },
+    { d: 5, label: '"Test page2"', id: 't_a2' },
+    { d: 3, label: 'p class="hidden"', hidden: 1 },
+    { d: 4, label: '"none"', hiddenChild: 1 },
+    { d: 3, label: 'p id="target"', id: 'pt' },
+    { d: 4, label: '"Answer? 1 + 2 = 3"', id: 't_pt' }
+  ];
+  const S1ORDER = ['body', 'h1', 't_h1', 'p1', 't_p1', 'pl', 'a1', 't_a1', 'a2', 't_a2', 'hidden', 'pt', 't_pt'];   // 作られる順（hidden は None になる試み）
+  const S1Y = (k) => 58 + k * 26;
+  const S1DISP = { body: 'block → Block', h1: 'block → Block', p1: 'block → Block', pl: 'block → Block', pt: 'block → Block', a1: 'inline → Inline', a2: 'inline → Inline' };
+  const s1 = {
+    steps: [
+      { title: '入口：receive_response の 3 段め', text: 'Page は応答から DOM と CSSOM を作り（`create_frame`）、JS を動かし（[[36-saba-js.html#s6|第36章 場面6]]）、その後で `LayoutView::new(dom, &style)` を呼ぶ。最初に `get_target_element_node` で body を探すので、head の中は木に入らない。' },
+      { title: 'build_layout_tree：子と兄弟へ再帰', text: '`create_layout_object`（[[34-saba-css.html#s4|第34章 場面4]]）で 1 個作り、`if let Some(n)` で開いて、子は `&layout_object` を親に、兄弟は `&None` を親に再帰する。戻り値を子・兄弟の欄につなぎ、DOM と同じ形の木が前順にできる。兄弟として作られた子は親の欄が空で、スタイルも継承しない。' },
+      { title: 'display: none は None。while で兄弟を進める', text: '`create_layout_object` は display が none なら `None` を返す。`while` は `None` のあいだ `target_node` を次の兄弟に進めて作り直す。p.links の次は p.hidden を飛ばして p#target になる。[[10-browser.html#s3.3|第10章 場面3]]のレイアウトツリーと同じ考え方。' },
+      { title: 'LayoutObject の欄と、kind の決め方', text: '欄は `kind`、DOM への `node`、子・兄弟・親の 3 本（親だけ `Weak`。理由は[[33-saba-dom.html#s2|第33章 場面2]]の Node と同じ）、`style`、`point`、`size`。`update_kind` が display から `Block`／`Inline` を決め、Text ノードは `Text` にする。' },
+      { title: 'できた木は 12 個。テストが確かめる形', text: 'LayoutObject は 12 個（Block 5・Inline 2・Text 5）。`test_hidden_class` は、body の最初の子が p で（a.hidden は飛ぶ）、p に子も兄弟も無いことを確かめる。Chromium は変わった所だけ直すが、saba は応答のたびに作り直す（[[4|位置を決める]]）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'page.rs（抜粋。空行は詰め、注記を足した）'],
+        [67, 'pub fn receive_response(&mut self,'],
+        [null, '                        response: HttpResponse) {'],
+        [68, '  self.create_frame(response.body());  // 第32〜34章'],
+        [70, '  self.execute_js();                   // 第36章'],
+        [72, '  self.set_layout_view();              // 場面1〜4'],
+        [74, '  self.paint_tree();                   // 場面5'],
+        [75, '}'],
+        [106, 'fn set_layout_view(&mut self) {'],
+        [117, '  let layout_view = LayoutView::new(dom, &style);'],
+        ['', 'layout_view.rs（LayoutView::new。詰めた）'],
+        [109, 'pub fn new(root: Rc<RefCell<Node>>, cssom: &StyleSheet)'],
+        [null, '  -> Self {'],
+        [112, '  let body_root ='],
+        [null, '    get_target_element_node(Some(root), ElementKind::Body);'],
+        [114, '  let mut tree = Self {'],
+        [115, '    root: build_layout_tree(&body_root, &None, cssom) };'],
+        [118, '  tree.update_layout();']
+      ]).hl(10, 16);
+      P.add([
+        ['', 'layout_view.rs（build_layout_tree。詰めた）'],
+        [16, 'fn build_layout_tree(node: &Option<Rc<RefCell<Node>>>,'],
+        [18, '  parent_obj: &Option<Rc<RefCell<LayoutObject>>>,'],
+        [19, '  cssom: &StyleSheet,'],
+        [20, ') -> Option<Rc<RefCell<LayoutObject>>> {'],
+        [23, '  let mut target_node = node.clone();'],
+        [24, '  let mut layout_object ='],
+        [null, '    create_layout_object(node, parent_obj, cssom);'],
+        [38, '  if let Some(n) = target_node {'],
+        [39, '    let original_first_child = n.borrow().first_child();'],
+        [40, '    let original_next_sibling = n.borrow().next_sibling();'],
+        [41, '    let mut first_child = build_layout_tree('],
+        [null, '      &original_first_child, &layout_object, cssom);'],
+        [42, '    let mut next_sibling = build_layout_tree('],
+        [null, '      &original_next_sibling, &None, cssom);'],
+        [96, '    obj.borrow_mut().set_first_child(first_child);'],
+        [97, '    obj.borrow_mut().set_next_sibling(next_sibling);'],
+        [100, '  layout_object']
+      ]).hl(11, 14);
+      P.add([
+        ['', 'layout_object.rs（create_layout_object の終わり。第34章。詰めた）'],
+        [77, '    if layout_object.borrow().style().display()'],
+        [null, '        == DisplayType::DisplayNone {'],
+        [78, '      return None;'],
+        [79, '    }'],
+        [82, '    layout_object.borrow_mut().update_kind();'],
+        [83, '    return Some(layout_object);'],
+        ['', 'layout_view.rs（build_layout_tree の 27〜36 行。詰めた）'],
+        [27, '  while layout_object.is_none() {'],
+        [28, '    if let Some(n) = target_node {'],
+        [29, '      target_node = n.borrow().next_sibling().clone();'],
+        [30, '      layout_object = create_layout_object('],
+        [null, '        &target_node, parent_obj, cssom);'],
+        [31, '    } else {'],
+        [34, '      return layout_object;'],
+        [35, '    }'],
+        [36, '  }']
+      ]).hl(8, 12);
+      P.add([
+        ['', 'layout_object.rs（詰めた）'],
+        [89, 'pub enum LayoutObjectKind { Block, Inline, Text }'],
+        [96, 'pub struct LayoutObject {'],
+        [97, '  kind: LayoutObjectKind,'],
+        [98, '  node: Rc<RefCell<Node>>,'],
+        [99, '  first_child: Option<Rc<RefCell<LayoutObject>>>,'],
+        [100, '  next_sibling: Option<Rc<RefCell<LayoutObject>>>,'],
+        [101, '  parent: Weak<RefCell<LayoutObject>>,'],
+        [102, '  style: ComputedStyle,'],
+        [103, '  point: LayoutPoint,'],
+        [104, '  size: LayoutSize,'],
+        ['', 'LayoutObject::new（115〜118）と update_kind（399〜414）の抜粋'],
+        [116, '  Some(p) => Rc::downgrade(p),'],
+        [117, '  None => Weak::new(),'],
+        [405, 'DisplayType::Block => self.kind = LayoutObjectKind::Block,'],
+        [406, 'DisplayType::Inline =>'],
+        [null, '  self.kind = LayoutObjectKind::Inline,'],
+        [412, 'NodeKind::Text(_) => self.kind = LayoutObjectKind::Text,']
+      ]).hl(2, 10);
+      P.add([
+        ['', 'layout_view.rs（テスト test_hidden_class。詰めた）'],
+        [356, '  .hidden {'],
+        [357, '    display: none;'],
+        [358, '  }'],
+        [361, '<body>'],
+        [362, '  <a class="hidden">link1</a>'],
+        [363, '  <p></p>'],
+        [364, '  <p class="hidden"><a>link2</a></p>'],
+        [365, '</body>'],
+        [368, '  let layout_view = create_layout_view(html);'],
+        [384, '  let p = root.expect("root should exist")'],
+        [null, '    .borrow().first_child();'],
+        [386, '  assert_eq!(LayoutObjectKind::Block,'],
+        [null, '    p.clone().expect("p node should exist").borrow().kind());'],
+        [395, '  assert!(p.clone().expect("p node should exist")'],
+        [null, '    .borrow().first_child().is_none());'],
+        [401, '  assert!(p.expect("p node should exist")'],
+        [null, '    .borrow().next_sibling().is_none());']
+      ]).hl(10, 17);
+      st.tr = S.g({}, svg);
+      // 右: DOM の行と LayoutObject の札
+      const g = st.g = S.g({}, svg);
+      S.text(496, 38, 'DOM（第33章）', { cls: 't-xs t-dim' }, g);
+      S.text(722, 38, 'LayoutObject', { cls: 't-xs t-dim' }, g);
+      st.dispHead = S.text(836, 38, 'display → kind', { cls: 't-xs t-dim' }, g);
+      st.rows = S1ROWS.map((r, k) => {
+        const y = S1Y(k), x = 496 + r.d * 14;
+        const row = { r, y, x };
+        row.box = S.rect(x, y - 10, 146, 20, { rx: 3, cls: 'f-in s-rule w1' }, g);
+        row.lbl = S.text(x + 6, y + 4, r.label, { cls: 't-xs t-mono' + (r.dom || r.hidden || r.hiddenChild ? ' t-dim' : '') }, g);
+        if (r.id) {
+          row.bx = 722 + (r.d - 2) * 16;
+          row.badge = S.g({}, g);
+          const kind = NODE[r.id].kind;
+          row.brect = S.rect(row.bx, y - 9, 56, 18, { rx: 3, cls: kind === 'Block' ? 'f-d-soft s-d w1' : kind === 'Inline' ? 'f-sf s-d w1 dash' : 'f-sf s-rule w1' }, row.badge);
+          row.btxt = S.text(row.bx + 28, y + 4, kind, { cls: 't-c t-xs t-mono' }, row.badge);
+          row.disp = S.text(836, y + 4, S1DISP[r.id] || 'Text ノードは Text', { cls: 't-xs t-mono t-dim' }, g);
+        }
+        return row;
+      });
+      // 木の線（親の札の下から子の札の左へ）
+      st.links = S.g({}, g);
+      g.insertBefore(st.links, st.rows[0].box);
+      st.linkOf = {};   // 子の札ごとの線（札と一緒に出す）
+      st.rows.forEach((row, k) => {
+        if (!row.r.id) return;
+        for (let j = k - 1; j >= 0; j--) {
+          const p = st.rows[j];
+          if (p.r.id && p.r.d === row.r.d - 1) {
+            st.linkOf[row.r.id] = S.path(`M${p.bx + 8},${p.y + 9} V${row.y} H${row.bx}`, { cls: 'f-none s-dim w1' }, st.links);
+            break;
+          }
+        }
+      });
+      // p.hidden の行: None と書く（body の木の線 x 730 と、兄弟の線 x 746 の右に置く）。p.links → p#target の兄弟の線（段階3 で照らす）
+      const hr = st.rows[13], plr = st.rows[8], ptr = st.rows[15];
+      st.noneTxt = S.text(760, hr.y + 4, 'display: none → None（作らない）', { cls: 't-xs t-x t-b' }, g);
+      st.noneChild = S.text(760, st.rows[14].y + 4, '（親ごと入らない）', { cls: 't-xs t-dim' }, g);
+      st.skip = S.path(`M${plr.bx + 8},${plr.y + 9} V${ptr.y} H${ptr.bx}`, { cls: 'f-none s-x w2 fade hide' }, g);
+      // 段階1 の注記
+      st.bodyNote = S.text(722, st.rows[3].y + 4, '← body_root（ここから下だけ）', { cls: 't-xs t-x t-b' }, g);
+      st.headNote = S.text(722, st.rows[2].y + 4, '描かない（木に入らない）', { cls: 't-xs t-dim' }, g);
+      // 段階5 の数え上げ
+      st.sum = S.g({ cls: 'fade hide' }, g);
+      S.text(496, 506, 'LayoutObject 12 個 ＝ Block 5（body・h1・p ×3）＋ Inline 2（a）＋ Text 5', { cls: 't-sm t-b' }, st.sum);
+      S.text(496, 526, '入らないもの: head の中（style・script）、p.hidden とその Text。Document・html は探す道だけ', { cls: 't-xs t-dim' }, st.sum);
+      st.shown = -1;
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.show(i);
+      const T = [
+        ['receive_response: create_frame → execute_js → set_layout_view → paint_tree', 'set_layout_view: LayoutView::new(dom, &style)　style ＝ CSSOM（規則 4 つ）', 'get_target_element_node(Some(root), ElementKind::Body) → body のノード', 'build_layout_tree(&body_root, &None, cssom) → root。head・style・script は見ない'],
+        ['build_layout_tree(&Some(body), &None): create_layout_object → Block', '  first_child ← build_layout_tree(&Some(h1), &Some(body の obj), cssom)', '  next_sibling ← build_layout_tree(&None, &None, cssom) → None', '訪れる順: body → h1 → Text → p.first → Text → p.links → a → Text → a → Text → …'],
+        ['build_layout_tree(&Some(p.hidden), &None): create_layout_object → None', '  while: target_node ＝ p.hidden の next_sibling() ＝ p#target → 作れた → 抜ける', '  → p.links の obj.set_next_sibling(Some(p#target の obj))', '兄弟が全部 none なら target_node が None になり、None を返す（34 行）'],
+        ['1 つめの a: kind Inline、node ＝ a の Rc、parent ＝ Weak → p.links の obj', '  style: 下線（a の初期値）、背景 aqua（親から継承）。point・size は 0', '2 つめの a: 兄弟なので &None で作る → parent は空、背景は白（継承しない）', 'update_kind: Element なら display で Block／Inline、Text ノードなら Text'],
+        ['LayoutObject 12 個 ＝ Block 5 ＋ Inline 2 ＋ Text 5', 'test_hidden_class: body の first_child ＝ p（a.hidden は飛ぶ）', '  p の first_child ＝ None、p の next_sibling ＝ None（p.hidden は入らない）', 'Chromium: 変わった所だけ直す（第10章 場面3 段階5）。saba: 応答のたびに作り直す']
+      ];
+      traceStep(st.tr, 352, T[i]);
+      // 札の見せ方は frame で決める（段階2 は順に現れる）。ここでは段階ごとの飾りだけ
+      st.rows.forEach((row) => {
+        row.box.setAttribute('class', row.r.hidden ? (i === 2 ? 'f-in s-x w2 dash' : 'f-in s-rule w1 dash') : (i === 0 && row.r.id === 'body' ? 'f-in s-x w2' : 'f-in s-rule w1'));
+        if (row.disp) row.disp.style.display = i === 3 ? '' : 'none';
+        if (row.btxt) row.btxt.setAttribute('class', 't-c t-xs t-mono' + (i === 3 ? ' t-b' : ''));
+      });
+      st.dispHead.style.display = i === 3 ? '' : 'none';
+      st.bodyNote.style.display = i === 0 ? '' : 'none';
+      st.headNote.style.display = i === 0 ? '' : 'none';
+      st.noneTxt.setAttribute('class', 't-xs ' + (i === 2 ? 't-x t-b' : 't-dim'));
+      S.fade(st.skip, i === 2);
+      S.fade(st.sum, i === 4);
+      st.shown = -1;
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      // 段階2: 0.4 秒に 1 個、作られる順に札が現れる（7.7 秒で 1 周）。他の段階は全部出ている（段階1 は無し）
+      let n = 13;
+      if (i === 0) n = 0;
+      else if (i === 1) n = playing() ? Math.min(13, Math.floor(U.mod(ctx.ts, 7.7) / 0.4) + 1) : 13;
+      if (n === st.shown) return;
+      st.shown = n;
+      const made = new Set(S1ORDER.slice(0, n));
+      const cur = i === 1 && n >= 1 && n < 13 ? S1ORDER[n - 1] : null;
+      st.rows.forEach((row) => {
+        if (row.badge) {
+          row.badge.style.display = made.has(row.r.id) ? '' : 'none';
+          row.brect.setAttribute('class', (NODE[row.r.id].kind === 'Block' ? 'f-d-soft ' : 'f-sf ') + (cur === row.r.id ? 's-x w2' : NODE[row.r.id].kind === 'Inline' ? 's-d w1 dash' : NODE[row.r.id].kind === 'Block' ? 's-d w1' : 's-rule w1'));
+        }
+      });
+      for (const id in st.linkOf) st.linkOf[id].style.display = made.has(id) ? '' : 'none';
+      st.noneTxt.style.display = made.has('hidden') ? '' : 'none';
+      st.noneChild.style.display = made.has('hidden') ? '' : 'none';
+      st.rows[13].box.setAttribute('class', cur === 'hidden' ? 'f-in s-x w2 dash' : (i === 2 ? 'f-in s-x w2 dash' : 'f-in s-rule w1 dash'));
+    }
+  };
+
+
+  /* ================================================================
+     場面2 定数と文字の升目
+     窓 600×400 は 0.63 倍で描く。字の升目は 2 倍（8×16 → 16×32）。棒は 590 を 248px に
+     ================================================================ */
+  const s2 = {
+    steps: [
+      { title: '窓の定数：600×400、画面の (30, 50)', text: '`constants.rs` の 7 行め以降は `pub static` の `i64`。窓は 600 × 400 で、画面の (30, 50) に置く。`TITLE_BAR_HEIGHT` 24 は noli が窓の上に描くタイトルバー、`TOOLBAR_HEIGHT` 26 は saba が描くアドレスバーの帯の高さ。' },
+      { title: '内容領域：590 × 340', text: '幅は 600 − 5 × 2 ＝ **590**、高さは 400 − 24 − 26 − 5 × 2 ＝ **340**。`WINDOW_PADDING` 5 は四方の余白。レイアウトの座標はこの領域の左上を (0, 0) とし、幅 590 がすべての Block の幅になる（[[3|大きさを決める]]）。' },
+      { title: '字の升目：8 × 16、行は 20', text: '字は 8 × 16、行は 16 ＋ 4 ＝ 20。noli の `draw_string` は `StringSize` の 3 段で 1 倍・2 倍・3 倍のビットマップの字を描く（公開ソース）。saba の `FontSize` 3 段を `convert_font_size` がそこへ写す。' },
+      { title: 'Text の幅 ＝ 8 × 倍率 × バイト数', text: 'Text の腕は `font_size` から `ratio`（1・2・3）を決め、幅 ＝ 8 × `ratio` × `t.len()`。"My Browser!" は 11 字の h1 なので 8 × 3 × 11 ＝ **264**、高さ 20 × 3 ＝ 60。`len()` はバイト数で、ASCII 以外では字数と合わない。' },
+      { title: '590 を超えたら行を増やす', text: '幅が 590 を超えると、幅は 590、高さは 20 × 倍率 × 行数。行数は `wrapping_div` の商に、割り切れなければ 1 を足す。p.first の 53 字は 424 で 1 行。Chromium は書体の字形を並べて（HarfBuzz のシェーピング）幅を測るが、saba は升目を数えるだけ。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'constants.rs（saba_core/src。1〜5 行の色は場面5。空行は詰めた）'],
+        [7, 'pub static ADDRESSBAR_HEIGHT: i64 = 20;'],
+        [9, 'pub static WINDOW_INIT_X_POS: i64 = 30;'],
+        [10, 'pub static WINDOW_INIT_Y_POS: i64 = 50;'],
+        [12, 'pub static WINDOW_WIDTH: i64 = 600;'],
+        [13, 'pub static WINDOW_HEIGHT: i64 = 400;'],
+        [14, 'pub static WINDOW_PADDING: i64 = 5;'],
+        [16, '// noliライブラリに定義されている定数'],
+        [17, 'pub static TITLE_BAR_HEIGHT: i64 = 24;'],
+        [19, 'pub static TOOLBAR_HEIGHT: i64 = 26;'],
+        [21, 'pub static CONTENT_AREA_WIDTH: i64 ='],
+        [null, '    WINDOW_WIDTH - WINDOW_PADDING * 2;'],
+        [22, 'pub static CONTENT_AREA_HEIGHT: i64 ='],
+        [23, '    WINDOW_HEIGHT - TITLE_BAR_HEIGHT - TOOLBAR_HEIGHT'],
+        [null, '    - WINDOW_PADDING * 2;'],
+        [25, 'pub static CHAR_WIDTH: i64 = 8;'],
+        [26, 'pub static CHAR_HEIGHT: i64 = 16;'],
+        [27, 'pub static CHAR_HEIGHT_WITH_PADDING: i64 = CHAR_HEIGHT + 4;']
+      ]);
+      P.add([
+        ['', 'app.rs（saba の 3 段を noli の 3 段へ）'],
+        [402, 'fn convert_font_size(size: FontSize) -> StringSize {'],
+        [403, '  match size {'],
+        [404, '    FontSize::Medium => StringSize::Medium,'],
+        [405, '    FontSize::XLarge => StringSize::Large,'],
+        [406, '    FontSize::XXLarge => StringSize::XLarge,'],
+        [407, '  }'],
+        [408, '}'],
+        ['', 'computed_style.rs（第34章。CSS Fonts 4 の absolute-size から 3 つ。詰めた）'],
+        [237, '#[derive(Debug, Copy, Clone, PartialEq)]'],
+        [238, 'pub enum FontSize { Medium, XLarge, XXLarge }'],
+        [248, '  ElementKind::H1 => FontSize::XXLarge,'],
+        [249, '  ElementKind::H2 => FontSize::XLarge,'],
+        [250, '  _ => FontSize::Medium,'],
+        ['', 'constants.rs'],
+        [25, 'pub static CHAR_WIDTH: i64 = 8;'],
+        [26, 'pub static CHAR_HEIGHT: i64 = 16;'],
+        [27, 'pub static CHAR_HEIGHT_WITH_PADDING: i64 = CHAR_HEIGHT + 4;']
+      ]).hl(1, 7);
+      P.add([
+        ['', 'layout_object.rs（compute_size の Text の腕。詰めた）'],
+        [240, 'LayoutObjectKind::Text => {'],
+        [241, '  if let NodeKind::Text(t) = self.node_kind() {'],
+        [242, '    let ratio = match self.style.font_size() {'],
+        [243, '      FontSize::Medium => 1, FontSize::XLarge => 2,'],
+        [245, '      FontSize::XXLarge => 3, };'],
+        [247, '    let width = CHAR_WIDTH * ratio * t.len() as i64;'],
+        [248, '    if width > CONTENT_AREA_WIDTH {'],
+        [250, '      size.set_width(CONTENT_AREA_WIDTH);'],
+        [251, '      let line_num ='],
+        [null, '        if width.wrapping_rem(CONTENT_AREA_WIDTH) == 0 {'],
+        [252, '          width.wrapping_div(CONTENT_AREA_WIDTH)'],
+        [253, '        } else {'],
+        [254, '          width.wrapping_div(CONTENT_AREA_WIDTH) + 1 };'],
+        [256, '      size.set_height('],
+        [null, '        CHAR_HEIGHT_WITH_PADDING * ratio * line_num);'],
+        [257, '    } else { size.set_width(width);'],
+        [260, '      size.set_height(CHAR_HEIGHT_WITH_PADDING * ratio); }']
+      ]);
+      st.tr = S.g({}, svg);
+      // 右上: 窓の内訳（0.63 倍）
+      const k = 0.63, X0 = 500, Y0 = 30;
+      const X = (v) => X0 + v * k, Y = (v) => Y0 + v * k;
+      const gw = st.gw = S.g({}, svg);
+      S.text(X(0), Y(0) - 8, '窓 600 × 400（画面の (30, 50) に置く。0.63 倍の模式図）', { cls: 't-xs t-dim' }, gw);
+      S.rect(X(0), Y(0), WIN_W * k, WIN_H * k, { cls: 'f-sf s-fg w1' }, gw);
+      st.title = S.rect(X(0), Y(0), WIN_W * k, TITLE * k, { cls: 'f-in s-rule w1' }, gw);
+      S.text(X(300), Y(16), 'タイトルバー 24（noli が描く）', { cls: 't-c t-xs' }, gw);
+      st.tool = S.rect(X(0), Y(TITLE), WIN_W * k, TOOL * k, { cls: 'f-rule s-rule w1' }, gw);
+      S.text(X(300), Y(TITLE + 17), 'ツールバー 26（Address: と白い箱。saba が描く）', { cls: 't-c t-xs' }, gw);
+      st.ca = S.rect(X(PAD), Y(TITLE + TOOL + PAD), CA_W * k, CA_H * k, { cls: 'f-sf s-d w1 dash' }, gw);
+      S.text(X(300), Y(TITLE + TOOL + PAD + 160), '内容領域 590 × 340', { cls: 't-c t-sm t-b' }, gw);
+      S.text(X(300), Y(TITLE + TOOL + PAD + 186), 'レイアウトの (0, 0) はこの左上（窓の (5, 55)）', { cls: 't-c t-xs t-dim' }, gw);
+      st.pads = [S.rect(X(0), Y(TITLE + TOOL), WIN_W * k, PAD * k, { cls: 'f-x-soft' }, gw), S.rect(X(0), Y(395), WIN_W * k, PAD * k, { cls: 'f-x-soft' }, gw),
+        S.rect(X(0), Y(TITLE + TOOL + PAD), PAD * k, CA_H * k, { cls: 'f-x-soft' }, gw), S.rect(X(595), Y(TITLE + TOOL + PAD), PAD * k, CA_H * k, { cls: 'f-x-soft' }, gw)];
+      // 寸法（右・下）
+      const dx = 896;
+      const seg = (a, b, label, lx) => {
+        S.line(dx, Y(a), dx, Y(b), { cls: 's-mid w1' }, gw);
+        S.line(dx - 4, Y(a), dx + 4, Y(a), { cls: 's-mid w1' }, gw);
+        S.line(dx - 4, Y(b), dx + 4, Y(b), { cls: 's-mid w1' }, gw);
+        S.text(lx || dx + 8, (Y(a) + Y(b)) / 2 + 4, label, { cls: 't-xs t-mono' }, gw);
+      };
+      seg(0, 24, '24'); seg(24, 50, '26'); seg(50, 55, '5', dx + 24); seg(55, 395, '340'); seg(395, 400, '5', dx + 24);
+      const dy = Y(400) + 14;
+      const hseg = (a, b, label) => {
+        S.line(X(a), dy, X(b), dy, { cls: 's-mid w1' }, gw);
+        S.line(X(a), dy - 4, X(a), dy + 4, { cls: 's-mid w1' }, gw);
+        S.line(X(b), dy - 4, X(b), dy + 4, { cls: 's-mid w1' }, gw);
+        S.text((X(a) + X(b)) / 2, dy + 14, label, { cls: 't-c t-xs t-mono' }, gw);
+      };
+      hseg(0, 5, '5'); hseg(5, 595, '590'); hseg(595, 600, '5');
+      st.f1 = S.text(X(0), dy + 32, '横 600 ＝ 5 ＋ 590 ＋ 5　　縦 400 ＝ 24 ＋ 26 ＋ 5 ＋ 340 ＋ 5', { cls: 't-xs' }, gw);
+      // 右下: 字の升目（2 倍）と、文字の幅の棒
+      const gb = st.gb = S.g({}, svg);
+      S.text(496, 366, '字の升目（2 倍に拡大）', { cls: 't-xs t-dim' }, gb);
+      st.cells = [1, 2, 3].map((r, j) => {
+        const cw = CW * r * 2, ch = CH * r * 2, pd = 4 * r * 2, x = [496, 528, 584][j], yb = 500;
+        const g = S.g({}, gb);
+        const cell = S.rect(x, yb - ch - pd, cw, ch, { cls: 'f-d-soft s-d w1' }, g);
+        S.rect(x, yb - pd, cw, pd, { cls: 'f-in s-rule w1' }, g);
+        S.text(x + cw / 2, yb - pd - ch * 0.2, 'M', { cls: 't-c t-mono t-b', style: { fontSize: (ch * 0.78).toFixed(1) + 'px' } }, g);
+        S.text(x + cw / 2, yb + 14, '×' + r, { cls: 't-c t-xs t-b' }, g);
+        S.text(x + cw / 2, yb + 27, (CW * r) + '×' + (CH * r), { cls: 't-c t-xs t-mono' }, g);
+        S.text(x + cw / 2, yb + 39, '行 ' + (CHP * r), { cls: 't-c t-xs t-mono t-dim' }, g);
+        return { g, cell };
+      });
+      st.lines = [
+        ['"My Browser!" 11 字 × 8 × 3 ＝ 264', 1], ['  264 ≤ 590 → 1 行、高さ 20 × 3 ＝ 60', 1],
+        ['p.first 53 字 × 8 × 1 ＝ 424', 1], ['  424 ≤ 590 → 1 行、高さ 20 × 1 ＝ 20', 1],
+        ['例: Medium 100 字 → 800 > 590', 2], ['  幅 590、800 ÷ 590 ＝ 1 余り 210 → 2 行、高さ 40', 2]
+      ].map(([t, grp], j) => ({ t: S.text(660, 370 + j * 16, t, { cls: 't-xs t-mono' }, gb), grp }));
+      const BX = 668, BW = 248;
+      st.bk = BW / CA_W;
+      st.frame = S.rect(BX, 482, BW, 54, { cls: 'f-none s-dim w1 dash' }, gb);
+      S.text(BX, 478, '0', { cls: 't-xs t-mono t-dim' }, gb);
+      st.lim = S.text(BX + BW, 478, '590', { cls: 't-end t-xs t-mono t-dim' }, gb);
+      st.bars = [
+        { y: 485, n: bytesOf(TXT.h1), r: 3, cls: 'f-d-soft s-d w1', lbl: '264' },
+        { y: 499, n: bytesOf(TXT.first), r: 1, cls: 'f-d-soft s-d w1', lbl: '424' },
+        { y: 513, n: 100, r: 1, cls: 'f-x-soft s-x w1', lbl: '800', lbl2: '→ 2 行' }
+      ].map((b) => {
+        b.g = S.g({}, gb);
+        b.r1 = S.rect(BX, b.y, 0, 10, { cls: b.cls }, b.g);
+        b.r2 = S.rect(BX, b.y + 11, 0, 10, { cls: b.cls }, b.g);
+        b.t = S.text(BX + BW + 6, b.y + 9, b.lbl, { cls: 't-xs t-mono' }, b.g);
+        if (b.lbl2) S.text(BX + 96, b.y + 20, '800 ＝ 590 ＋ 210 ' + b.lbl2, { cls: 't-xs t-mono' }, b.g);
+        return b;
+      });
+      st.BX = BX;
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      const which = i <= 1 ? 0 : i === 2 ? 1 : 2;
+      const p = st.P.show(which);
+      if (which === 0) p.hl(...(i === 0 ? [1, 9] : [10, 14]));
+      if (which === 2) p.hl(...(i === 3 ? [3, 6] : [7, 15]));
+      const T = [
+        ['WINDOW_WIDTH 600 × WINDOW_HEIGHT 400、WINDOW_INIT_X_POS 30・Y_POS 50', 'TITLE_BAR_HEIGHT 24（noli の定数の写し）、TOOLBAR_HEIGHT 26', 'ADDRESSBAR_HEIGHT 20、WINDOW_PADDING 5', '全部 pub static の i64。CHAR_* も同じ（段階3）'],
+        ['CONTENT_AREA_WIDTH ＝ 600 − 5 × 2 ＝ 590', 'CONTENT_AREA_HEIGHT ＝ 400 − 24 − 26 − 5 × 2 ＝ 340', '内容領域の左上 ＝ 窓の (5, 24 ＋ 26 ＋ 5) ＝ (5, 55)。レイアウトではここが (0, 0)', 'update_layout の入口: LayoutSize::new(CONTENT_AREA_WIDTH, 0) ＝ 590 × 0'],
+        ['CHAR_WIDTH 8、CHAR_HEIGHT 16、CHAR_HEIGHT_WITH_PADDING ＝ 16 ＋ 4 ＝ 20', 'FontSize::Medium → StringSize::Medium（1 倍）、XLarge → Large（2 倍）', 'FontSize::XXLarge → StringSize::XLarge（3 倍）← 名前が 1 段ずれる', 'h1 は XXLarge、h2 は XLarge、他は Medium（第34章の初期値）'],
+        ['"My Browser!": t.len() ＝ 11、ratio ＝ 3 → 幅 8 × 3 × 11 ＝ 264', '  264 ≤ 590 → 1 行。高さ ＝ 20 × 3 ＝ 60', 'p.first: 53 字 × 8 × 1 ＝ 424 ≤ 590 → 424 × 20', '"こんにちは".len() ＝ 15（UTF-8 で 3 バイト × 5 字）→ 幅は 120 と数える'],
+        ['例: Medium の 100 字 → 幅 800 > 590', '  size.width ＝ 590、line_num ＝ 800.wrapping_div(590) ＋ 1 ＝ 1 ＋ 1 ＝ 2', '  size.height ＝ 20 × 1 × 2 ＝ 40', '割り切れるとき（例 Medium 295 字 → 2,360 ＝ 590 × 4）は ＋1 しない → 4 行']
+      ];
+      traceStep(st.tr, 352, T[i]);
+      op(st.gw, i <= 1 ? '' : 0.4);
+      op(st.gb, i <= 1 ? 0.35 : '');
+      st.title.setAttribute('class', i === 0 ? 'f-in s-x w2' : 'f-in s-rule w1');
+      st.tool.setAttribute('class', i === 0 ? 'f-rule s-x w2' : 'f-rule s-rule w1');
+      st.ca.setAttribute('class', i === 1 ? 'f-sf s-x w2 dash' : 'f-sf s-d w1 dash');
+      st.pads.forEach((r) => { r.style.display = i === 1 ? '' : 'none'; });
+      st.f1.setAttribute('class', i === 1 ? 't-xs t-b' : 't-xs');
+      st.cells.forEach((c) => c.cell.setAttribute('class', i === 2 ? 'f-d-soft s-x w2' : 'f-d-soft s-d w1'));
+      st.lines.forEach((l) => { l.t.setAttribute('class', 't-xs t-mono' + ((i === 3 && l.grp === 1) || (i === 4 && l.grp === 2) ? ' t-b' : '')); l.t.style.display = l.grp === 2 && i < 4 ? 'none' : ''; });
+      st.bars[2].g.style.display = i === 4 ? '' : 'none';
+      st.lim.setAttribute('class', i === 4 ? 't-end t-xs t-mono t-x t-b' : 't-end t-xs t-mono t-dim');
+      st.frame.setAttribute('class', i === 4 ? 'f-none s-x w1 dash' : 'f-none s-dim w1 dash');
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      // 段階4・5: 棒が 1 字ずつ伸びる（2.5 秒で全部、5 秒で 1 周）。止めている人には伸び切った姿
+      const f = (i === 3 || i === 4) && playing() ? Math.min(1, U.mod(ctx.ts, 5) / 2.5) : 1;
+      st.bars.forEach((b) => {
+        const chars = Math.round(f * b.n);
+        const w = chars * CW * b.r;
+        const w1 = Math.min(w, CA_W), w2 = Math.max(0, w - CA_W);
+        b.r1.setAttribute('width', (w1 * st.bk).toFixed(1));
+        b.r2.setAttribute('width', (w2 * st.bk).toFixed(1));
+        b.r2.style.display = w2 > 0 ? '' : 'none';
+      });
+    }
+  };
+
+
+  /* ================================================================
+     場面3 大きさを決める
+     S3EV は calculate_node_size が止まる順（0 ＝ 1 回めの compute_size（Block の幅）、1 ＝ 2 回め（確定））。
+     兄弟の再帰（169 行）が自分の 2 回め（174 行）より先なので、body の確定が最後になる
+     ================================================================ */
+  const S3ROWS = [['body', 0], ['h1', 1], ['t_h1', 2], ['p1', 1], ['t_p1', 2], ['pl', 1], ['a1', 2], ['t_a1', 3], ['a2', 2], ['t_a2', 3], ['pt', 1], ['t_pt', 2]];
+  const S3LBL = { body: 'body', h1: 'h1', t_h1: '"My Browser!"（11 字）', p1: 'p.first', t_p1: '"HTML, CSS and …"（53 字）', pl: 'p.links', a1: 'a', t_a1: '"Test page1 "（11 バイト）', a2: 'a', t_a2: '"Test page2"（10 字）', pt: 'p#target', t_pt: '"Answer? 1 + 2 = 3"（17 字）' };
+  const S3EV = [['body', 0], ['h1', 0], ['t_h1', 1], ['p1', 0], ['t_p1', 1], ['pl', 0], ['t_a1', 1], ['t_a2', 1], ['a2', 1], ['a1', 1], ['pt', 0], ['t_pt', 1], ['pt', 1], ['pl', 1], ['p1', 1], ['h1', 1], ['body', 1]];
+  const s3 = {
+    steps: [
+      { title: 'calculate_node_size：下りで 1 回、上りで 1 回', text: '入口は `update_layout` の `LayoutSize::new(CONTENT_AREA_WIDTH, 0)`。各ノードで、Block なら先に `compute_size`、次に子を自分の大きさで、兄弟を親の大きさで再帰し、最後にもう一度 `compute_size`。子の大きさが決まってから自分の高さが決まる。' },
+      { title: 'Block の幅 ＝ 親の幅（上から下へ）', text: '`size.set_width(parent_size.width())`。body は入口の 590、h1 と p は body の 590。[[10-browser.html#s3.3|第10章 場面3]]の「幅は親から下へ」そのもの。1 回めでは子の高さがまだ 0 なので高さも 0 で、2 回めで直る。' },
+      { title: 'Text：字数から（葉）', text: 'Text は Block でないので 1 回めは無く、2 回めで[[2:3|場面2 の式]]を使う。"My Browser!" 264 × 60、p.first 424 × 20、"Test page1 "（末尾の空白を含め 11 バイト）88 × 20、JS が入れた "Answer? 1 + 2 = 3" 136 × 20。' },
+      { title: 'Inline ＝ 子の幅と高さの和', text: 'a は Inline。子の Text を `while child.is_some()` で回り、幅も高さも足す。a は 88 × 20 と 80 × 20。`match child { Some(c) => c, None => panic!(…) }` は、`is_some()` を見た直後に中身を取り出す定型。' },
+      { title: 'Block の高さ ＝ 子の和、ただし横並びは最初だけ', text: '子を順に見て、「前の子が Block」か「この子が Block」のときだけ高さを足す。p.links は a1（前が Block）で ＋20、a2（前も自分も Inline）は足さず 20。body は 60 ＋ 20 ＋ 20 ＋ 20 ＝ **120**。横に並ぶインラインの行の高さを最初の 1 つで代表させる近似である。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'layout_view.rs（詰めた。注記を足した）'],
+        [215, 'fn update_layout(&mut self) {'],
+        [216, '  Self::calculate_node_size(&self.root,'],
+        [null, '    LayoutSize::new(CONTENT_AREA_WIDTH, 0));'],
+        [158, 'fn calculate_node_size('],
+        [null, '  node: &Option<Rc<RefCell<LayoutObject>>>,'],
+        [null, '  parent_size: LayoutSize) {'],
+        [159, '  if let Some(n) = node {'],
+        [161, '    if n.borrow().kind() == LayoutObjectKind::Block {'],
+        [162, '      n.borrow_mut().compute_size(parent_size); // 1 回め: 幅'],
+        [163, '    }'],
+        [165, '    let first_child = n.borrow().first_child();'],
+        [166, '    Self::calculate_node_size(&first_child,'],
+        [null, '      n.borrow().size());          // 子には自分の大きさ'],
+        [168, '    let next_sibling = n.borrow().next_sibling();'],
+        [169, '    Self::calculate_node_size(&next_sibling, parent_size);'],
+        [174, '    n.borrow_mut().compute_size(parent_size);  // 2 回め: 確定'],
+        [175, '  }']
+      ]).hl(8, 16);
+      P.add([
+        ['', 'layout_object.rs（compute_size の Block の腕。詰めた）'],
+        [191, 'pub fn compute_size(&mut self, parent_size: LayoutSize) {'],
+        [194, '  match self.kind() {'],
+        [195, '    LayoutObjectKind::Block => {'],
+        [196, '      size.set_width(parent_size.width());'],
+        [200, '      let mut height = 0;'],
+        [201, '      let mut child = self.first_child();'],
+        [202, '      let mut previous_child_kind = LayoutObjectKind::Block;'],
+        [203, '      while child.is_some() {'],
+        [204, '        let c = match child { Some(c) => c,'],
+        [206, '          None => panic!("first child should exist") };'],
+        [209, '        if previous_child_kind == LayoutObjectKind::Block'],
+        [210, '          || c.borrow().kind() == LayoutObjectKind::Block {'],
+        [212, '          height += c.borrow().size.height();'],
+        [215, '        previous_child_kind = c.borrow().kind();'],
+        [216, '        child = c.borrow().next_sibling();'],
+        [218, '      size.set_height(height);'],
+        [266, '  self.size = size;']
+      ]);
+      P.add([
+        ['', 'layout_object.rs（compute_size の Text の腕。詰めた。注記を足した）'],
+        [240, 'LayoutObjectKind::Text => {'],
+        [241, '  if let NodeKind::Text(t) = self.node_kind() {'],
+        [242, '    let ratio = match self.style.font_size() {'],
+        [243, '      FontSize::Medium => 1, FontSize::XLarge => 2,'],
+        [245, '      FontSize::XXLarge => 3, };'],
+        [247, '    let width = CHAR_WIDTH * ratio * t.len() as i64;'],
+        [248, '    if width > CONTENT_AREA_WIDTH {'],
+        [250, '      size.set_width(CONTENT_AREA_WIDTH);'],
+        [251, '      let line_num = … ;   // 場面2'],
+        [256, '      size.set_height('],
+        [null, '        CHAR_HEIGHT_WITH_PADDING * ratio * line_num);'],
+        [257, '    } else {'],
+        [259, '      size.set_width(width);'],
+        [260, '      size.set_height(CHAR_HEIGHT_WITH_PADDING * ratio);'],
+        [261, '    }']
+      ]).hl(6, 14);
+      P.add([
+        ['', 'layout_object.rs（compute_size の Inline の腕。詰めた）'],
+        [220, 'LayoutObjectKind::Inline => {'],
+        [222, '  let mut width = 0;'],
+        [223, '  let mut height = 0;'],
+        [224, '  let mut child = self.first_child();'],
+        [225, '  while child.is_some() {'],
+        [226, '    let c = match child { Some(c) => c,'],
+        [228, '      None => panic!("first child should exist") };'],
+        [231, '    width += c.borrow().size.width();'],
+        [232, '    height += c.borrow().size.height();'],
+        [234, '    child = c.borrow().next_sibling();'],
+        [235, '  }'],
+        [237, '  size.set_width(width);'],
+        [238, '  size.set_height(height);'],
+        [239, '}']
+      ]).hl(5, 13);
+      st.tr = S.g({}, svg);
+      // 右: 木の表（名前・kind・幅 × 高さ）と、いま止まっている行
+      const g = st.g = S.g({}, svg);
+      S.text(496, 44, 'LayoutObject', { cls: 't-xs t-dim' }, g);
+      S.text(690, 44, 'kind', { cls: 't-xs t-dim' }, g);
+      st.hw = S.text(790, 44, '幅', { cls: 't-end t-xs t-dim' }, g);
+      st.hh = S.text(808, 44, '高さ', { cls: 't-xs t-dim' }, g);
+      S.text(862, 44, 'compute_size', { cls: 't-xs t-dim' }, g);
+      st.rows = S3ROWS.map(([id, d], k) => {
+        const y = 66 + k * 27;
+        const row = { id, y };
+        row.band = S.rect(490, y - 12, 454, 20, { rx: 3, cls: 'f-x-soft', style: { display: 'none' } }, g);
+        row.name = S.text(496 + d * 14, y + 4, S3LBL[id], { cls: 't-xs t-mono' }, g);
+        row.kind = S.text(690, y + 4, NODE[id].kind, { cls: 't-xs t-mono t-dim' }, g);
+        row.w = S.text(790, y + 4, '', { cls: 't-end t-xs t-mono t-b' }, g);
+        row.x = S.text(799, y + 4, '×', { cls: 't-c t-xs t-mono t-dim', style: { display: 'none' } }, g);
+        row.h = S.text(808, y + 4, '', { cls: 't-xs t-mono t-b' }, g);
+        row.ph = S.text(862, y + 4, '', { cls: 't-xs t-x t-b' }, g);
+        return row;
+      });
+      S.line(490, 402, 944, 402, { cls: 's-rule w1' }, g);
+      // 下: 段階ごとの式
+      const G = st.G = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      const lines = (k, arr) => arr.forEach((t, j) => S.text(496, 424 + j * 20, t, { cls: 't-xs' + (j === 0 ? ' t-b' : '') }, G[k]));
+      lines(0, ['訪れる順（↓ 1 回め ＝ Block の幅、↑ 2 回め ＝ 大きさの確定）', 'body↓ h1↓ Text↑ p.first↓ Text↑ p.links↓ Text↑ Text↑ a↑ a↑', 'p#target↓ Text↑ p#target↑ p.links↑ p.first↑ h1↑ body↑', '兄弟の再帰（169 行）が自分の 2 回め（174 行）より先なので、body の確定が最後']);
+      // 段階2〜5 の値は左下の追跡に出すので、ここには追跡に無いことだけを書く（段階4 は無し）
+      lines(1, ['Text と Inline は 1 回めが無い（Block でないので 161 行の if を通らない）']);
+      lines(2, ['どれも 590 以下なので 1 行。折り返しは起きない']);
+      S.text(496, 424, 'body の高さ ' + L.body.h + ' の内訳（帯の長さは高さに比例）', { cls: 't-xs t-b' }, G[4]);
+      // 段階5: body の高さの帯（高さ 1 ＝ 3.7 px。120 で 444 px）
+      const segs = [['h1', L.h1.h], ['p.first', L.p1.h], ['p.links', L.pl.h], ['p#target', L.pt.h]];
+      let sx = 496;
+      segs.forEach(([n, h], j) => {
+        const w = h * 3.7;
+        S.rect(sx, 436, w, 22, { rx: 2, cls: j % 2 ? 'f-d-soft s-d w1' : 'f-in s-d w1' }, G[4]);
+        S.text(sx + w / 2, 451, n + ' ' + h, { cls: 't-c t-xs t-mono' }, G[4]);
+        sx += w;
+      });
+      st.shown = '';
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      const which = i === 0 ? 0 : (i === 1 || i === 4) ? 1 : i === 2 ? 2 : 3;
+      const p = st.P.show(which);
+      if (which === 1) p.hl(...(i === 1 ? [3, 4] : [5, 16]));
+      const T = [
+        ['update_layout: calculate_node_size(&root, LayoutSize::new(590, 0))', 'body: Block → compute_size(590 × 0) → 幅 590（1 回め）', '  → 子 h1 を body の size（590 × 0）で、兄弟 None を 590 × 0 で', '  → 戻ってから compute_size（2 回め）→ 高さ 120（段階5）'],
+        ['body.compute_size(parent 590 × 0): size.set_width(590)', 'h1.compute_size(parent ＝ body の size 590 × 0): 幅 590', 'p.first・p.links・p#target も parent_size ＝ 590 × 0（兄弟には親の size を渡す）', '1 回めの高さ: 子の size がまだ 0 × 0 なので 0。2 回めで直る'],
+        ['Text "My Browser!": 8 × 3 × 11 ＝ 264 ≤ 590 → 264 × 60', 'Text（p.first）: 8 × 1 × 53 ＝ 424 → 424 × 20', 'Text "Test page1 ": 8 × 11 ＝ 88 → 88 × 20、"Test page2": 80 × 20', 'Text "Answer? 1 + 2 = 3": 8 × 17 ＝ 136 → 136 × 20（JS の後の文字列）'],
+        ['a1.compute_size: child ＝ Text 88 × 20 → width 88、height 20', 'a2.compute_size: child ＝ Text 80 × 20 → 80 × 20', 'Inline は parent_size を使わない（幅は中身で決まる）', '順: Text(a2) → a2 → a1（兄弟の再帰が先、自分の 2 回めは後）'],
+        ['p.links: child a1（previous Block）→ height ＋ 20 ＝ 20', '  child a2（previous Inline、自分も Inline）→ 足さない → 20', 'h1 ＝ 60、p.first ＝ 20、p#target ＝ 20', 'body ＝ 60 ＋ 20 ＋ 20 ＋ 20 ＝ 120 → 590 × 120']
+      ];
+      traceStep(st.tr, 352, T[i]);
+      st.G.forEach((g, k) => S.fade(g, k === i));
+      st.rows.forEach((row) => {
+        const kind = NODE[row.id].kind;
+        const em = (i === 2 && kind === 'Text') || (i === 3 && kind === 'Inline');
+        row.name.setAttribute('class', 't-xs t-mono' + (em ? ' t-b t-x' : ''));
+        row.kind.setAttribute('class', 't-xs t-mono' + (em ? ' t-x t-b' : ' t-dim'));
+        row.w.setAttribute('class', 't-end t-xs t-mono t-b' + (i === 1 && kind === 'Block' ? ' t-x' : ''));
+        row.h.setAttribute('class', 't-xs t-mono t-b' + (i === 4 && kind === 'Block' ? ' t-x' : ''));
+      });
+      st.hw.setAttribute('class', 't-end t-xs' + (i === 1 ? ' t-x t-b' : ' t-dim'));
+      st.hh.setAttribute('class', 't-xs' + (i === 4 ? ' t-x t-b' : ' t-dim'));
+      st.shown = '';
+    },
+    frame(ctx) {
+      const st = ctx.state;
+      // 17 の出来事を 0.45 秒ごとに（7.65 秒）、2.35 秒止めて 1 周。止めている人には全部決まった姿
+      const tt = playing() ? U.mod(ctx.ts, 10) : 99;
+      const e = Math.min(S3EV.length, Math.floor(tt / 0.45) + 1);
+      const cur = tt < S3EV.length * 0.45 ? S3EV[e - 1] : null;
+      const key = e + ':' + (cur ? cur[0] + cur[1] : '-');
+      if (key === st.shown) return;
+      st.shown = key;
+      const done = S3EV.slice(0, e);
+      st.rows.forEach((row) => {
+        const n = NODE[row.id], r = L[row.id];
+        const pre = done.some(([id, ph]) => id === row.id && ph === 0), post = done.some(([id, ph]) => id === row.id && ph === 1);
+        const wTxt = n.kind === 'Block' ? (pre || post ? String(r.w) : '') : (post ? String(r.w) : '');
+        const hTxt = post ? String(r.h) : (pre ? '0' : '');
+        row.w.textContent = wTxt; row.h.textContent = hTxt;
+        row.x.style.display = wTxt || hTxt ? '' : 'none';
+        const isCur = cur && cur[0] === row.id;
+        row.band.style.display = isCur ? '' : 'none';
+        row.ph.textContent = isCur ? (cur[1] === 0 ? '↓ 1 回め: 幅' : '↑ 2 回め: 確定') : '';
+      });
+    }
+  };
+
+
+  /* ================================================================
+     場面4 位置を決める
+     内容領域 590×340 を 0.72 倍で描く。箱は calculate_node_position が訪れる順（前順）に現れる
+     ================================================================ */
+  const s4 = {
+    steps: [
+      { title: 'calculate_node_position：親の位置と前の兄弟を渡す', text: '入口は `LayoutPoint::new(0, 0)`、前の兄弟は `Block`・`None`・`None`。各ノードは `compute_position` で自分の位置を決め、子には自分の位置と「前の兄弟なし」を、兄弟には同じ親の位置と自分の `kind`・`point`・`size` を渡して再帰する。' },
+      { title: 'タプルの match：Block が絡めば下へ', text: '`match` はタプル（自分の kind, 前の兄弟の kind）を見る。`(Block, _) | (_, Block)` は「どちらかが Block」で、y ＝ 兄の y ＋ 兄の高さ（兄がいなければ親の y）、x ＝ 親の x。p.first の y は 0 ＋ 60 ＝ 60。' },
+      { title: '(Inline, Inline)：右へ', text: 'a1 は前の兄弟が「無し」（`Block` として渡る）なので 1 つめの腕で親の位置 (0, 80)。a2 は `(Inline, Inline)` で x ＝ 兄の x ＋ 兄の幅 ＝ 0 ＋ 88 ＝ **88**、y ＝ 兄の y ＝ 80。2 つめの腕の `else` には、この呼び方では来ない。' },
+      { title: 'Text と残りの腕。LayoutPoint は Copy', text: 'test.html の Text はどれも最初の子なので `(Text, Block)` で親の位置。`_` の腕（例: 前が Text）も親の位置。`LayoutPoint`・`LayoutSize` は `i64` 2 つの `Copy` な構造体（[[34-saba-css.html#s5.6|第34章 場面5]]）で、`point()` は参照でなく写しを返すので、そのまま引数に渡せる。' },
+      { title: '毎回全部作り直す', text: '`receive_response` は応答のたびに `LayoutView::new` で木を作り、大きさと位置を全部計算する。[[10-browser.html#s3.5|第10章 場面3 段階5]]の「変わった所だけ」の仕組み（dirty の印、強制同期レイアウト）は無い。JS の `textContent` もレイアウトの前に済んでいる。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'layout_view.rs（calculate_node_position。詰めた。注記を足した）'],
+        [185, '  if let Some(n) = node {'],
+        [186, '    n.borrow_mut().compute_position('],
+        [187, '      parent_point,'],
+        [188, '      previous_sibling_kind,'],
+        [189, '      previous_sibling_point,'],
+        [190, '      previous_sibling_size,'],
+        [191, '    );'],
+        [194, '    let first_child = n.borrow().first_child();'],
+        [195, '    Self::calculate_node_position(&first_child,'],
+        [197, '      n.borrow().point(),           // 親の位置 ＝ 自分の位置'],
+        [198, '      LayoutObjectKind::Block, None, None); // 前の兄弟は無い'],
+        [204, '    let next_sibling = n.borrow().next_sibling();'],
+        [205, '    Self::calculate_node_position(&next_sibling,'],
+        [207, '      parent_point,                 // 親は同じ'],
+        [208, '      n.borrow().kind(),'],
+        [209, '      Some(n.borrow().point()),'],
+        [210, '      Some(n.borrow().size()));']
+      ]).hl(2, 7);
+      P.add([
+        ['', 'layout_object.rs（compute_position。詰めた）'],
+        [276, '  let mut point = LayoutPoint::new(0, 0);'],
+        [278, '  match (self.kind(), previous_sibling_kind) {'],
+        [280, '    (LayoutObjectKind::Block, _)'],
+        [null, '    | (_, LayoutObjectKind::Block) => {'],
+        [281, '      if let (Some(size), Some(pos)) ='],
+        [null, '        (previous_sibling_size, previous_sibling_point) {'],
+        [282, '        point.set_y(pos.y() + size.height());'],
+        [283, '      } else {'],
+        [284, '        point.set_y(parent_point.y()); }'],
+        [286, '      point.set_x(parent_point.x());'],
+        [289, '    (LayoutObjectKind::Inline, LayoutObjectKind::Inline) => {'],
+        [290, '      if let (Some(size), Some(pos)) = … {'],
+        [291, '        point.set_x(pos.x() + size.width());'],
+        [292, '        point.set_y(pos.y()); } … }'],
+        [298, '    _ => { point.set_x(parent_point.x());'],
+        [300, '           point.set_y(parent_point.y()); }'],
+        [304, '  self.point = point;']
+      ]);
+      P.add([
+        ['', 'layout_object.rs（i64 の座標と大きさ。詰めた）'],
+        [457, '#[derive(Debug, Clone, PartialEq, Copy)]'],
+        [458, 'pub struct LayoutPoint { x: i64, y: i64 }'],
+        [464, '  pub fn new(x: i64, y: i64) -> Self { Self { x, y } }'],
+        [468, '  pub fn x(&self) -> i64 { self.x }'],
+        [476, '  pub fn set_x(&mut self, x: i64) { self.x = x; }'],
+        [485, '#[derive(Debug, Clone, PartialEq, Copy)]'],
+        [486, 'pub struct LayoutSize { width: i64, height: i64 }'],
+        [496, '  pub fn width(&self) -> i64 { self.width }'],
+        [508, '  pub fn set_height(&mut self, height: i64) {'],
+        [509, '    self.height = height; }'],
+        ['', 'layout_object.rs 448〜454（&self から写しを返す）'],
+        [448, '  pub fn point(&self) -> LayoutPoint { self.point }'],
+        [452, '  pub fn size(&self) -> LayoutSize { self.size }'],
+        ['', 'compute_position の残りの腕（298〜304）'],
+        [298, '  _ => { point.set_x(parent_point.x());'],
+        [300, '         point.set_y(parent_point.y()); }'],
+        [304, '  self.point = point;']
+      ]).hl(1, 2);
+      P.add([
+        ['', 'page.rs（応答のたびに 1 回。再レイアウトの入口は無い。詰めた）'],
+        [67, 'pub fn receive_response(&mut self,'],
+        [null, '                        response: HttpResponse) {'],
+        [68, '  self.create_frame(response.body());'],
+        [70, '  self.execute_js();'],
+        [72, '  self.set_layout_view();'],
+        [74, '  self.paint_tree();'],
+        [75, '}'],
+        [106, 'fn set_layout_view(&mut self) {'],
+        [107, '  let dom = match &self.frame {'],
+        [108, '    Some(frame) => frame.borrow().document(),'],
+        [109, '    None => return,'],
+        [110, '  };'],
+        [112, '  let style = match self.style.clone() { … };'],
+        [117, '  let layout_view = LayoutView::new(dom, &style);'],
+        [119, '  self.layout_view = Some(layout_view);'],
+        ['', 'layout_view.rs（LayoutView::new の終わり。注記を足した）'],
+        [118, '  tree.update_layout();   // 大きさ（場面3）→ 位置（この場面）']
+      ]).hl(14, 15);
+      st.tr = S.g({}, svg);
+      // 右上: 内容領域と箱
+      const K = 0.72, X0 = 500, Y0 = 48;
+      const X = (v) => X0 + v * K, Y = (v) => Y0 + v * K;
+      const g = st.g = S.g({}, svg);
+      S.text(X0, Y0 - 10, '内容領域 590 × 340（0.72 倍）。札は 名前 (x, y) 幅 × 高さ', { cls: 't-xs t-dim' }, g);
+      S.rect(X(0), Y(0), CA_W * K, CA_H * K, { cls: 'f-sf s-rule w1' }, g);
+      const CLS = { Block: 'f-none s-d w15', Inline: 'f-none s-d w15 dash', Text: 'f-none s-dim w1 dash2' };
+      const fmt = (id) => `(${L[id].x}, ${L[id].y}) ${L[id].w} × ${L[id].h}`;
+      st.bx = {};
+      PRE.forEach((id) => {
+        const r = L[id], gg = S.g({}, g);
+        st.bx[id] = { g: gg, rect: S.rect(X(r.x), Y(r.y), r.w * K, r.h * K, { cls: id === 'body' ? 'f-none s-mid w1' : CLS[NODE[id].kind] }, gg), kind: NODE[id].kind };
+      });
+      // 札は全部の箱の後に描く（後から描く Text の箱の点線が札を貫かないように）。halo は内容領域の地の色の縁
+      const lg = S.g({}, g);
+      PRE.forEach((id) => { st.bx[id].lg = S.g({}, lg); });
+      const lab = (id, x, y, t, end) => S.text(x, y, t, { cls: 't-xs t-mono halo' + (end ? ' t-end' : '') }, st.bx[id].lg);
+      lab('body', X(590) - 4, Y(120) + 12, 'body ' + fmt('body'), true);
+      lab('h1', X(0) + 4, Y(0) + 12, 'h1 ' + fmt('h1'));
+      lab('t_h1', X(0) + 4, Y(60) - 5, '"My Browser!" ' + fmt('t_h1'));
+      lab('p1', X(590) - 4, Y(60) + 10.3, 'p.first ' + fmt('p1'), true);
+      lab('t_p1', X(0) + 4, Y(60) + 10.3, '"HTML, CSS …" ' + fmt('t_p1'));
+      lab('pl', X(590) - 4, Y(80) + 10.3, 'p.links ' + fmt('pl'), true);
+      lab('pt', X(590) - 4, Y(100) + 10.3, 'p#target ' + fmt('pt'), true);
+      lab('t_pt', X(0) + 4, Y(100) + 10.3, '"Answer? 1 + 2 = 3" ' + fmt('t_pt'));
+      lab('a1', X(0) + 4, Y(175), 'a1 ' + fmt('a1') + '（Inline）。中の Text も ' + fmt('t_a1'));
+      lab('a2', X(0) + 4, Y(200), 'a2 ' + fmt('a2') + '（Inline）。中の Text も ' + fmt('t_a2'));
+      // 箱の中の名前（引き出し線は p#target の札を横切るので使わない）
+      S.text(X(44), Y(90) + 3.1, 'a1', { cls: 't-c t-xs t-mono t-b halo' }, st.bx.a1.lg);
+      S.text(X(128), Y(90) + 3.1, 'a2', { cls: 't-c t-xs t-mono t-b halo' }, st.bx.a2.lg);
+      // 下: match の 3 つの腕
+      const gm = st.gm = S.g({}, svg);
+      S.text(496, 322, 'match (self.kind(), previous_sibling_kind) の 3 つの腕', { cls: 't-sm t-b' }, gm);
+      st.arms = [
+        ['(Block, _) | (_, Block)', 'y ＝ 兄の y ＋ 兄の高さ（兄が無ければ親の y）、x ＝ 親の x'],
+        ['(Inline, Inline)', 'x ＝ 兄の x ＋ 兄の幅、y ＝ 兄の y（兄が無ければ親の位置）'],
+        ['_', 'x ＝ 親の x、y ＝ 親の y']
+      ].map(([pat, rule], j) => {
+        const y = 330 + j * 64;
+        const r = S.rect(490, y, 454, 58, { rx: 5, cls: 'f-sf s-rule w1' }, gm);
+        S.text(500, y + 15, pat, { cls: 't-xs t-mono t-b' }, gm);
+        S.text(500, y + 31, rule, { cls: 't-xs' }, gm);
+        const ex = S.text(500, y + 49, '', { cls: 't-xs t-x t-b' }, gm);
+        return { r, ex };
+      });
+      st.shown = -1;
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      const which = i === 0 ? 0 : (i === 1 || i === 2) ? 1 : i === 3 ? 2 : 3;
+      const p = st.P.show(which);
+      if (which === 1) p.hl(...(i === 1 ? [3, 10] : [11, 14]));
+      const T = [
+        ['update_layout: calculate_node_position(&root, (0, 0), Block, None, None)', 'body.compute_position((0, 0), Block, None, None) → (0, 0)', '  子 h1 へ: (body の位置 (0, 0), Block, None, None)', '  兄弟へ: (親の位置, body の kind, Some(point), Some(size)) ← body に兄弟は無い'],
+        ['h1: (Block, Block)、兄なし → y ＝ 親の y ＝ 0、x ＝ 0 → (0, 0)', 'p.first: (Block, Block)、兄 h1 (0, 0) 590 × 60 → y ＝ 0 ＋ 60 → (0, 60)', 'p.links: 兄 p.first (0, 60) 590 × 20 → y ＝ 60 ＋ 20 → (0, 80)', 'p#target: 兄 p.links (0, 80) 590 × 20 → y ＝ 80 ＋ 20 → (0, 100)'],
+        ['a1: (Inline, Block)、兄なし → 1 つめの腕 → 親 p.links の位置 (0, 80)', 'a2: (Inline, Inline)、兄 a1 (0, 80) 88 × 20', '  → x ＝ 0 ＋ 88 ＝ 88、y ＝ 80 → (88, 80)', '2 つめの腕の else（兄なしの Inline・Inline）: 最初の子は Block として渡るので来ない'],
+        ['Text "My Browser!": (Text, Block) → 親 h1 の位置 (0, 0)', 'Text "Test page2": (Text, Block) → 親 a2 の位置 (88, 80)', '_ の腕: (Inline, Text) や (Text, Inline) など → 親の位置。test.html では通らない', 'LayoutPoint { x: i64, y: i64 } は Copy → point() は写し（参照ではない）を返す'],
+        ['応答のたび: LayoutView::new → build_layout_tree → update_layout（大きさ → 位置）', 'test.html: 12 個の size と point が全部決まる（表は場面1〜4 の図）', 'Chromium: 変わったノードに dirty の印、影響する範囲だけ（第10章 場面3 段階5）', 'saba: 印も差分も無く、JS（textContent）もレイアウトの前に済む']
+      ];
+      traceStep(st.tr, 352, T[i]);
+      // 箱の強調
+      for (const id in st.bx) {
+        const b = st.bx[id];
+        const em = i === 0 || i === 4 || (i === 1 && b.kind === 'Block') || (i === 2 && b.kind === 'Inline') || (i === 3 && b.kind === 'Text');
+        op(b.g, em ? '' : 0.3); op(b.lg, em ? '' : 0.3);
+      }
+      // 腕の例
+      const EX = [
+        ['', '', ''],
+        ['例: p.first は (Block, Block)、兄 h1 の高さ 60 → y ＝ 0 ＋ 60 → (0, 60)', '', ''],
+        ['例: a1 は (Inline, Block)、兄なし → 親 p.links の (0, 80)', '例: a2 は兄 a1 の幅 88 → x ＝ 0 ＋ 88 → (88, 80)', ''],
+        ['例: Text は (Text, Block)、兄なし → 親の位置 (0, 0)・(88, 80) など', '', '(Inline, Text) など。test.html では通らない'],
+        ['', '', '']
+      ];
+      st.arms.forEach((a, j) => {
+        a.ex.textContent = EX[i][j];
+        a.r.setAttribute('class', EX[i][j] ? 'f-sf s-x w2' : 'f-sf s-rule w1');
+      });
+      st.shown = -1;
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      // 段階1: 0.5 秒に 1 個、前順に箱が現れる（9 秒で 1 周）。他の段階は全部出ている
+      let n = PRE.length;
+      if (i === 0) n = playing() ? Math.min(PRE.length, Math.floor(U.mod(ctx.ts, 9) / 0.5) + 1) : PRE.length;
+      if (n === st.shown) return;
+      st.shown = n;
+      const cur = i === 0 && n < PRE.length && playing() ? PRE[n - 1] : null;
+      PRE.forEach((id, k) => {
+        const b = st.bx[id];
+        b.g.style.display = b.lg.style.display = k < n ? '' : 'none';
+        b.rect.setAttribute('class', cur === id ? 'f-x-soft s-x w2' : (id === 'body' ? 'f-none s-mid w1' : { Block: 'f-none s-d w15', Inline: 'f-none s-d w15 dash', Text: 'f-none s-dim w1 dash2' }[b.kind]));
+      });
+    }
+  };
+
+
+  /* ================================================================
+     場面5 表示項目と、窓に描く
+     表示項目は DL（paint の規則で作った 10 個）。窓は 0.7 倍。窓の中の色は実際の値なので固定の色で塗る
+     ================================================================ */
+  /* 窓の中の文字。OS のビットマップの字の代わりに、この教材の等幅の書体を升目の幅（8 × ratio × k）に合わせる */
+  function cellText(parent, x, yTop, str, ratio, k, color, ul) {
+    const cw = CW * ratio * k, chH = CH * ratio * k;
+    const fs = Math.max(10, chH * 0.82);
+    const w = cw * str.length;
+    const t = S.el('text', { x, y: (yTop + chH * 0.8).toFixed(1), textLength: w.toFixed(1), lengthAdjust: 'spacingAndGlyphs', cls: 't-mono', style: { fill: color, fontSize: fs.toFixed(1) + 'px' } }, parent);
+    t.textContent = str;
+    if (ul) S.line(x, yTop + chH * 0.95, x + w, yTop + chH * 0.95, { cls: 'w1', style: { stroke: color } }, parent);
+    return t;
+  }
+  /* 窓 600×400 の模式図（コードの数値から描く。saba を動かした画面ではない） */
+  function winPic(parent, x0, y0, k, url) {
+    const g = S.g({}, parent);
+    const X = (v) => x0 + v * k, Yw = (v) => y0 + v * k;          // 窓の左上（タイトルバー込み）から
+    const Yc = (v) => y0 + (TITLE + v) * k;                        // noli の座標（タイトルバーの下が y ＝ 0）
+    const W = { g, X, Yw, Yc };
+    W.frame = S.rect(X(0), Yw(0), WIN_W * k, WIN_H * k, { cls: 's-fg w1', style: { fill: C_WHITE } }, g);
+    // タイトルバーは noli が描く（noli の window.rs: DARKBLUE 0x00008b の帯に白い名前を (5, 3) に、右端から 22 に 16×16 の GREY の閉じるボタン）
+    W.title = S.rect(X(0), Yw(0), WIN_W * k, TITLE * k, { cls: 's-rule w1', style: { fill: '#00008b' } }, g);
+    S.text(X(5), Yw(16), 'saba', { cls: 't-xs t-b', style: { fill: C_WHITE } }, g);
+    S.rect(X(WIN_W - 22), Yw(4), 16 * k, 16 * k, { cls: 'w1', style: { fill: '#808080', stroke: '#5a5a5a' } }, g);
+    W.tool = S.rect(X(0), Yc(0), WIN_W * k, TOOL * k, { style: { fill: '#d3d3d3' } }, g);
+    S.line(X(0), Yc(26), X(599), Yc(26), { cls: 'w1', style: { stroke: '#808080' } }, g);
+    S.line(X(0), Yc(27), X(599), Yc(27), { cls: 'w1', style: { stroke: '#5a5a5a' } }, g);
+    cellText(g, X(5), Yc(5), 'Address:', 1, k, C_BLACK, false);
+    W.addr = S.rect(X(70), Yc(2), (WIN_W - 74) * k, (2 + ADDR) * k, { cls: 'w1', style: { fill: C_WHITE, stroke: '#808080' } }, g);
+    if (url) W.url = cellText(g, X(74), Yc(6), url, 1, k, C_BLACK, false);
+    W.items = DL.map((d) => {
+      const gi = S.g({}, g);
+      if (d.kind === 'Rect') S.rect(X(PAD + d.x), Yc(PAD + TOOL + d.y), d.w * k, d.h * k, { style: { fill: d.bg } }, gi);
+      else cellText(gi, X(PAD + d.x), Yc(PAD + TOOL + d.y), d.text, d.ratio, k, d.color, d.ul);
+      return gi;
+    });
+    return W;
+  }
+  const s5 = {
+    steps: [
+      { title: 'DisplayItem：2 種類の描画命令の enum', text: '`DisplayItem` は `Rect`（style・位置・大きさ）と `Text`（文字列・style・位置）の 2 つの列挙子を持つ enum。[[10-browser.html#s4.1|第10章 場面4 段階1]]の表示リストの 1 項目にあたる。`paint_node` は木を前順にたどり、各ノードの `paint()` が返す `Vec` を `extend` でつなぐ。' },
+      { title: 'Block の要素 → Rect（背景色）、Inline → 無し', text: '`paint` は Block で、ノードが要素なら `vec![DisplayItem::Rect { … }]` を返す。色は `style` の background_color で、p.links だけ aqua、他は白。Inline の腕は空なので a は何も出さない。列の順がそのまま重なりの順になる。' },
+      { title: 'Text → 空白を整えて、行ごとに Text', text: '空白を整える（改行を空白に、連続は 1 つに）。"Test page1 " は末尾の空白が落ちて "Test page1" になるが、幅 88 は 11 バイトで計算済みなので、次の a との間に 8 px の空きが残る。`split_text` の境は 600 ＋ 5 ＝ 605 で、590 とは違う。' },
+      { title: 'update_ui：Text は draw_string、Rect は fill_rect', text: 'UI は列を `match` で分け、`Text` なら `draw_string`（色, x ＋ 5, y ＋ 31, 文字列, 大きさ, 下線）、`Rect` なら `fill_rect`（背景色, x ＋ 5, y ＋ 31, 幅, 高さ）。＋31 は余白 5 ＋ ツールバー 26。色は `code_u32()` で u32 にする。' },
+      { title: '窓の残り：タイトルバーは noli、ツールバーは setup_toolbar', text: '`Window::new` が画面の (30, 50) に 600×400 の窓を作り、noli がタイトルバー（24）を描いて以後の y を 24 ずらす。`setup_toolbar` は起動時に LIGHTGREY の帯、"Address:"、白い箱を描く。色は `u32` の 0xRRGGBB。' },
+      { title: 'flush で画面へ。Chromium との違い', text: '`draw_string`・`fill_rect` は窓のシートに書くだけで、`flush` が OS に画面への反映を頼む。その先は[[09-os.html#s3|第9章 場面3]]のシステムコールと[[08-display.html#s1|第8章 場面1]]のフレームバッファ。[[10-browser.html#s4|第10章 場面4]]のレイヤー・ラスタ・合成は無く、1 枚の窓に順に描く。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'display_item.rs（saba_core/src。use を省いた全文）'],
+        [6, '#[derive(Debug, Clone, PartialEq)]'],
+        [7, 'pub enum DisplayItem {'],
+        [8, '  Rect {'],
+        [9, '    style: ComputedStyle,'],
+        [10, '    layout_point: LayoutPoint,'],
+        [11, '    layout_size: LayoutSize,'],
+        [12, '  },'],
+        [13, '  Text {'],
+        [14, '    text: String,'],
+        [15, '    style: ComputedStyle,'],
+        [16, '    layout_point: LayoutPoint,'],
+        [17, '  },'],
+        [18, '}'],
+        ['', 'layout_view.rs（paint_node は前順。詰めた）'],
+        [230, '  display_items.extend(n.borrow_mut().paint());'],
+        [233, '  Self::paint_node(&first_child, display_items);'],
+        [236, '  Self::paint_node(&next_sibling, display_items);']
+      ]).hl(15, 17);
+      P.add([
+        ['', 'layout_object.rs（paint。詰めた。注記を足した）'],
+        [132, 'pub fn paint(&mut self) -> Vec<DisplayItem> {'],
+        [133, '  if self.style.display() == DisplayType::DisplayNone {'],
+        [134, '    return vec![];'],
+        [135, '  }'],
+        [137, '  match self.kind {'],
+        [138, '    LayoutObjectKind::Block => {'],
+        [140, '      if let NodeKind::Element(_e) = self.node_kind() {'],
+        [141, '        return vec![DisplayItem::Rect {'],
+        [142, '          style: self.style(),'],
+        [143, '          layout_point: self.point(),'],
+        [144, '          layout_size: self.size(),'],
+        [145, '        }];'],
+        [146, '      }'],
+        [148, '    LayoutObjectKind::Inline => { // (d2)'],
+        [151, '    }                              // 何も出さない'],
+        [188, '  vec![]']
+      ]).hl(7, 12);
+      P.add([
+        ['', 'layout_object.rs（paint の Text の腕。詰めた）'],
+        [152, 'LayoutObjectKind::Text => {'],
+        [154, '  if let NodeKind::Text(t) = self.node_kind() {'],
+        [155, '    let mut v = vec![];'],
+        [157, '    let ratio = match self.style.font_size() { … };'],
+        [162, '    let plain_text = t.replace("\\n", " ").split(\' \')'],
+        [165, '      .filter(|s| !s.is_empty())'],
+        [166, '      .collect::<Vec<_>>().join(" ");'],
+        [168, '    let lines = split_text(plain_text, CHAR_WIDTH * ratio);'],
+        [169, '    let mut i = 0;'],
+        [170, '    for line in lines {'],
+        [171, '      let item = DisplayItem::Text {'],
+        [172, '        text: line, style: self.style(),'],
+        [174, '        layout_point: LayoutPoint::new(self.point().x(),'],
+        [176, '          self.point().y() + CHAR_HEIGHT_WITH_PADDING * i) };'],
+        [179, '      v.push(item);'],
+        [180, '      i += 1;'],
+        [183, '    return v;']
+      ]).hl(5, 8);
+      P.add([
+        ['', 'app.rs（update_ui。詰めた）'],
+        [204, '  for item in display_items { match item {'],
+        [206, '  DisplayItem::Text { text, style, layout_point } => {'],
+        [211, '    if self.window.draw_string('],
+        [214, '        style.color().code_u32(),'],
+        [215, '        layout_point.x() + WINDOW_PADDING,'],
+        [216, '        layout_point.y() + WINDOW_PADDING + TOOLBAR_HEIGHT,'],
+        [217, '        &text, convert_font_size(style.font_size()),'],
+        [219, '        style.text_decoration() == TextDecoration::Underline,'],
+        [220, '      ).is_err() { return Err(Error::InvalidUI(…)); }'],
+        [226, '  DisplayItem::Rect { style, layout_point, layout_size } => {'],
+        [231, '    if self.window.fill_rect('],
+        [234, '        style.background_color().code_u32(),'],
+        [235, '        layout_point.x() + WINDOW_PADDING,'],
+        [236, '        layout_point.y() + WINDOW_PADDING + TOOLBAR_HEIGHT,'],
+        [237, '        layout_size.width(), layout_size.height(),'],
+        [248, '  self.window.flush();']
+      ]).hl(2, 15);
+      P.add([
+        ['', 'app.rs（WasabiUI::new と setup_toolbar。詰めた）'],
+        [49, '  window: Window::new("saba".to_string(), WHITE,'],
+        [52, '    WINDOW_INIT_X_POS, WINDOW_INIT_Y_POS,'],
+        [54, '    WINDOW_WIDTH, WINDOW_HEIGHT).unwrap(),'],
+        [268, '  self.window.fill_rect(LIGHTGREY, 0, 0,'],
+        [null, '    WINDOW_WIDTH, TOOLBAR_HEIGHT)?;'],
+        [272, '  self.window.draw_line(GREY, 0, TOOLBAR_HEIGHT,'],
+        [null, '    WINDOW_WIDTH - 1, TOOLBAR_HEIGHT)?;'],
+        [283, '  self.window.draw_string(BLACK, 5, 5, "Address:",'],
+        [288, '    StringSize::Medium, /*underline=*/ false)?;'],
+        [293, '  self.window.fill_rect(WHITE, 70, 2,'],
+        [null, '    WINDOW_WIDTH - 74, 2 + ADDRESSBAR_HEIGHT)?;'],
+        ['', 'constants.rs 1〜5（u32 の 0xRRGGBB）'],
+        [1, 'pub static WHITE: u32 = 0xffffff;'],
+        [2, 'pub static LIGHTGREY: u32 = 0xd3d3d3;'],
+        [3, 'pub static GREY: u32 = 0x808080;'],
+        [5, 'pub static BLACK: u32 = 0x000000;']
+      ]).hl(1, 3);
+      P.add([
+        ['', 'app.rs（noli の型と、Result の型合わせ。詰めた。注記を足した）'],
+        [7, 'use noli::error::Result as OsResult;'],
+        [8, 'use noli::prelude::SystemApi;'],
+        [12, 'use noli::sys::wasabi::Api;'],
+        [13, 'use noli::window::StringSize;'],
+        [14, 'use noli::window::Window;'],
+        [253, 'fn setup(&mut self) -> Result<(), Error> {'],
+        [254, '  if let Err(error) = self.setup_toolbar() {'],
+        [256, '    return Err(Error::InvalidUI(format!('],
+        [257, '      "failed to initialize a toolbar with error: {:#?}",'],
+        [258, '      error)));'],
+        [262, '  self.window.flush();'],
+        [263, '  Ok(())'],
+        [266, 'fn setup_toolbar(&mut self) -> OsResult<()> {'],
+        [268, '  self.window.fill_rect(LIGHTGREY, 0, 0,'],
+        [null, '    WINDOW_WIDTH, TOOLBAR_HEIGHT)?;  // OsResult の Err'],
+        [305, '  Ok(())']
+      ]).hl(11, 11);
+      st.tr = S.g({}, svg);
+      // 右上: 表示項目の列（2 列 × 5）
+      const g = st.g = S.g({}, svg);
+      st.listHead = S.text(490, 30, 'paint() が返す Vec<DisplayItem>（10 個。前順）', { cls: 't-xs t-dim' }, g);
+      st.cards = DL.map((d, j) => {
+        const x = j < 5 ? 490 : 718, y = 42 + (j % 5) * 36;
+        const gc = S.g({}, g);
+        const r = S.rect(x, y, 222, 30, { rx: 4, cls: 'f-sf s-rule w1' }, gc);
+        S.text(x + 5, y + 19, String(j + 1), { cls: 't-xs t-mono t-dim' }, gc);
+        const kt = S.text(x + 22, y + 19, d.kind, { cls: 't-xs t-mono t-b' }, gc);
+        S.rect(x + 50, y + 10, 10, 10, { cls: 's-rule w1', style: { fill: d.kind === 'Rect' ? d.bg : d.color } }, gc);
+        const txt = d.kind === 'Rect' ? `${NODE[d.id].name} (${d.x}, ${d.y}) ${d.w}×${d.h}` : `"${d.text.length > 16 ? d.text.slice(0, 13) + '…' : d.text}" (${d.x}, ${d.y})${d.ul ? ' 下線' : ''}${d.ratio === 3 ? ' ×3' : ''}`;
+        S.text(x + 65, y + 19, txt, { cls: 't-xs t-mono' }, gc);
+        return { g: gc, r, kt, d };
+      });
+      // 右下: 窓の模式図
+      st.winHead = S.text(516, 244, 'noli の窓 600×400（0.7 倍の模式図。文字は幅だけ合わせた）', { cls: 't-xs t-dim' }, g);
+      st.W = winPic(g, 516, 250, 0.7, 'http://host.test:8000/test.html');
+      // 内容領域の原点と、＋5・＋31 の注記（段階4）
+      const W = st.W;
+      st.org = S.g({}, g);
+      S.circle(W.X(5), W.Yc(31), 3, { cls: 'f-x' }, st.org);
+      S.text(W.X(10), W.Yc(31 + 230), '内容領域の (0, 0) ＝ 窓の (5, 31)（＋ noli のタイトルバー 24）', { cls: 't-xs t-x t-b' }, st.org);
+      S.text(W.X(10), W.Yc(31 + 252), 'x ＋ WINDOW_PADDING 5、y ＋ 5 ＋ TOOLBAR_HEIGHT 26', { cls: 't-xs t-x' }, st.org);
+      st.shown = '';
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.show(i);
+      const T = [
+        ['paint(): let mut display_items = Vec::new(); paint_node(&root, &mut …)', 'paint_node: display_items.extend(n.borrow_mut().paint()) → 子 → 兄弟', '順: body, h1, Text, p.first, Text, p.links, a, Text, a, Text, p#target, Text', '→ Rect 5 ＋ Text 5 ＝ 10 個（a の 2 つは空の Vec）'],
+        ['body: Rect { style(bg white), (0, 0), 590 × 120 }', 'h1: Rect { white, (0, 0), 590 × 60 }　p.first: Rect { white, (0, 60), 590 × 20 }', 'p.links: Rect { bg aqua #00ffff, (0, 80), 590 × 20 }　p#target: Rect { white, (0, 100) }', 'a（Inline）: vec![] ← 描くインライン要素は無い、と腕のコメントにある'],
+        ['"Test page1 " → split(\' \') → ["Test", "page1", ""] → filter → join → "Test page1"', '  Text { "Test page1", style(black, Underline), (0, 80) }　幅は 88 のまま', 'split_text: "Test page1" 10 × 8 ＝ 80 ≤ 605 → 1 行。53 × 8 ＝ 424 → 1 行', '"My Browser!": Text { "My Browser!", style(red, XXLarge), (0, 0) }'],
+        ['Rect p.links → fill_rect(0x00ffff, 0 ＋ 5, 80 ＋ 5 ＋ 26 ＝ 111, 590, 20)', 'Text h1 → draw_string(0xff0000, 5, 31, "My Browser!", StringSize::XLarge, false)', 'Text a → draw_string(0x000000, 5, 111, "Test page1", Medium, true)', '  2 つめの a は (93, 111, "Test page2")。XXLarge → StringSize::XLarge（3 倍）'],
+        ['Window::new("saba", WHITE, 30, 50, 600, 400): 画面の (30, 50) に 600 × 400 の窓', 'noli: タイトルバー 24 を描き、以後の y に 24 を足す（公開ソース）', 'setup_toolbar: fill_rect(LIGHTGREY, 0, 0, 600, 26)、"Address:" を (5, 5) に', '  fill_rect(WHITE, 70, 2, 526, 22)、境の線 2 本（y 26 GREY、27 DARKGREY）'],
+        ['window.flush(): 窓のシート全体を画面へ（update_ui の最後に 1 回）', '  → 1 画素ずつ draw_point のシステムコール（第9章 場面3）。600×400 で 24 万回', 'flush_area(rect): 一部だけ（カーソルの移動、アドレスバーの描き直し。場面6）', 'Chromium: 表示リスト → レイヤー → ラスタ → 合成（第10章 場面4）。saba: 窓に直接']
+      ];
+      traceStep(st.tr, 352, T[i]);
+      st.cards.forEach((c) => {
+        const em = i === 0 || i === 3 || (i === 1 && c.d.kind === 'Rect') || (i === 2 && c.d.kind === 'Text');
+        op(c.g, em ? '' : (i >= 4 ? 0.3 : 0.35));
+        c.kt.setAttribute('class', 't-xs t-mono t-b' + (em && (i === 1 || i === 2) ? ' t-x' : ''));
+      });
+      op(st.W.g, i <= 2 ? 0.3 : '');
+      st.org.style.display = i === 3 ? '' : 'none';
+      st.W.title.setAttribute('class', i === 4 ? 's-x w2' : 's-rule w1');
+      st.W.tool.setAttribute('class', i === 4 ? 's-x w2' : '');
+      st.W.frame.setAttribute('class', i === 5 ? 's-x w3' : 's-fg w1');
+      st.winHead.textContent = i === 5 ? 'flush(): 窓のシート → OS → 画面のフレームバッファ（第8章 場面1）' : 'noli の窓 600×400（0.7 倍の模式図。文字は幅だけ合わせた）';
+      st.winHead.setAttribute('class', i === 5 ? 't-xs t-x t-b' : 't-xs t-dim');
+      st.shown = '';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      // 段階1: 札が 0.4 秒ごとに増える（6 秒で 1 周）。段階4: 窓に 0.5 秒ごとに 1 項目ずつ描く（8 秒で 1 周）。止めている人には全部
+      let nCard = DL.length, nWin = DL.length;
+      if (i === 0) nCard = playing() ? Math.min(DL.length, Math.floor(U.mod(ctx.ts, 6) / 0.4) + 1) : DL.length;
+      if (i === 3) nWin = playing() ? Math.min(DL.length, Math.floor(U.mod(ctx.ts, 8) / 0.5) + 1) : DL.length;
+      const key = nCard + ':' + nWin;
+      if (key === st.shown) return;
+      st.shown = key;
+      const cur = i === 0 && nCard < DL.length && playing() ? nCard - 1 : i === 3 && nWin < DL.length && playing() ? nWin - 1 : -1;
+      st.cards.forEach((c, j) => {
+        c.g.style.display = j < nCard ? '' : 'none';
+        c.r.setAttribute('class', j === cur ? 'f-x-soft s-x w2' : 'f-sf s-rule w1');
+      });
+      st.W.items.forEach((it, j) => { it.style.display = j < nWin ? '' : 'none'; });
+    }
+  };
+
+
+  /* ================================================================
+     場面6 操作 — poll するループとヒットテスト
+     画面（例）を 0.66 倍で描く。窓は (30, 50)。クリックの例は画面 (75, 185) → 相対 (45, 135) → 内容領域 (45, 85)
+     ================================================================ */
+  const CLICK = { sx: 75, sy: 185 };
+  const REL = { x: CLICK.sx - 30, y: CLICK.sy - 50 };
+  const CAP = { x: REL.x, y: REL.y - TITLE - TOOL };
+  const s6 = {
+    steps: [
+      { title: 'run_app：OS を poll する素朴なループ', text: '`loop` で 2 つの関数を呼び続ける。noli の `get_mouse_cursor_info()` はイベントがあれば `Some(MouseEvent)`、`read_key()` はキューに字があれば `Some(char)`、無ければ `None`。[[10-browser.html#s5.3|第10章 場面5]]のイベントループと違い、タスクの列も優先度も描画の段も無い。' },
+      { title: 'マウス：画面の座標から窓の相対座標へ', text: 'イベントが来るたび、赤い 10×10 のカーソル（`Cursor` のシート）を古い位置から消して新しい位置に描く。ボタンが押されていれば、画面の座標から窓の位置 (30, 50) を引いて相対座標にし、0〜600・0〜400 の外なら何もしない。画面 (75, 185) なら相対 (45, 135)。' },
+      { title: 'ツールバーのクリックで Editing。キーで URL を編む', text: '相対 y が 24 以上 50 未満ならツールバー。`Editing` にしてアドレスバーを空にする。`Editing` のときだけキーを使い、`0x0A`（Enter）で `start_navigation`、`0x7F`・`0x08` で末尾を `pop`、他は `push` して描き直す。`Normal` は `read_key` を捨てる。' },
+      { title: '内容領域のクリック → clicked → 親が a なら href', text: '相対 y から 24 ＋ 26 を引いて内容領域の (45, 85) にし、`Page::clicked` へ。箱の `parent`（`Weak`）を `upgrade` し、DOM ノードが a なら `get_attribute("href")` を返す。描くときの ＋5 は引かないので、当たりは描いた位置と 5 px ずれる。' },
+      { title: 'find_node_by_position：子・兄弟を先に探し、最も奥の箱', text: '再帰は自分を調べる前に `first_child`、次に `next_sibling` を探し、見つかればそれを返す。返るのはいちばん奥の箱で、(45, 85) では "Test page1 " の Text の箱 (0, 80)〜(88, 100) に当たる。比べる式は両端を含む `<=` で、境目は先に見つかった方。' },
+      { title: 'start_navigation：消して、取って、4 段で描く', text: '内容領域を白く塗り、`handle_url`（[[31-saba-http.html#s2|第31章 場面2]]）で応答を取り、`receive_response` の 4 段を経て `update_ui`。`handle_url` が `Err` なら `?` で `start` の外まで戻って main が 1 を返し、noli の `entry_point!` が `exit(1)` する。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'app.rs（詰めた）'],
+        [62, 'pub fn start(&mut self,'],
+        [64, '  handle_url: fn(String) -> Result<HttpResponse, Error>,'],
+        [65, ') -> Result<(), Error> {'],
+        [66, '  self.setup()?;'],
+        [68, '  self.run_app(handle_url)?;'],
+        [70, '  Ok(())'],
+        [73, 'fn run_app(&mut self,'],
+        [75, '  handle_url: fn(String) -> Result<HttpResponse, Error>,'],
+        [76, ') -> Result<(), Error> {'],
+        [77, '  loop {'],
+        [78, '    self.handle_mouse_input(handle_url)?;'],
+        [79, '    self.handle_key_input(handle_url)?;'],
+        [80, '  }'],
+        [81, '}'],
+        ['', 'noli（hikalium/wasabi の for_saba。公開ソースの SystemApi から 2 つ）'],
+        [null, 'fn read_key() -> Option<char>'],
+        [null, 'fn get_mouse_cursor_info() -> Option<MouseEvent>']
+      ]).hl(10, 13);
+      P.add([
+        ['', 'app.rs（handle_mouse_input の前半。詰めた）'],
+        [87, '  if let Some(MouseEvent { button, position }) ='],
+        [null, '      Api::get_mouse_cursor_info() {'],
+        [88, '    self.window.flush_area(self.cursor.rect());'],
+        [89, '    self.cursor.set_position(position.x, position.y);'],
+        [90, '    self.window.flush_area(self.cursor.rect());'],
+        [91, '    self.cursor.flush();'],
+        [93, '    if button.l() || button.c() || button.r() {'],
+        [95, '      let relative_pos = (position.x - WINDOW_INIT_X_POS,'],
+        [97, '        position.y - WINDOW_INIT_Y_POS);'],
+        [101, '      if relative_pos.0 < 0 || relative_pos.0 > WINDOW_WIDTH'],
+        [103, '        || relative_pos.1 < 0'],
+        [104, '        || relative_pos.1 > WINDOW_HEIGHT {'],
+        [108, '        return Ok(()); }'],
+        ['', 'cursor.rs（10×10 の赤い四角のシート。詰めた）'],
+        [12, 'let mut sheet = Sheet::new(Rect::new(0, 0, 10, 10).unwrap());'],
+        [14, 'bitmap_draw_rect(bitmap, 0xff0000, 0, 0, 10, 10)'],
+        [null, '  .expect("failed to draw a cursor");']
+      ]).hl(8, 12);
+      P.add([
+        ['', 'app.rs（ツールバーの判定と handle_key_input。詰めた）'],
+        [112, '      if relative_pos.1 < TOOLBAR_HEIGHT + TITLE_BAR_HEIGHT'],
+        [113, '        && relative_pos.1 >= TITLE_BAR_HEIGHT {'],
+        [116, '        self.input_url = String::new();'],
+        [117, '        self.input_mode = InputMode::Editing;'],
+        [119, '        return Ok(()); }'],
+        [146, '  match self.input_mode {'],
+        [147, '    InputMode::Normal => { let _ = Api::read_key(); }'],
+        [151, '    InputMode::Editing => {'],
+        [152, '      if let Some(c) = Api::read_key() {'],
+        [153, '        if c == 0x0A as char {'],
+        [155, '          self.start_navigation('],
+        [null, '            handle_url, self.input_url.clone())?;'],
+        [158, '          self.input_mode = InputMode::Normal;'],
+        [159, '        } else if c == 0x7F as char || c == 0x08 as char {'],
+        [161, '          self.input_url.pop();'],
+        [163, '        } else { self.input_url.push(c);'],
+        [165, '          self.update_address_bar()?;']
+      ]).hl(6, 17);
+      P.add([
+        ['', 'app.rs（handle_mouse_input の後半。詰めた）'],
+        [122, '      self.input_mode = InputMode::Normal;'],
+        [124, '      let position_in_content_area = (relative_pos.0,'],
+        [126, '        relative_pos.1 - TITLE_BAR_HEIGHT - TOOLBAR_HEIGHT);'],
+        [128, '      let page = self.browser.borrow().current_page();'],
+        [129, '      let next_destination ='],
+        [null, '        page.borrow_mut().clicked(position_in_content_area);'],
+        [131, '      if let Some(url) = next_destination {'],
+        [132, '        self.input_url = url.clone();'],
+        [133, '        self.update_address_bar()?;'],
+        [134, '        self.start_navigation(handle_url, url)?;'],
+        ['', 'page.rs（clicked。詰めた）'],
+        [50, '  if let Some(n) = view.find_node_by_position(position) {'],
+        [51, '    if let Some(parent) = n.borrow().parent().upgrade() {'],
+        [52, '      if let NodeKind::Element(e) ='],
+        [null, '          parent.borrow().node_kind() {'],
+        [53, '        if e.kind() == ElementKind::A {'],
+        [54, '          return e.get_attribute("href");']
+      ]).hl(12, 17);
+      P.add([
+        ['', 'layout_view.rs（find_node_by_position_internal。詰めた）'],
+        [133, '      let first_child = n.borrow().first_child();'],
+        [134, '      let result1 = Self::find_node_by_position_internal('],
+        [null, '        &first_child, position);'],
+        [135, '      if result1.is_some() { return result1; }'],
+        [139, '      let next_sibling = n.borrow().next_sibling();'],
+        [140, '      let result2 = Self::find_node_by_position_internal('],
+        [null, '        &next_sibling, position);'],
+        [141, '      if result2.is_some() { return result2; }'],
+        [145, '      if n.borrow().point().x() <= position.0'],
+        [146, '        && position.0 <= (n.borrow().point().x()'],
+        [null, '                          + n.borrow().size().width())'],
+        [147, '        && n.borrow().point().y() <= position.1'],
+        [148, '        && position.1 <= (n.borrow().point().y()'],
+        [null, '                          + n.borrow().size().height()) {'],
+        [150, '        return Some(n.clone());'],
+        [152, '      None']
+      ]).hl(1, 8);
+      P.add([
+        ['', 'app.rs（start_navigation。詰めた）'],
+        [174, 'fn start_navigation(&mut self,'],
+        [176, '  handle_url: fn(String) -> Result<HttpResponse, Error>,'],
+        [177, '  destination: String) -> Result<(), Error> {'],
+        [179, '  self.clear_content_area()?;'],
+        [181, '  match handle_url(destination) {'],
+        [182, '    Ok(response) => {'],
+        [183, '      let page = self.browser.borrow().current_page();'],
+        [184, '      page.borrow_mut().receive_response(response); }'],
+        [186, '    Err(e) => { return Err(e); } }'],
+        [191, '  self.update_ui()?;'],
+        [193, '  Ok(())'],
+        ['', 'page.rs（receive_response。場面1 の板と同じ）'],
+        [68, '  self.create_frame(response.body());  // 第32〜34章'],
+        [70, '  self.execute_js();                   // 第36章'],
+        [72, '  self.set_layout_view();              // 場面1〜4'],
+        [74, '  self.paint_tree();                   // 場面5']
+      ]).hl(4, 10);
+      st.tr = S.g({}, svg);
+      // 右上: 画面（例）と窓
+      const k = 0.66, SX = 490, SY = 22;
+      const sc = (x, y) => [SX + x * k, SY + y * k];
+      const g = st.g = S.g({}, svg);
+      S.rect(SX, SY, 454, 300, { rx: 4, cls: 'f-in s-rule w1' }, g);
+      S.text(SX + 6, SY + 13, '画面（例。0.66 倍）。画面の (0, 0) はこの左上', { cls: 't-xs t-dim' }, g);
+      const [wx, wy] = sc(30, 50);
+      st.W = winPic(g, wx, wy, k, 'http://host.test:8000/test.html');
+      st.winLbl = S.text(wx + 2, wy - 4, '窓の左上 ＝ 画面の (30, 50)', { cls: 't-xs t-mono' }, g);
+      // ツールバーの範囲（段階3）と、当たりの箱（段階4・5）
+      st.toolBox = S.rect(wx, wy + TITLE * k, WIN_W * k, TOOL * k, { cls: 'f-none s-x w2 fade hide' }, g);
+      const hb = L.t_a1;
+      const [hx, hy] = sc(30 + hb.x, 50 + TITLE + TOOL + hb.y);
+      st.hit = S.rect(hx, hy, hb.w * k, hb.h * k, { cls: 'f-none s-x w2 dash fade hide' }, g);
+      st.hitLbl = S.text(hx, hy + hb.h * k + 28, '↑ 当たる範囲 Text "Test page1 " (0, 80)〜(88, 100)。描いた字より 5 px 左上', { cls: 't-xs t-x t-b fade hide' }, g);
+      // カーソル（赤い 10×10 のシート）
+      st.cur = S.rect(0, 0, 10 * k, 10 * k, { style: { fill: C_RED } }, g);
+      // 座標の変換（窓の空いている所に）
+      const [cx0, cy0] = sc(40, 50 + TITLE + TOOL + 5 + 168);
+      st.chain = [
+        `画面 (${CLICK.sx}, ${CLICK.sy})`,
+        `− 窓の位置 (30, 50) → 相対 (${REL.x}, ${REL.y})`,
+        `− TITLE_BAR 24 − TOOLBAR 26 → 内容領域 (${CAP.x}, ${CAP.y})`
+      ].map((t, j) => S.text(cx0, cy0 + j * 18, t, { cls: 't-xs t-mono' }, g));
+      // 右下: ループと OS、InputMode、読み込みの 4 段
+      const gl = st.gl = S.g({}, svg);
+      S.rect(490, 346, 206, 120, { rx: 6, cls: 'f-sf s-rule w1' }, gl);
+      S.text(500, 362, 'run_app の loop { … }', { cls: 't-xs t-mono t-b' }, gl);
+      st.bMouse = box(gl, 500, 372, 186, 26, 'handle_mouse_input', null, 'f-sf s-rule w1', 't-xs t-mono');
+      st.bKey = box(gl, 500, 426, 186, 26, 'handle_key_input', null, 'f-sf s-rule w1', 't-xs t-mono');
+      S.path('M593,398 V426', { cls: 'f-none s-dim w15', 'marker-end': mk('dim') }, gl);
+      S.path('M500,439 H494 V385 H500', { cls: 'f-none s-dim w15', 'marker-end': mk('dim') }, gl);
+      S.text(716, 362, 'OS（noli の Api。無ければ None）', { cls: 't-xs t-dim' }, gl);
+      st.oMouse = box(gl, 716, 372, 228, 26, 'get_mouse_cursor_info()', null, 'f-in s-rule w1', 't-xs t-mono');
+      st.oKey = box(gl, 716, 426, 228, 26, 'read_key()', null, 'f-in s-rule w1', 't-xs t-mono');
+      S.path('M686,381 H716', { cls: 'f-none s-dim w1', 'marker-end': mk('dim') }, gl);
+      S.path('M716,389 H686', { cls: 'f-none s-dim w1', 'marker-end': mk('dim') }, gl);
+      S.path('M686,435 H716', { cls: 'f-none s-dim w1', 'marker-end': mk('dim') }, gl);
+      S.path('M716,443 H686', { cls: 'f-none s-dim w1', 'marker-end': mk('dim') }, gl);
+      st.rMouse = S.text(716, 412, '→ None', { cls: 't-xs t-mono' }, gl);
+      st.rKey = S.text(716, 466, '→ None', { cls: 't-xs t-mono' }, gl);
+      // InputMode（段階3）
+      const gi = st.gi = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 504, 'InputMode', { cls: 't-xs t-dim' }, gi);
+      box(gi, 560, 488, 90, 24, 'Normal', null, 'f-sf s-rule w1', 't-xs t-mono t-b');
+      box(gi, 760, 488, 90, 24, 'Editing', null, 'f-sf s-x w2', 't-xs t-mono t-b');
+      S.path('M650,494 H760', { cls: 'f-none s-dim w15', 'marker-end': mk('dim') }, gi);
+      S.path('M760,506 H650', { cls: 'f-none s-dim w15', 'marker-end': mk('dim') }, gi);
+      S.text(705, 485, 'ツールバーをクリック', { cls: 't-c t-xs' }, gi);
+      S.text(755, 525, 'Enter（0x0A）か、内容領域をクリック', { cls: 't-end t-xs' }, gi);
+      S.text(490, 546, 'Normal は read_key を捨てる。Editing は push／pop で描き直し、Enter で start_navigation', { cls: 't-xs t-dim' }, gi);
+      // 読み込みの 4 段（段階6）
+      const gn = st.gn = S.g({ cls: 'fade hide' }, svg);
+      [['clear_content_area', 490, 118], ['handle_url', 618, 80], ['receive_response', 708, 110], ['update_ui', 828, 80]].forEach(([n, x, w], j, arr) => {
+        box(gn, x, 480, w, 24, n, null, j === 2 ? 'f-sf s-x w2' : 'f-sf s-rule w1', 't-xs t-mono');
+        if (j < arr.length - 1) S.path(`M${x + w},492 H${arr[j + 1][1]}`, { cls: 'f-none s-dim w15', 'marker-end': mk('dim') }, gn);
+      });
+      S.text(490, 522, '白く塗る → 第31章（HTTP）→ create_frame → execute_js → set_layout_view → paint_tree → 場面5', { cls: 't-xs' }, gn);
+      S.text(490, 538, 'handle_url が Err → return Err(e) → ? で run_app → start → main が 1 を返し、exit(1)', { cls: 't-xs t-dim' }, gn);
+      st.shown = '';
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.show(i);
+      const T = [
+        ['run_app: loop { handle_mouse_input(handle_url)?; handle_key_input(handle_url)?; }', 'Api::get_mouse_cursor_info() → None（動いていない）／ Some(MouseEvent { … })', "Api::read_key() → None（キューが空）／ Some('h')", '第10章 場面5: タスクキュー → 1 つずつ → マイクロタスク → 描画。saba: 毎周たずねるだけ'],
+        [`MouseEvent { button, position: (${CLICK.sx}, ${CLICK.sy}) }（画面の座標。例）`, 'cursor: flush_area(古い 10×10) → set_position → flush_area → flush', `relative_pos ＝ (${CLICK.sx} − 30, ${CLICK.sy} − 50) ＝ (${REL.x}, ${REL.y})`, `0 ≤ ${REL.x} ≤ 600 かつ 0 ≤ ${REL.y} ≤ 400 → 窓の中。外なら return Ok(())`],
+        [`relative.1 ＝ ${REL.y}: 24 ≤ ${REL.y} < 50 ではない → ツールバーではない`, '（例: 相対 y が 24〜49 なら Editing。clear_address_bar、input_url ＝ ""）', "Editing: read_key → 'h' → push → update_address_bar（白く塗って描き直す）", '  0x0A → start_navigation(handle_url, input_url)　0x7F／0x08 → pop'],
+        [`position_in_content_area ＝ (${REL.x}, ${REL.y} − 24 − 26) ＝ (${CAP.x}, ${CAP.y})`, `page.clicked((${CAP.x}, ${CAP.y})) → find_node_by_position → Text "Test page1 " の箱`, '  parent().upgrade() → a の LayoutObject → node_kind ＝ Element(a)', '  → get_attribute("href") ＝ Some("http://host.test:8000/test1.html")'],
+        [`body → h1 → Text(h1) (0, 0)〜(264, 60): ${CAP.y} ≤ 60 でない → None`, `  → p.first → Text (0, 60)〜(424, 80): ${CAP.y} ≤ 80 でない → None`, `  → p.links → a1 → Text (0, 80)〜(88, 100): 0 ≤ ${CAP.x} ≤ 88、80 ≤ ${CAP.y} ≤ 100 → Some`, '一番奥から返るので、p.links や body の箱（どちらも当たる）は返らない'],
+        ['start_navigation(handle_url, "http://host.test:8000/test1.html")', '  clear_content_area → fill_rect(WHITE, 0, 28, 590, 338) → flush', '  handle_url → Ok(response) → receive_response（4 段）→ update_ui', '  Err(e) → return Err(e) → ? → main: println!("browser fails to start …") → 1']
+      ];
+      traceStep(st.tr, 352, T[i]);
+      const hl = (b, on) => b.r.setAttribute('class', on ? (b === st.oMouse || b === st.oKey ? 'f-in s-x w2' : 'f-sf s-x w2') : (b === st.oMouse || b === st.oKey ? 'f-in s-rule w1' : 'f-sf s-rule w1'));
+      hl(st.bMouse, i === 1 || i === 3); hl(st.oMouse, i === 1); hl(st.bKey, i === 2); hl(st.oKey, i === 2);
+      op(st.gl, i === 0 || i === 1 || i === 2 ? '' : 0.3);
+      S.fade(st.gi, i === 2);
+      S.fade(st.gn, i === 5);
+      S.fade(st.toolBox, i === 2);
+      S.fade(st.hit, i === 3 || i === 4);
+      S.fade(st.hitLbl, i === 3 || i === 4);
+      // 窓の白い地の上の文字なので、照らさない行はダークモードでも読める固定の色にする
+      st.chain.forEach((t, j) => {
+        const em = (i === 1 && j <= 1) || (i === 3 && j === 2);
+        t.setAttribute('class', 't-xs t-mono' + (em ? ' t-x t-b' : ''));
+        t.style.fill = em ? '' : (i === 0 || i === 5 ? '#707070' : C_BLACK);
+      });
+      st.winLbl.setAttribute('class', 't-xs t-mono' + (i === 1 ? ' t-x t-b' : ' t-dim'));
+      op(st.g, i === 5 ? 0.45 : '');
+      st.shown = '';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      const k = 0.66, SX = 490, SY = 22;
+      // 段階1: 0.8 秒ごとに呼び先が替わり、6 回に 1 回だけ Some が返る。段階2: カーソルが 2 秒で (75, 185) へ動いて止まる（5 秒で 1 周）
+      const c = i === 0 && playing() ? Math.floor(U.mod(ctx.ts, 4.8) / 0.8) : -1;
+      const f = i === 1 && playing() ? Math.min(1, U.mod(ctx.ts, 5) / 2) : 1;
+      const key = i + ':' + c + ':' + f.toFixed(2);
+      if (key === st.shown) return;
+      st.shown = key;
+      st.bMouse.r.setAttribute('class', c >= 0 && c % 2 === 0 ? 'f-x-soft s-x w2' : (i === 1 || i === 3 ? 'f-sf s-x w2' : 'f-sf s-rule w1'));
+      st.bKey.r.setAttribute('class', c >= 0 && c % 2 === 1 ? 'f-x-soft s-x w2' : (i === 2 ? 'f-sf s-x w2' : 'f-sf s-rule w1'));
+      // 段階2・4 はクリックの例、段階3 はキーの例なので、そこでは Some を返した姿にする
+      st.rMouse.textContent = c === 2 || i === 1 || i === 3 ? '→ Some(MouseEvent { … })' : '→ None';
+      st.rKey.textContent = c === 5 || i === 2 ? "→ Some('h')" : '→ None';
+      const px = U.lerp(220, CLICK.sx, U.ease.out(f)), py = U.lerp(120, CLICK.sy, U.ease.out(f));
+      S.attrs(st.cur, { x: SX + px * k, y: SY + py * k });
+      st.chain[0].textContent = i === 1 ? `画面 (${Math.round(px)}, ${Math.round(py)})` : `画面 (${CLICK.sx}, ${CLICK.sy})`;
+    }
+  };
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第IX部 ブラウザを読む ／ 第35章',
+      title: 'レイアウトと描画',
+      home: '../index.html',
+      prev: { href: '34-saba-css.html', title: 'CSS とスタイル' },
+      next: { href: '36-saba-js.html', title: 'JavaScript エンジン', lead: '第35章の画面の最後の行 "Answer? 1 + 2 = 3" は HTML には無く、JavaScript が "original text" を書き換えて作る。' },
+      legend: [{ c: 'd', label: 'データ（ノード・表示項目）' }, { c: 'x', label: '注目・変化' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>

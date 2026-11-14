@@ -1,0 +1,1925 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>JavaScript エンジン — YouTubeが見えるまで</title>
+<meta name="description" content="Rust で書かれた小さなブラウザ saba の JavaScript エンジン（字句解析・構文解析・評価の 3 ファイル、テストを除いて 1,011 行）を読む。test.html の script の 6 行が 37 個のトークンと 3 つの文の木になり、木を歩く評価器が add(1, 2) を呼び、document.getElementById で DOM の Text を差し替えるまでを、具体的な値を入れて 1 行ずつ追う。教材の最後の章。">
+<meta property="og:title" content="JavaScript エンジン — YouTubeが見えるまで">
+<meta property="og:description" content="Rust で書かれた小さなブラウザ saba の JavaScript エンジン（テストを除いて 1,011 行）を読む。script の 6 行が 37 個のトークンと木になり、評価器が DOM の Text を差し替えるまで。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+  svg a { cursor: pointer; }
+  svg a:hover text, svg a:focus-visible text { text-decoration: underline; text-underline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第IX部 ブラウザを読む ／ 第36章 ／ 全36章</p>
+    <h1 id="h-s0">JavaScript エンジン</h1>
+    <p class="standfirst">第35章の画面の最後の行 "Answer? 1 + 2 = 3" は HTML には無く、JavaScript が "original text" を書き換えて作る。saba の JS エンジンは字句解析・構文解析・評価の 3 つのファイルで、テストを除いて 1,011 行。test.html の script の 6 行が 37 個のトークンと 3 つの文の木になり、木を歩く評価器が関数を呼び、document.getElementById で DOM の Text を差し替えるまでを、具体的な値を入れて 1 行ずつ追う。最後に、第10章で見た Chromium と V8 との距離を測り、第IX部で追った道を 1 枚に重ねる。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>字句 — JsLexer</a><p>script の文字列を 5 種のトークン 37 個に切る。予約語は var・function・return の 3 つで、先頭一致。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>構文木 — 再帰下降</a><p>13 種の enum Node を Rc でつなぐ。関数の呼び出しの深さが優先順位になる。var target=… の木が下から組み上がる。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>評価と環境</a><p>RuntimeValue の 3 つの札、名前と値の対を並べた Environment、木を歩く eval。未定義の名前は文字列になる。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>関数を呼ぶ</a><p>add(1, 2)。新しい Environment に a ＝ 1、b ＝ 2 を結び、本体を評価して Number(3)。outer は呼び出し側。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>DOM に触る</a><p>"document.getElementById" という文字列、HtmlElement、textContent への代入が Text ノードを差し替える。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>全体を通す</a><p>receive_response の順、Chromium・V8 との距離、この版が扱わないもの、第IX部の道と最後の画面。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。この教材の最後の章。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードは <a href="https://github.com/d0iasm/sababook">d0iasm/sababook</a>（Asami Doi、MIT ライセンス）の ch7/saba から引用した（2025 年 1 月 6 日のコミット c87dc64。行番号は元のファイルのもので、長い行は折り返し、省いた行は … で示した。「詰めた」と書いた板は空行を落とし、字下げを縮め、複数の行を 1 行に並べている。番号の付いた行で // だけの行は元のコメント（長いものは … で略した）、コードの後ろの // と番号の無い行は教材の注記）。このリポジトリは書籍『［作って学ぶ］ブラウザのしくみ』のサンプルコードだが、この章の説明はコードと、Web で公開されている仕様（ECMAScript・DOM Standard・HTML Standard など。2026 年 11 月に閲覧）だけから書き、書籍の文章は使っていない。この教材の担当は saba をビルドも実行もしておらず、動きはコードを読んで追ったもの。「と読める」と書いた所はコードからの推定。図は模式図。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 字句 ================= -->
+<section class="scene sc-anim" id="s1" data-tab="字句" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>字句 — JsLexer が 37 個のトークンに切る</h2>
+    <p class="sh-meta"><span class="chip">token.rs</span><span class="chip">162 行</span><span class="chip">enum Token</span><span class="chip">Iterator</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">第35章の画面の "Answer? 1 + 2 = 3" は、script の 6 行が "original text" を書き換えたもの。最初の段は字句解析で、JsLexer が 5 種のトークン 37 個に切る。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">ECMAScript の記号（12.8）は 57 種、ReservedWord は 38 語（2026 年 11 月閲覧）。saba は 10 種と 3 語。空白は <code>' '</code> と <code>'\n'</code> しか飛ばさず、タブ・コメント・<code>'…'</code> の文字列・小数は止まるか別の切れ方になる。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="token.rs のコードと、script の文字列、next が返す順に並ぶ 37 個のトークンの図"></svg></div>
+    <figcaption>図1　左は段階ごとのコード（token.rs）。右上は script の文字列（Text ノードの中身）、その下は next が返す順に並ぶトークン。枠と色の違いが 5 つの種類で、赤い枠がいま読んでいるトークン。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 構文木 ================= -->
+<section class="scene sc-anim" id="s2" data-tab="構文木" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>構文木 — 再帰下降で 13 種の Node を組む</h2>
+    <p class="sh-meta"><span class="chip">ast.rs</span><span class="chip">470 行</span><span class="chip">Rc&lt;Node&gt;</span><span class="chip">Peekable</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">37 個のトークンを、規則ごとの関数が呼び合って木に組む（再帰下降）。節は 13 種の enum Node で、Program の body に文が 3 つ並ぶ。ここでは 2 つめの文の木を追う。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">ECMAScript の式の文法は、AssignmentExpression から最初の選択肢をたどると PrimaryExpression まで 20 段（2026 年 11 月閲覧）。saba はそのうち同じ名前の 5 段で、条件・論理・比較・* / の段は無い。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="ast.rs のコードと、2 つめの文のトークン列、組み上がる構文木、式の関数の階段の図"></svg></div>
+    <figcaption>図2　左は段階ごとのコード（ast.rs）。右上は 2 つめの文のトークン列（赤い枠は peek している位置）、その下は組み上がる木（上の段ほど根に近い）、右下は式の関数の階段（下ほど強く結び付く。段階6 は右結合の例）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 評価と環境 ================= -->
+<section class="scene sc-anim" id="s3" data-tab="評価" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>評価と環境 — eval・RuntimeValue・Environment</h2>
+    <p class="sh-meta"><span class="chip">runtime.rs</span><span class="chip">379 行</span><span class="chip">enum の札</span><span class="chip">Vec の表</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">できた木を JsRuntime が根から歩いて評価する。値は型の札を付けた RuntimeValue、変数は名前と値の対を並べた Environment に入る。木の節を 1 つずつ match で読む評価器である。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">ECMAScript の数は IEEE 754 の 64 ビット（第26章 場面4）、saba の Number は u64。片方が文字列なら <code>+</code> が連結になるのは同じ。<code>-</code> は仕様なら文字列を数に直し（<code>"5" - 1</code> は 4）、直せなければ NaN。saba は 0 にする。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="runtime.rs のコードと、RuntimeValue の 3 つの札、Environment の表、eval が木を歩いて値を作る図"></svg></div>
+    <figcaption>図3　左は段階ごとのコード（runtime.rs）。右上は RuntimeValue の 3 つの札と大域の Environment の表、右下は段階ごとの例（to_string・update_variable・eval が歩く順・名前の引き方・Add と Sub）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 関数を呼ぶ ================= -->
+<section class="scene sc-anim" id="s4" data-tab="関数" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>関数を呼ぶ — add(1, 2) と新しい環境</h2>
+    <p class="sh-meta"><span class="chip">CallExpression</span><span class="chip">functions</span><span class="chip">outer</span><span class="chip">assert!</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">3 つめの文の右辺 add(1, 2) で、場面3 の評価器が関数を呼ぶ。新しい Environment を作り、仮引数に値を結び、本体を評価して戻り値を取る。ECMAScript のスコープとの違いも 1 つ見える。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">ECMAScript の関数は、作られた場所の Environment Record を [[Environment]] に持ち（10.2）、呼ぶたびにそれを [[OuterEnv]] にした環境を作る（9.1.2.4）。saba の Function にこの欄は無い。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="runtime.rs の CallExpression のコードと、functions の表、大域の環境と新しい環境、本体の評価の図"></svg></div>
+    <figcaption>図4　左は段階ごとのコード（runtime.rs）。右上は functions の表、その下は大域の env と add(1, 2) のために作る新しい環境（outer の矢印は呼び出し側へ）。右下は段階ごとの評価の筋（段階6 はスコープの例）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 DOM に触る ================= -->
+<section class="scene sc-anim" id="s5" data-tab="DOM" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>DOM に触る — document.getElementById と textContent</h2>
+    <p class="sh-meta"><span class="chip">call_browser_api</span><span class="chip">HtmlElement</span><span class="chip">Rc&lt;RefCell&lt;Node&gt;&gt;</span><span class="chip">set_first_child</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">JS が DOM に触る口は、document.getElementById と textContent への代入だけ。メソッド名を文字列で持ち、第33章のノードを JS の値にして、Text を差し替える。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">DOM Standard では getElementById は Document と DocumentFragment のメソッド、textContent は Node の属性。saba はどちらも評価器の中に直に書き、名前を文字列で比べて真似る。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="runtime.rs と api.rs のコードと、DOM の木、JS の環境の変数 target が同じノードを指す矢印、Text が差し替わる図"></svg></div>
+    <figcaption>図5　左は段階ごとのコード（runtime.rs・api.rs・node.rs）。右上は第33章の DOM の木（Text と a は一部省略）と JS の env で、矢印は同じ Rc&lt;RefCell&lt;Node&gt;&gt; を指すことを示す。右下は段階ごとの評価の筋。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 全体を通す ================= -->
+<section class="scene sc-anim" id="s6" data-tab="全体" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>全体を通す — 第10章との距離</h2>
+    <p class="sh-meta"><span class="chip">page.rs</span><span class="chip">receive_response</span><span class="chip">1 回だけ</span><span class="chip">第IX部</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">JS の 3 つのファイルを、Page が HTML・CSS・レイアウトの間につなぐ。receive_response の 4 行の順が、第10章の Chromium との違いを決める。第IX部の道を 1 枚に重ねる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">saba は Wasabi OS の上の 1 スレッドで動き、JS のためのスレッドもタイマーも無い。クリックは JS を介さず、Page::clicked がレイアウトの木から href を返す（第35章）。この 1,011 行が持つのは「木を歩いて値を作る」部分だけ。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="page.rs のコードと、receive_response の 4 つの手順、saba の窓の最終画面、Chromium・V8 との比較、第IX部の 6 章の道の図"></svg></div>
+    <figcaption>図6　右上は receive_response の 4 つの手順、その下は saba の窓の最終画面（600×400 を 0.56 倍。色は saba が描く値で、文字は読める大きさに広げた）。右下は Chromium・V8 との比較と、第IX部の道。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — JavaScript エンジン</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>JsLexer は script の文字列を先頭から読み、空白を飛ばし、予約語（var・function・return）を先頭一致で見て、記号 10 種・数・識別子・文字列の 5 種のトークンに切る。test.html では 37 個（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>JsParser は規則ごとの関数が呼び合う再帰下降で、13 種の enum Node を Rc でつないだ木を作る。assignment → additive → left_hand_side → member → primary の呼び出しの深さが優先順位になる（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>JsRuntime は木を歩く評価器。値は Number・StringLiteral・HtmlElement の 3 つの札を持つ RuntimeValue、変数は Vec の対を線形探索する Environment。未定義の名前はその名前の文字列になる（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>関数は functions の Vec に積み、呼ぶときは outer を呼び出し側にした新しい環境を作って引数を結び、BlockStatement の最後の文の値を返す。add(1, 2) は Number(3)（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>document.getElementById は "document.getElementById" という文字列との一致で呼ばれ、DOM のノードへの Rc&lt;RefCell&lt;Node&gt;&gt; を HtmlElement として返す。textContent への代入が set_first_child で Text を差し替える（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>JS は DOM が全部できてから 1 回だけ走り、その後にレイアウトと描画が続く。Chromium はパーサを止め、イベントループで何度も走らせる。V8 のバイトコードと JIT に対し、saba は木を歩くだけ（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th><i class="sw d"></i>JsLexer と Token</th><td>文字の列を Punctuator(char)・Number(u64)・Identifier・Keyword・StringLiteral の 5 種のトークンに切る反復子（impl Iterator）。test.html の script は 37 個。</td></tr>
+        <tr><th>予約語（RESERVED_WORDS）</th><td>var・function・return の 3 語。先頭一致で見る。ECMAScript の ReservedWord は 38 語（2026 年 11 月閲覧）。</td></tr>
+        <tr><th>構文木（Node・Program）</th><td>13 種の enum Node を Rc&lt;Node&gt; でつないだ木。Program.body は文の列（例では 3 つ）。作った後で書き換えないので RefCell は無い。</td></tr>
+        <tr><th>再帰下降</th><td>文法の規則ごとに関数を 1 つ書き、互いに呼び合って木を組む解析法。parse_ast → source_element → statement → 式の関数の順に呼ぶ。</td></tr>
+        <tr><th>優先順位（呼び出しの深さ）</th><td>assignment → additive → left_hand_side → member → primary の順に呼び、深い関数ほど強く結び付く。右辺が assignment_expression なので右結合、と読める。</td></tr>
+        <tr><th><i class="sw d"></i>RuntimeValue</th><td>評価の結果。Number(u64)・StringLiteral(String)・HtmlElement { object, property } の 3 種の札を持つ enum。値が型を持ち歩く動的な型。</td></tr>
+        <tr><th>Environment</th><td>variables: Vec&lt;(String, Option&lt;RuntimeValue&gt;)&gt; と outer。get_variable は線形探索し、無ければ outer へ。関数の呼び出しごとに新しく作る。</td></tr>
+        <tr><th>関数呼び出し</th><td>functions の Vec から名前（文字列）で探し、引数を新しい環境に add_variable し、BlockStatement の最後の文の値（ReturnStatement の argument）を返す。</td></tr>
+        <tr><th>ブラウザ API（call_browser_api）</th><td>callee が "document.getElementById" という文字列に等しければ get_element_by_id を呼ぶ。この版の唯一の API。</td></tr>
+        <tr><th><i class="sw x"></i>HtmlElement と textContent</th><td>DOM のノードへの Rc&lt;RefCell&lt;Node&gt;&gt; と property を持つ値。property が "textContent" のとき、代入が set_first_child で Text ノードを差し替える。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <p class="note">この章で教材は終わり。saba の全体は <a href="https://github.com/d0iasm/sababook">d0iasm/sababook</a>（ch7/saba）で読める。書籍で扱わない実験的なコードと最新の変更は <a href="https://github.com/d0iasm/saba">d0iasm/saba</a> にある（sababook の README）。<a href="../index.html">目次</a>の地図から気になる層へ戻るか、<a href="01-denshi.html">第1章</a>から通して読み直せる。</p>
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg, A = YT.anim;
+
+  /* ---------- この章で使う部品（第30章から写した） ---------- */
+
+  const op = (el, v) => { el.style.opacity = v; };
+  const playing = () => YT.motion.playing;
+  const KW = /\b(fn|let|mut|pub|struct|impl|use|mod|const|match|if|else|for|in|loop|while|break|return|move|self|Self|crate|as|dyn|ref|where|enum|type|static)\b/g;
+
+  /* 等幅のコードの 1 行。予約語は太字、// から後ろは薄い色。空白は詰めない（pre）。
+     "…" と '…' の中は予約語として太字にしない（["var", "function", "return"] の return など） */
+  const LIT = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)'/g;
+  function codeLine(parent, x, y, s, cls) {
+    const t = S.text(x, y, '', { cls: 't-mono pre ' + (cls || 't-sm') }, parent);
+    const ci = s.indexOf('//');
+    const code = ci >= 0 ? s.slice(0, ci) : s, cm = ci >= 0 ? s.slice(ci) : '';
+    const lits = [];
+    let m;
+    LIT.lastIndex = 0;
+    while ((m = LIT.exec(code))) lits.push([m.index, m.index + m[0].length]);
+    const inLit = (k) => lits.some(([a, b]) => k >= a && k < b);
+    let last = 0;
+    KW.lastIndex = 0;
+    while ((m = KW.exec(code))) {
+      if (inLit(m.index)) continue;
+      if (m.index > last) S.el('tspan', { text: code.slice(last, m.index) }, t);
+      S.el('tspan', { text: m[0], cls: 't-b' }, t);
+      last = m.index + m[0].length;
+    }
+    if (last < code.length) S.el('tspan', { text: code.slice(last) }, t);
+    if (cm) S.el('tspan', { text: cm, cls: 't-dim' }, t);
+    return t;
+  }
+  /* コードの板。lines は [行番号, 文字列]（行番号 null は折り返しの続き、'' は見出しの行）。
+     hl(a, b) で a〜b 行め（0 始まり）を照らす。hl() で消す */
+  function codePanel(parent, x, y, w, lines, opts) {
+    opts = opts || {};
+    const lh = opts.lh || 16, pad = 10;
+    const g = S.g({}, parent);
+    const h = pad * 2 + lines.length * lh + 2;
+    S.rect(x, y, w, h, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+    const band = S.rect(x + 3, y, w - 6, lh, { rx: 3, cls: 'f-x-soft', style: { display: 'none' } }, g);
+    const y0 = y + pad + 11;
+    lines.forEach(([ln, s], k) => {
+      const yy = y0 + k * lh;
+      if (ln === '') { S.text(x + pad, yy, s, { cls: 't-xs t-dim' }, g); return; }
+      if (ln != null) S.text(x + pad + 26, yy, String(ln), { cls: 't-xs t-dim t-mono t-end' }, g);
+      codeLine(g, x + pad + 34, yy, s, opts.cls);
+    });
+    const api = {
+      g, h,
+      hl(a, b) {
+        if (a == null) { band.style.display = 'none'; return api; }
+        if (b == null) b = a;
+        S.attrs(band, { y: y0 + a * lh - 12, height: (b - a + 1) * lh });
+        band.style.display = '';
+        return api;
+      }
+    };
+    return api;
+  }
+  /* 枠と題（と小さな説明）の箱 */
+  function box(parent, x, y, w, h, title, sub, cls, tcls) {
+    const g = S.g({}, parent);
+    const r = S.rect(x, y, w, h, { rx: 5, cls: cls || 'f-sf s-rule w1' }, g);
+    const t = S.text(x + w / 2, y + (sub ? h / 2 - 2 : h / 2 + 4), title, { cls: 't-c ' + (tcls || 't-sm t-b') }, g);
+    const s = sub ? S.text(x + w / 2, y + h / 2 + 12, sub, { cls: 't-c t-xs t-dim' }, g) : null;
+    return { g, r, t, s, x, y, w, h };
+  }
+  /* 他の章の場面へのリンク（SVG の a） */
+  function xlink(parent, x, y, href, label, end) {
+    const a = S.el('a', { href, 'aria-label': label }, parent);
+    S.text(x, y, label + ' ↗', { cls: 't-xs t-mid' + (end ? ' t-end' : '') }, a);
+    return a;
+  }
+  /* 文の列（段階ごとの具体的な値の追跡） */
+  function trace(parent, x, y, lines, lh) {
+    return lines.map((s, k) => {
+      const cls = typeof s === 'string' ? 't-sm' : s[1];
+      return S.text(x, y + k * (lh || 20), typeof s === 'string' ? s : s[0], { cls: cls + ' pre' }, parent);
+    });
+  }
+  /* 段階ごとの追跡を左下に出す（最初の行は太字） */
+  function showTrace(g, lines, y) {
+    S.clear(g);
+    trace(g, 20, y || 352, lines.map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+  }
+
+  /* ---------- この章だけの部品 ---------- */
+
+  /* トークンの種類ごとの見た目。リテラル（数・文字列）は d（データ）の色、ほかは無彩色 */
+  const KIND = {
+    Keyword: { box: 'f-in s-fg w15', txt: 't-b', label: 'Keyword(String)' },
+    Identifier: { box: 'f-sf s-rule w1', txt: '', label: 'Identifier(String)' },
+    Punctuator: { box: 'f-soft s-rule w1', txt: '', label: 'Punctuator(char)' },
+    Number: { box: 'f-d-soft s-d w1', txt: 't-b t-d', label: 'Number(u64)' },
+    StringLiteral: { box: 'f-d-soft s-d w1', txt: 't-d', label: 'StringLiteral(String)' }
+  };
+  const chipW = (text, fs, pad) => Math.round(text.length * (fs || 11) * 0.6 + (pad == null ? 6 : pad) * 2);
+  /* 全角の字（かな・漢字・全角括弧）を 1 字ぶんに数える幅。和文の混じる札に使う */
+  const chipWJ = (text, fs, pad) => Math.round(Array.from(text).reduce((a, ch) => a + (ch.charCodeAt(0) >= 0x3000 ? 1 : 0.6), 0) * (fs || 11) + (pad == null ? 6 : pad) * 2);
+  /* トークンや値の札。左上 (x, y) を基準に置く。set(on) で注目の枠に */
+  function chip(parent, x, y, text, kind, o) {
+    o = o || {};
+    const fs = o.fs || 11, h = o.h || 22;
+    const w = o.w || chipW(text, fs, o.pad);
+    const st = KIND[kind] || { box: o.box || 'f-sf s-rule w1', txt: o.txt || '' };
+    const g = S.g({ transform: 'translate(' + x + ',' + y + ')' }, parent);
+    const r = S.rect(0, 0, w, h, { rx: 4, cls: st.box }, g);
+    const t = S.text(w / 2, h / 2 + fs * 0.36, text, { cls: 't-c t-mono ' + st.txt, style: fs !== 12.5 ? { fontSize: fs + 'px' } : null }, g);
+    const api = {
+      g, r, t, w, h, x, y, kind,
+      set(mode) {   // '' 通常、'cur' 注目、'dim' 薄く
+        r.setAttribute('class', mode === 'cur' ? st.box.replace(/s-\w+ w\d+/, 's-x w2') + ' glow' : st.box);
+        g.style.opacity = mode === 'dim' ? 0.45 : '';
+        return api;
+      }
+    };
+    return api;
+  }
+
+  /* ================================================================
+     場面1 字句
+     script の中身（第33章の Text ノード。先頭の改行と空白は入らない。末尾は "\n     "）を、
+     token.rs の next と同じ規則で切る写し。37 個になる
+     ================================================================ */
+  const SRC = 'function add(a, b) {\n        return a + b;\n      }\n\n      var target=document.getElementById("target");\n      target.textContent="Answer? 1 + 2 = " + add(1, 2);\n     ';
+  function lexJs(src) {   // 図のための写し。token.rs 124〜161 と同じ分岐（unimplemented! は止まる）
+    const out = [], n = src.length, RES = ['var', 'function', 'return'];
+    let pos = 0;
+    while (pos < n) {
+      while (pos < n && (src[pos] === ' ' || src[pos] === '\n')) pos++;
+      if (pos >= n) break;
+      const start = pos, c = src[pos];
+      const kw = RES.find((w) => src.startsWith(w, pos));
+      if (kw) { pos += kw.length; out.push({ kind: 'Keyword', text: kw, start, end: pos }); continue; }
+      if ('+-;=(){},.'.includes(c)) { pos++; out.push({ kind: 'Punctuator', text: c, start, end: pos }); continue; }
+      if (c >= '0' && c <= '9') { while (pos < n && src[pos] >= '0' && src[pos] <= '9') pos++; out.push({ kind: 'Number', text: src.slice(start, pos), start, end: pos }); continue; }
+      if (/[A-Za-z_$]/.test(c)) { while (pos < n && /[A-Za-z0-9_$]/.test(src[pos])) pos++; out.push({ kind: 'Identifier', text: src.slice(start, pos), start, end: pos }); continue; }
+      if (c === '"') { pos++; const s = pos; while (pos < n && src[pos] !== '"') pos++; out.push({ kind: 'StringLiteral', text: src.slice(s, pos), start, end: pos + 1 }); pos++; continue; }
+      break;
+    }
+    return out;
+  }
+  const TOKS = lexJs(SRC);          // 37 個
+  const tokLabel = (tk) => tk.kind === 'StringLiteral' ? '"' + tk.text + '"' : tk.text;
+  const tokRepr = (tk) => 'Token::' + tk.kind + '(' + (tk.kind === 'Punctuator' ? "'" + tk.text + "'" : tk.kind === 'Number' ? tk.text : '"' + tk.text + '"') + ')';
+  const tokBranch = (tk) => {
+    const L = tk.text.length;
+    if (tk.kind === 'Keyword') return 'check_reserved_word: RESERVED_WORDS と先頭一致 → pos += ' + L;
+    if (tk.kind === 'Punctuator') return "match c: '" + tk.text + "' は 10 文字の腕 → Punctuator(c)、pos += 1";
+    if (tk.kind === 'Number') return "match c: '0'..='9' → consume_number → num ＝ 0 × 10 ＋ " + tk.text + ' ＝ ' + tk.text;
+    if (tk.kind === 'Identifier') return 'match c: 英字 → consume_identifier → 英数字・_・$ が続く限り（' + L + ' 文字）';
+    return "match c: '\"' → consume_string → 次の '\"' まで " + L + ' 文字（空白も記号も文字のまま）';
+  };
+  const S1_REP = [-1, 14, 32, 28, 36];      // 止めている人に見せる「いま」のトークン（段階ごと）
+  const S1_PERIOD = 10.5, S1_CPS = 20;      // 1 周 10.5 秒、1 秒に 20 文字読む
+  const s1 = {
+    steps: [
+      { title: 'Token の 5 種と、Iterator として渡す形', text: '`Token` は Punctuator・Number・Identifier・Keyword・StringLiteral の 5 種で、値を持つ enum（[[32-saba-tokenizer.html#s1|第32章 場面1]]）。`JsLexer` は `input: Vec<char>` と `pos` を持ち、`impl Iterator` の `next` が 1 個ずつ返す。' },
+      { title: '空白を飛ばし、予約語を先頭一致で見る', text: '`next` はまず `\' \'` と `\'\\n\'` を飛ばす。次に `check_reserved_word` が `var`・`function`・`return` を**先頭一致**で比べ、合えば `Keyword`。語の長さぶんしか見ないので `variable` は `var` と `iable` に割れる、と読める。先頭では `function` が当たる。' },
+      { title: '記号 10 種と数', text: '`match c` の最初の腕は `+ - ; = ( ) { } , .` の 10 文字で、1 文字の `Punctuator`。数字なら `consume_number` が桁を `num * 10 + 桁` で u64 に畳み、`1` は `Number(1)`。小数点も負号も無く、`-` は常に記号。' },
+      { title: '識別子と文字列', text: '英字・`_`・`$` で始まれば `consume_identifier` が英数字・`_`・`$` の続く限り集め、`Identifier("getElementById")`。`"` なら `consume_string` が次の `"` までをそのまま集め、空白も `+` も文字のまま。`\\` のエスケープと `\'` は扱わない。' },
+      { title: '37 個のトークン', text: 'script の 6 行は Keyword 3・Identifier 11・Punctuator 19・StringLiteral 2・Number 2 の **37 個**。文字列の外の空白は残らない。他の文字は `unimplemented!` で止まる。[[28-compiler.html#s1.2|第28章 場面1]]と同じ段で、`Peekable` に包んでパーサへ。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      // 左: 段階ごとのコード
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'token.rs（抜粋）'],
+        [5, 'static RESERVED_WORDS: [&str; 3] ='],
+        [null, '    ["var", "function", "return"];'],
+        [8, 'pub enum Token {'],
+        [9, '    /// https://262.ecma-international.org/#sec-punctuators'],
+        [10, '    Punctuator(char),'],
+        [12, '    Number(u64),'],
+        [14, '    Identifier(String),'],
+        [16, '    Keyword(String),'],
+        [18, '    StringLiteral(String),'],
+        [19, '}'],
+        [21, 'pub struct JsLexer {'],
+        [22, '    pos: usize,'],
+        [23, '    input: Vec<char>,'],
+        [24, '}'],
+        [121, 'impl Iterator for JsLexer {'],
+        [122, '    type Item = Token;'],
+        [124, '    fn next(&mut self) -> Option<Self::Item> {']
+      ]).hl(3, 10);
+      panel([
+        ['', 'token.rs（next の前半と check_reserved_word。詰めた）'],
+        [124, 'fn next(&mut self) -> Option<Self::Item> {'],
+        [125, '  if self.pos >= self.input.len() { return None; }'],
+        [130, "  while self.input[self.pos] == ' '"],
+        [null, "      || self.input[self.pos] == '\\n' {"],
+        [131, '    self.pos += 1;'],
+        [133, '    if self.pos >= self.input.len() { return None; }'],
+        [136, '  }'],
+        [139, '  if let Some(keyword) = self.check_reserved_word() {'],
+        [140, '    self.pos += keyword.len();'],
+        [141, '    let token = Some(Token::Keyword(keyword));'],
+        [142, '    return token;'],
+        [143, '  }'],
+        [49, 'fn check_reserved_word(&self) -> Option<String> {'],
+        [50, '  for word in RESERVED_WORDS {'],
+        [51, '    if self.contains(word) { return Some(word.to_string()); }'],
+        [56, '  None'],
+        [57, '}']
+      ]).hl(3, 12);
+      panel([
+        ['', 'token.rs（next の後半と consume_number。詰めた）'],
+        [145, '  let c = self.input[self.pos];'],
+        [147, '  let token = match c {'],
+        [148, "    '+' | '-' | ';' | '=' | '(' | ')'"],
+        [null, "    | '{' | '}' | ',' | '.' => {"],
+        [149, '      let t = Token::Punctuator(c); self.pos += 1; t }'],
+        [153, "    '0'..='9' => Token::Number(self.consume_number()),"],
+        [154, "    'a'..='z' | 'A'..='Z' | '_' | '$' =>"],
+        [null, '      Token::Identifier(self.consume_identifier()),'],
+        [155, '    \'"\' => Token::StringLiteral(self.consume_string()),'],
+        [156, '    _ => unimplemented!("char {:?} is not supported yet", c),'],
+        [157, '  };'],
+        [98, 'fn consume_number(&mut self) -> u64 {'],
+        [99, '  let mut num = 0;'],
+        [108, '    match c {'],
+        [109, "      '0'..='9' => {"],
+        [110, '        num = num * 10 + (c.to_digit(10).unwrap() as u64);']
+      ]).hl(3, 6);
+      panel([
+        ['', 'token.rs（consume_identifier・consume_string。詰めた）'],
+        [59, 'fn consume_identifier(&mut self) -> String {'],
+        [60, '  let mut result = String::new();'],
+        [62, '  loop {'],
+        [67, '    if self.input[self.pos].is_ascii_alphanumeric()'],
+        [68, "      || self.input[self.pos] == '_'"],
+        [69, "      || self.input[self.pos] == '$' {"],
+        [71, '      result.push(self.input[self.pos]); self.pos += 1;'],
+        [73, '    } else { return result; }'],
+        [76, '  } }'],
+        [79, 'fn consume_string(&mut self) -> String {'],
+        [81, '  self.pos += 1;'],
+        [83, '  loop {'],
+        [88, '    if self.input[self.pos] == \'"\' {'],
+        [null, '      self.pos += 1; return result; }'],
+        [93, '    result.push(self.input[self.pos]); self.pos += 1;'],
+        [95, '  } }']
+      ]).hl(4, 8);
+      st.tr = S.g({}, svg);
+      // 右上: script の文字列（トークンごとに tspan を分け、読んだ所の色を変える）
+      const g = st.g = S.g({}, svg);
+      S.rect(490, 16, 454, 114, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      S.text(500, 32, 'script の中身（Text ノードの ' + SRC.length + ' 文字。先頭の改行と空白は入らない）', { cls: 't-xs t-dim' }, g);
+      const lines = SRC.split('\n');
+      let off = 0;
+      lines.slice(0, 6).forEach((s, k) => {
+        const o = off;
+        off += s.length + 1;
+        const t = S.text(500, 50 + k * 14, '', { cls: 't-xs t-mono pre' }, g);
+        let i = 0;
+        while (i < s.length) {
+          const tk = TOKS.find((q) => q.start === o + i);
+          if (tk) {
+            tk.span = S.el('tspan', { text: s.slice(i, tk.end - o) }, t);
+            i = tk.end - o;
+          } else {
+            let j = i;
+            while (j < s.length && !TOKS.some((q) => q.start === o + j)) j++;
+            S.el('tspan', { text: s.slice(i, j) }, t);
+            i = j;
+          }
+        }
+      });
+      // 右中: トークンの札（next が返す順に流し込む）
+      S.text(490, 150, 'トークン（Iterator の next が返す順。札の枠と色が種類）', { cls: 't-xs t-dim' }, g);
+      let cx = 490, cy = 160;
+      st.chips = TOKS.map((tk) => {
+        const w = chipW(tokLabel(tk), 11);
+        if (cx + w > 944) { cx = 490; cy += 29; }
+        const c = chip(g, cx, cy, tokLabel(tk), tk.kind);
+        cx += w + 5;
+        return c;
+      });
+      st.chipBottom = cy + 22;
+      // 種類の凡例
+      const ly = st.chipBottom + 14;
+      let lx = 490;
+      ['Punctuator', 'Number', 'Identifier', 'Keyword', 'StringLiteral'].forEach((k) => {
+        const c = chip(g, lx, ly, k, k, { fs: 10, h: 18, pad: 5 });
+        lx += c.w + 6;
+      });
+      st.now = S.text(490, ly + 40, '', { cls: 't-sm t-mono t-b pre' }, g);
+      st.branch = S.text(490, ly + 58, '', { cls: 't-xs pre' }, g);
+      st.lexState = S.text(490, ly + 78, '', { cls: 't-xs t-mono t-dim pre' }, g);
+      // 右下: 段階ごとの補い
+      const by = 436;
+      const G = st.G = [];
+      const grp = () => { const q = S.g({ cls: 'fade hide' }, svg); G.push(q); return q; };
+      let q = grp();   // 段階1: doc コメントが指す ECMAScript の節
+      S.text(490, by, 'doc コメントが指す ECMAScript の節（tc39.es/ecma262、2026 年 11 月）', { cls: 't-xs t-dim' }, q);
+      [['Punctuator', '12.8 Punctuators', '#sec-punctuators'], ['Number', '12.9.3 Numeric Literals', '#sec-literals-numeric-literals'], ['Identifier', '12.7.1 Identifier Names', '#sec-identifier-names'], ['Keyword', '12.7.2 Keywords and Reserved Words', '#sec-keywords-and-reserved-words'], ['StringLiteral', '12.9.4 String Literals', '#sec-literals-string-literals']].forEach(([k, s, h], i) => {
+        const y = by + 20 + i * 18;
+        S.text(490, y, k, { cls: 't-xs t-mono t-b' }, q);
+        xlink(q, 600, y, 'https://tc39.es/ecma262/' + h, s);
+      });
+      q = grp();       // 段階2: 予約語 3 語と、先頭一致
+      S.text(490, by, 'RESERVED_WORDS（3 語）。ECMAScript の ReservedWord は 38 語（await・yield を含む）', { cls: 't-xs t-dim' }, q);
+      lx = 490;
+      ['var', 'function', 'return'].forEach((w) => { const c = chip(q, lx, by + 10, w, 'Keyword'); lx += c.w + 6; });
+      S.text(490, by + 58, '先頭一致なので、もし variable と書けば', { cls: 't-xs' }, q);
+      S.text(700, by + 58, 'variable', { cls: 't-xs t-mono t-b' }, q);
+      S.text(760, by + 58, '→', { cls: 't-xs t-dim' }, q);
+      let c2 = chip(q, 780, by + 44, 'var', 'Keyword'); chip(q, 780 + c2.w + 6, by + 44, 'iable', 'Identifier');
+      S.text(490, by + 82, 'に割れる、と読める（test.html には無い）。空白は \' \' と \'\\n\' だけ飛ばし、タブは unimplemented!', { cls: 't-xs pre' }, q);
+      q = grp();       // 段階3: 記号 10 種と数
+      S.text(490, by, 'Punctuator の 10 文字（ECMAScript の 12.8 の記号は 57 種。?. や === や => は無い）', { cls: 't-xs t-dim' }, q);
+      lx = 490;
+      ['+', '-', ';', '=', '(', ')', '{', '}', ',', '.'].forEach((w) => { const c = chip(q, lx, by + 10, w, 'Punctuator'); lx += c.w + 6; });
+      S.text(490, by + 58, 'consume_number: num ＝ num × 10 ＋ 桁（u64）。小数点も負号も無いので、', { cls: 't-xs pre' }, q);
+      S.text(490, by + 76, '"1.5" は', { cls: 't-xs pre' }, q);
+      lx = 540;
+      [['1', 'Number'], ['.', 'Punctuator'], ['5', 'Number']].forEach(([w, k]) => { const c = chip(q, lx, by + 62, w, k); lx += c.w + 6; });
+      S.text(lx + 4, by + 76, 'の 3 個に割れる。\'-\' は常に記号（1 - 2 は場面3 の式）', { cls: 't-xs pre' }, q);
+      q = grp();       // 段階4: 識別子と文字列
+      S.text(490, by, 'consume_identifier: 先頭は a〜z・A〜Z・_・$、続きは英数字・_・$。ASCII だけ', { cls: 't-xs t-dim' }, q);
+      lx = 490;
+      ['getElementById', 'textContent', '$', '_tmp2'].forEach((w) => { const c = chip(q, lx, by + 10, w, 'Identifier'); lx += c.w + 6; });
+      S.text(490, by + 58, 'consume_string: \'"\' の次から、次の \'"\' の手前まで。\\" のエスケープは無く、\'…\' は unimplemented!', { cls: 't-xs t-dim pre' }, q);
+      lx = 490;
+      ['target', 'Answer? 1 + 2 = '].forEach((w) => { const c = chip(q, lx, by + 68, '"' + w + '"', 'StringLiteral'); lx += c.w + 6; });
+      S.text(lx + 4, by + 82, '← 16 文字。中の空白と + はただの文字', { cls: 't-xs pre' }, q);
+      q = grp();       // 段階5: 内訳と、止まるもの
+      S.text(490, by, '37 個の内訳と、止まるもの', { cls: 't-xs t-dim' }, q);
+      lx = 490;
+      const cnt = {};
+      TOKS.forEach((tk) => { cnt[tk.kind] = (cnt[tk.kind] || 0) + 1; });
+      ['Keyword', 'Identifier', 'Punctuator'].forEach((k) => { const c = chip(q, lx, by + 8, k + ' × ' + cnt[k], k); lx += c.w + 6; });
+      lx = 490;
+      ['StringLiteral', 'Number'].forEach((k) => { const c = chip(q, lx, by + 34, k + ' × ' + cnt[k], k); lx += c.w + 6; });
+      S.text(lx + 4, by + 49, '＝ 37 個', { cls: 't-sm t-b' }, q);
+      S.text(490, by + 76, 'unimplemented!("char {:?} is not supported yet", c): タブ・\'\\r\'・\'\\\'\'・< > * / ! など', { cls: 't-xs pre' }, q);
+      S.text(490, by + 94, '末尾の "\\n     " は空白として飛ばし、input の終わりで None → 反復子の終わり', { cls: 't-xs pre' }, q);
+      xlink(q, 490, by + 112, '28-compiler.html#s1.2', '第28章 場面1 字句解析（rustc のトークン）');
+      xlink(q, 944, by + 112, '32-saba-tokenizer.html#s1', '第32章 場面1 HTML トークナイザ', true);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      const which = i === 0 ? 0 : i === 1 ? 1 : i === 3 ? 3 : 2;
+      st.C.forEach((c, k) => S.fade(c.g, k === which));
+      if (which === 2) st.C[2].p.hl(...(i === 2 ? [3, 6] : [10, 10]));
+      st.G.forEach((g, k) => S.fade(g, k === i));
+      const T = [
+        ['Token: Punctuator(char) ／ Number(u64) ／ Identifier ／ Keyword ／ StringLiteral', 'JsLexer { pos: 0, input: Vec<char> }　input.len() ＝ ' + SRC.length + '（script の Text）', 'impl Iterator for JsLexer { type Item = Token; fn next(&mut self) → Option<Token> }', '場面2 の JsParser は .peekable() で包み、1 個先を覗きながら next を呼ぶ'],
+        ['pos ＝ 0: "function" が RESERVED_WORDS[1] と先頭一致 → Keyword("function")', "pos += 8 → ' ' を飛ばす → 'a' は英字、add は予約語ではない → 識別子へ", "改行 '\\n' も空白と同じに飛ばす。タブと '\\r' は飛ばさない（unimplemented!）", '"variable" なら var ＋ iable に割れる、と読める（test.html には無い）'],
+        ["'(' ')' '{' '}' ',' ';' '.' '=' '+' '-' の 10 文字 → Punctuator(c)、pos += 1", "consume_number: '1' → num ＝ 0 × 10 ＋ 1 ＝ 1 → 次が ',' なので止まる", 'Number(1)、Number(2)。u64 なので小数も負号も無い（"1.5" は 1 . 5 に割れる）', "'42' なら 2 周: num ＝ 0 × 10 ＋ 4 ＝ 4 → 4 × 10 ＋ 2 ＝ 42"],
+        ["'g' は英字 → consume_identifier → \"getElementById\"（14 文字、'(' で止まる）", "'\"' → consume_string → 次の '\"' まで 16 文字 → StringLiteral(\"Answer? 1 + 2 = \")", "中の空白・'+'・'?' は文字のまま。'\\\\' のエスケープは無く、'\\'' は unimplemented!", '$ と _ も識別子の文字（ECMAScript の IdentifierName と同じ）'],
+        ['37 個 ＝ Keyword 3 ＋ Identifier 11 ＋ Punctuator 19 ＋ StringLiteral 2 ＋ Number 2', '末尾の "\\n     " は飛ばして None → 反復子の終わり', "他の文字（タブ・'\\''・'<'・'*'…）は unimplemented! で止まる", '第28章 場面1 の字句解析と同じ段。次は Peekable に包んで構文解析へ']
+      ];
+      showTrace(st.tr, T[i]);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      // 段階1 は切り終えた姿。段階2〜5 は 1 秒に 20 文字ずつ読み進め、1 周 10.5 秒で最初に戻る。
+      // 止めている人には、切り終えた姿とその段階の代表のトークン
+      let pos, cur;
+      if (i === 0) { pos = SRC.length; cur = -1; }
+      else if (!playing()) { pos = SRC.length; cur = S1_REP[i]; }
+      else {
+        pos = Math.min(SRC.length, Math.floor(U.mod(ctx.ts, S1_PERIOD) * S1_CPS));
+        cur = -1;
+        for (let k = 0; k < TOKS.length; k++) if (TOKS[k].start <= pos) cur = k;
+      }
+      const done = pos >= SRC.length;
+      TOKS.forEach((tk, k) => {
+        const shown = i === 0 || done || k <= cur;
+        st.chips[k].g.style.display = shown ? '' : 'none';
+        st.chips[k].set(k === cur ? 'cur' : (shown && !done && k < cur ? '' : ''));
+        if (tk.span) tk.span.setAttribute('class', k === cur ? 't-x t-b' : (!done && k < cur ? 't-dim' : (!done && k > cur ? '' : '')));
+      });
+      if (cur >= 0) {
+        const tk = TOKS[cur];
+        st.now.textContent = 'いま: ' + tokRepr(tk) + '（' + (cur + 1) + ' 個め）';
+        st.branch.textContent = tokBranch(tk);
+      } else {
+        st.now.textContent = i === 0 ? 'Token は 5 種。リテラル（Number と StringLiteral）を d の色に' : 'いま: 空白を飛ばしている';
+        st.branch.textContent = i === 0 ? 'Iterator の next が 1 個ずつ返す。全部で ' + TOKS.length + ' 個' : "while self.input[self.pos] == ' ' || == '\\n' { self.pos += 1; }";
+      }
+      const shownN = i === 0 || done ? TOKS.length : (cur + 1);
+      st.lexState.textContent = 'JsLexer: pos ＝ ' + pos + ' ／ input.len() ＝ ' + SRC.length + ' ／ 返した個数 ＝ ' + shownN + (done && i > 0 ? '（終わり → None）' : '');
+    }
+  };
+
+  /* ================================================================
+     場面2 構文木
+     2 つめの文 var target=document.getElementById("target"); の 10 個のトークン（場面1 の 15〜24 個め）を、
+     ast.rs の関数が呼び合って木にする出来事の列を、コードを読んで書き出したもの
+     ================================================================ */
+  const S2T = TOKS.slice(14, 24);
+  const S2_ROWS = [    // [深さ, 前置き, 節]。上ほど根に近い
+    [0, '', 'VariableDeclaration { declarations: [1 個] }'],
+    [1, '└ ', 'VariableDeclarator { id, init }'],
+    [2, '├ id: ', 'Identifier("target")'],
+    [2, '└ init: ', 'CallExpression { callee, arguments }'],
+    [3, '├ callee: ', 'MemberExpression { object, property }'],
+    [4, '├ object: ', 'Identifier("document")'],
+    [4, '└ property: ', 'Identifier("getElementById")'],
+    [3, '└ arguments: ', '[ StringLiteral("target") ]']
+  ];
+  const S2_FN = ['assignment_expression', 'additive_expression', 'left_hand_side_expression', 'member_expression', 'primary_expression'];
+  // 出来事: [消費済みのトークン数（＝ peek の位置）, 上の段の関数, 階段の段（-1 は無し）, この出来事で作る節の行, 説明]
+  const S2_EV = [
+    [0, 'source_element', -1, [], 'source_element: peek ＝ Keyword("var")。"function" ではないので statement へ'],
+    [1, 'statement', -1, [], 'statement: "var" を next() で消費 → variable_declaration()'],
+    [2, 'identifier', -1, [2], 'identifier(): next() ＝ Identifier("target") → Identifier の節（id）'],
+    [3, 'initialiser', -1, [], "initialiser(): next() ＝ Punctuator('=') → assignment_expression()"],
+    [3, '', 0, [], 'assignment_expression: まず additive_expression を呼ぶ（= は後で見る）'],
+    [3, '', 1, [], 'additive_expression: まず left_hand_side_expression を呼ぶ（+ - は後で見る）'],
+    [3, '', 2, [], 'left_hand_side_expression: まず member_expression を呼ぶ（( は後で見る）'],
+    [3, '', 3, [], 'member_expression: まず primary_expression を呼ぶ（. は後で見る）'],
+    [4, '', 4, [5], 'primary_expression: next() ＝ Identifier("document") → Identifier の葉'],
+    [6, '', 3, [6, 4], "member_expression: peek ＝ '.' → 消費 → identifier() ＝ getElementById → MemberExpression"],
+    [7, '', 2, [], "left_hand_side_expression: peek ＝ '(' → 消費 → arguments()"],
+    [8, '', 0, [7], 'arguments: assignment_expression → … → primary_expression ＝ StringLiteral("target")'],
+    [9, '', 2, [3], "arguments: peek ＝ ')' → 消費して終わり → CallExpression { callee, arguments }"],
+    [9, '', 1, [], "additive_expression: peek ＝ ';'。'+' でも '-' でもないので left をそのまま返す"],
+    [9, '', 0, [], "assignment_expression: peek ＝ ';'。'=' ではないので expr をそのまま返す"],
+    [9, 'variable_declaration', -1, [1, 0], 'variable_declaration: VariableDeclarator { id, init } → VariableDeclaration'],
+    [10, 'statement', -1, [], "statement: peek ＝ ';' → 消費。parse_ast が Program.body に push する"]
+  ];
+  const S2_SEG = [[0, 17], [0, 4], [4, 9], [9, 13], [13, 17], [0, 17]];   // 段階ごとに見せる出来事の範囲 [from, to)
+  const S2_DT = 0.9;   // 1 つの出来事に 0.9 秒
+  const s2 = {
+    steps: [
+      { title: 'enum Node と Program', text: '`enum Node` は 13 種で、多くは ECMAScript の文法の名前と同じ。子は `Option<Rc<Node>>`、`Program` の `body: Vec<Rc<Node>>` に文が並ぶ。`JsParser` は `Peekable<JsLexer>` で 1 個先を覗く（[[34-saba-css.html#s2.1|第34章 場面2]]）。' },
+      { title: 'parse_ast → source_element → statement', text: '`parse_ast` は `source_element` を `None` が返るまで繰り返し、`Program.body` に push する。`source_element` は `function` なら関数の宣言、他は `statement` へ。`statement` は `var`・`return`・式文に分け、末尾の `;` を消費する。' },
+      { title: '式の階段 — 呼び出しの深さが優先順位', text: '式は `assignment_expression` から `primary_expression` まで 5 段の関数を順に呼ぶ。深い関数ほど先に木になり、強く結び付く。`document` は 5 段下りて `Identifier` の葉になる（[[28-compiler.html#s1.3|第28章 場面1]]）。`.`・`(`・`+`・`=` を見た関数だけが節を作る。' },
+      { title: 'member と call — . と ( を見て節を作る', text: '`member_expression` は `.` を見たら `identifier()` を読み、`MemberExpression` を作る。`left_hand_side_expression` は `(` を見たら `arguments()` で `)` まで引数の式を集め、`CallExpression` を作る。' },
+      { title: '木の完成と ; の消費', text: '`additive_expression` も `assignment_expression` も、`peek` が `;` なので節を作らず左を返す。`initialiser` の値が `init` になる。`statement` が `;` を消費し、`VariableDeclaration` が `Program.body` の 2 つめの文になる。' },
+      { title: 'Rc<Node> と右結合', text: '節は `Rc<Node>` で、`RefCell` が無い。書き換えないからで、DOM の `Rc<RefCell<Node>>`（[[33-saba-dom.html#s2|第33章 場面2]]）と違う。`additive_expression` の右辺は `assignment_expression` を呼ぶので、`1 - 2 - 3` は `1 - (2 - 3)` の形、と読める。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'ast.rs（enum Node・Program・JsParser。詰めた）'],
+        [9, 'pub enum Node {'],
+        [10, '  ExpressionStatement(Option<Rc<Node>>),'],
+        [11, '  AdditiveExpression { operator: char, left: …, right: … },'],
+        [16, '  AssignmentExpression { operator: char, left: …, right: … },'],
+        [21, '  MemberExpression { object: …, property: … },'],
+        [25, '  NumericLiteral(u64),'],
+        [26, '  VariableDeclaration { declarations: Vec<…> },'],
+        [29, '  VariableDeclarator { id: …, init: … },'],
+        [33, '  Identifier(String),'],
+        [34, '  StringLiteral(String),'],
+        [35, '  BlockStatement { body: Vec<…> },'],
+        [38, '  ReturnStatement { argument: … },'],
+        [41, '  FunctionDeclaration { id: …, params: Vec<…>, body: … },'],
+        [46, '  CallExpression { callee: …, arguments: Vec<…> },'],
+        [50, '}                        // … は Option<Rc<Node>>'],
+        [136, 'pub struct Program { body: Vec<Rc<Node>> }'],
+        [154, 'pub struct JsParser { t: Peekable<JsLexer> }']
+      ]).hl(1, 15);
+      panel([
+        ['', 'ast.rs（parse_ast → source_element → statement。詰めた）'],
+        [452, 'pub fn parse_ast(&mut self) -> Program {'],
+        [457, '  loop { let node = self.source_element();'],
+        [460, '    match node { Some(n) => body.push(n),'],
+        [462, '      None => { program.set_body(body); return program; }'],
+        [432, 'fn source_element(&mut self) -> Option<Rc<Node>> {'],
+        [440, '  if keyword == "function" {              // Keyword の腕'],
+        [443, '    self.function_declaration()'],
+        [444, '  } else { self.statement() }'],
+        [324, 'fn statement(&mut self) -> Option<Rc<Node>> {'],
+        [332, '  if keyword == "var" { … self.variable_declaration() }'],
+        [337, '  else if keyword == "return" { …'],
+        [341, '    Node::new_return_statement('],
+        [null, '      self.assignment_expression()) }'],
+        [346, '  _ => Node::new_expression_statement('],
+        [null, '         self.assignment_expression()),'],
+        [349, '  if let Some(Token::Punctuator(c)) = self.t.peek() {'],
+        [351, "    if c == &';' { assert!(self.t.next().is_some()); } }"]
+      ]).hl(1, 4);
+      panel([
+        ['', 'ast.rs（式の階段。上ほど弱く結び付く。詰めた）'],
+        [268, 'fn assignment_expression(&mut self) -> Option<Rc<Node>> {'],
+        [269, '  let expr = self.additive_expression();'],
+        [277, "  Token::Punctuator('=') => { …"],
+        [280, "    Node::new_assignment_expression('=', expr,"],
+        [null, '      self.assignment_expression()) }'],
+        [282, '  _ => expr,'],
+        [247, 'fn additive_expression(&mut self) -> Option<Rc<Node>> {'],
+        [248, '  let left = self.left_hand_side_expression();'],
+        [257, "  '+' | '-' => { …"],
+        [260, '    Node::new_additive_expression(c, left,'],
+        [null, '      self.assignment_expression()) }'],
+        [224, 'fn left_hand_side_expression(&mut self) -> Option<Rc<Node>> {'],
+        [225, '  let expr = self.member_expression();'],
+        [177, 'fn member_expression(&mut self) -> Option<Rc<Node>> {'],
+        [178, '  let expr = self.primary_expression();'],
+        [163, 'fn primary_expression(&mut self) -> Option<Rc<Node>> {'],
+        [170, '  Token::Identifier(value) => Node::new_identifier(value),']
+      ]).hl(1, 17);
+      panel([
+        ['', 'ast.rs（member_expression・left_hand_side_expression・arguments。詰めた）'],
+        [177, 'fn member_expression(&mut self) -> Option<Rc<Node>> {'],
+        [178, '  let expr = self.primary_expression();'],
+        [187, "    if c == &'.' {"],
+        [189, "      assert!(self.t.next().is_some());         // '.' を消費"],
+        [190, '      return Node::new_member_expression('],
+        [null, '        expr, self.identifier());'],
+        [193, '    } expr }'],
+        [224, 'fn left_hand_side_expression(&mut self) -> Option<Rc<Node>> {'],
+        [234, "    if c == &'(' {"],
+        [236, "      assert!(self.t.next().is_some());         // '(' を消費"],
+        [238, '      return Node::new_call_expression('],
+        [null, '        expr, self.arguments()); }'],
+        [199, 'fn arguments(&mut self) -> Vec<Option<Rc<Node>>> {'],
+        [207, "    if c == &')' { assert!(self.t.next().is_some());"],
+        [null, '      return arguments; }'],
+        [212, "    if c == &',' { assert!(self.t.next().is_some()); }"],
+        [217, '  _ => arguments.push(self.assignment_expression()),']
+      ]).hl(3, 7);
+      panel([
+        ['', 'ast.rs（variable_declaration・initialiser・identifier。詰めた）'],
+        [313, 'fn variable_declaration(&mut self) -> Option<Rc<Node>> {'],
+        [314, '  let ident = self.identifier();'],
+        [316, '  let declarator ='],
+        [null, '    Node::new_variable_declarator(ident, self.initialiser());'],
+        [318, '  let mut declarations = Vec::new();'],
+        [319, '  declarations.push(declarator);'],
+        [321, '  Node::new_variable_declaration(declarations)'],
+        [322, '}'],
+        [286, 'fn initialiser(&mut self) -> Option<Rc<Node>> {'],
+        [293, '  Token::Punctuator(c) => match c {'],
+        [294, "    '=' => self.assignment_expression(),"],
+        [295, '    _ => None, },'],
+        [301, 'fn identifier(&mut self) -> Option<Rc<Node>> {'],
+        [308, '  Token::Identifier(name) => Node::new_identifier(name),'],
+        [309, '  _ => None,'],
+        [349, '  if let Some(Token::Punctuator(c)) = self.t.peek() {'],
+        [351, "    if c == &';' { assert!(self.t.next().is_some()); } }"]
+      ]).hl(1, 8);
+      st.tr = S.g({}, svg);
+      const g = st.g = S.g({}, svg);
+      // 上: 2 つめの文のトークン列
+      S.text(490, 22, '2 つめの文のトークン（赤い枠 ＝ peek の位置、薄い ＝ 消費済み）', { cls: 't-xs t-dim' }, g);
+      let cx = 490;
+      st.tchips = S2T.map((tk) => { const c = chip(g, cx, 28, tokLabel(tk), tk.kind, { fs: 10, h: 20, pad: 5 }); cx += c.w + 5; return c; });
+      // 文までの呼び出し（上の段）
+      S.text(490, 70, '文までの呼び出し', { cls: 't-xs t-dim' }, g);
+      st.peek = S.text(944, 70, '', { cls: 't-end t-xs t-mono t-x t-b' }, g);
+      st.topSpans = [];
+      const l1 = S.text(490, 86, '', { cls: 't-xs t-mono pre' }, g);
+      ['parse_ast', 'source_element', 'statement', 'variable_declaration'].forEach((n, k) => {
+        if (k) S.el('tspan', { text: ' → ', cls: 't-dim' }, l1);
+        st.topSpans.push([n, S.el('tspan', { text: n }, l1)]);
+      });
+      const l2 = S.text(490, 102, '', { cls: 't-xs t-mono pre' }, g);
+      S.el('tspan', { text: '   ├ ', cls: 't-dim' }, l2);
+      st.topSpans.push(['identifier', S.el('tspan', { text: 'identifier()' }, l2)]);
+      S.el('tspan', { text: '   └ ', cls: 't-dim' }, l2);
+      st.topSpans.push(['initialiser', S.el('tspan', { text: 'initialiser()' }, l2)]);
+      S.el('tspan', { text: ' → assignment_expression（階段の上の段へ）', cls: 't-dim' }, l2);
+      // 中: 組み上がる木
+      S.text(490, 124, '組み上がる木（上ほど根に近い。節はすべて Rc<Node>）', { cls: 't-xs t-dim' }, g);
+      st.rows = S2_ROWS.map(([d, pre, node], k) => {
+        const y = 132 + k * 26, x = 490 + d * 22;
+        const rg = S.g({}, g);
+        if (pre) S.text(x, y + 14, pre, { cls: 't-xs t-mono t-dim pre' }, rg);
+        const c = chip(rg, x + pre.length * 6, y, node, 'node', { fs: 10, h: 20, pad: 5, box: 'f-sf s-rule w1' });
+        return { g: rg, chip: c };
+      });
+      st.note = S.text(490, 354, '', { cls: 't-xs pre' }, g);
+      // 下: 式の階段
+      const gs = st.gs = S.g({}, svg);
+      S.text(490, 382, '式の階段（下ほど強く結び付き、先に木になる。右は節を作る印）', { cls: 't-xs t-dim' }, gs);
+      const SIGNS = ["'='", "'+' '-'", "'('", "'.'", '識別子・文字列・数'];
+      st.stairs = S2_FN.map((n, k) => {
+        const c = chip(gs, 490 + k * 38, 390 + k * 22, n + '   ' + SIGNS[k], 'stair', { fs: 10, h: 20, pad: 6, w: 290, box: 'f-in s-rule w1' });
+        c.t.setAttribute('x', 8); c.t.setAttribute('class', 't-mono');
+        return c;
+      });
+      S.text(944, 530, '= は + より弱く、+ は ( と . より弱い。深い段ほど先に節になる', { cls: 't-end t-xs t-dim' }, gs);
+      // 段階6: 右結合の例と Rc<Node>
+      const ra = st.ra = S.g({ cls: 'fade hide' }, svg);
+      S.text(490, 382, 'Rc<Node>: 参照カウントだけ。DOM の Rc<RefCell<Node>> と違い、JS はこの木を書き換えない', { cls: 't-xs t-dim' }, ra);
+      S.text(490, 408, 'saba の 1 - 2 - 3（コードから読んだ形）', { cls: 't-xs t-b' }, ra);
+      ["AdditiveExpression('-')", '├ left: NumericLiteral(1)', "└ right: AdditiveExpression('-')", '      ├ left: NumericLiteral(2)', '      └ right: NumericLiteral(3)'].forEach((s, k) => S.text(490 + (k ? 10 : 0), 428 + k * 18, s, { cls: 't-xs t-mono pre' }, ra));
+      S.text(490, 530, '＝ 1 - (2 - 3) の形、と読める（右結合）', { cls: 't-xs t-x t-b' }, ra);
+      S.text(720, 408, 'ECMAScript の文法', { cls: 't-xs t-b' }, ra);
+      ['AdditiveExpression :', '  AdditiveExpression -', '    MultiplicativeExpression', '左再帰の規則なので (1 - 2) - 3 の形（左結合）'].forEach((s, k) => S.text(720, 428 + k * 18, s, { cls: 't-xs ' + (k < 3 ? 't-mono pre' : '') }, ra));
+      xlink(ra, 720, 510, 'https://tc39.es/ecma262/#sec-additive-operators', 'ECMAScript 13.8 Additive Operators');
+      S.text(720, 530, 'test.html の式は + が 1 つずつなので差は出ない', { cls: 't-xs t-dim' }, ra);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      const which = i === 0 ? 0 : i === 1 ? 1 : i === 2 ? 2 : i === 3 ? 3 : i === 4 ? 4 : 2;
+      st.C.forEach((c, k) => S.fade(c.g, k === which));
+      if (which === 2) st.C[2].p.hl(...(i === 5 ? [7, 11] : [1, 17]));
+      S.fade(st.gs, i !== 5);
+      S.fade(st.ra, i === 5);
+      const T = [
+        ['Node は 13 種: ExpressionStatement・AdditiveExpression・AssignmentExpression…', '子の型は Option<Rc<Node>>。Vec<Option<Rc<Node>>> は引数・宣言・文の列', 'Program.body ＝ [FunctionDeclaration, VariableDeclaration, ExpressionStatement]', 'JsParser { t: Peekable<JsLexer> }　peek() で覗き、next() で消費する'],
+        ['parse_ast: loop { source_element() } → None で終わり、3 つの文が body に', 'source_element: peek ＝ Keyword("var") ≠ "function" → statement()', 'statement: Keyword("var") → next() で消費 → variable_declaration()', "文の最後: peek ＝ Punctuator(';') なら next() で消費（無くても止まらない）"],
+        ['variable_declaration: identifier() ＝ target、initialiser() が \'=\' を消費', 'assignment → additive → left_hand_side → member → primary の 5 段を下りる', 'primary_expression: next() ＝ Identifier("document") → Identifier の葉', '上の段ほど弱く結び付く（= より +、+ より ( と . が先に木になる）'],
+        ["member_expression: peek ＝ '.' → 消費 → identifier() ＝ getElementById", '→ MemberExpression { object: document, property: getElementById }', "left_hand_side_expression: peek ＝ '(' → 消費 → arguments()", "arguments: StringLiteral(\"target\") を集め、')' で終わる → CallExpression"],
+        ["additive_expression: peek ＝ ';' → '+' でも '-' でもない → left を返す", "assignment_expression: peek ＝ ';' → '=' ではない → expr を返す", 'VariableDeclarator { id: Identifier("target"), init: CallExpression }', "VariableDeclaration { declarations: [それ] } → statement が ';' を消費"],
+        ['Rc<Node>: 参照カウントだけ。borrow_mut が無いので実行時の検査も無い', 'FunctionDeclaration の body は Rc の clone で functions に入る（場面4）', "1 - 2 - 3 → AdditiveExpression('-', 1, AdditiveExpression('-', 2, 3))、と読める", 'ECMAScript: AdditiveExpression - MultiplicativeExpression（左再帰 ＝ 左結合）']
+      ];
+      showTrace(st.tr, T[i]);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      const stat = i === 0 || i === 5;                 // 木ができた後の姿を止めて見せる段階
+      const [from, to] = S2_SEG[i];
+      // 段階2〜5 は、その段階の出来事を 0.9 秒ずつ進め、最後の出来事で止まる。止めている人には最後の出来事の姿
+      const k = stat ? S2_EV.length - 1 : (!playing() ? to - 1 : Math.min(to - 1, from + Math.floor(ctx.ts / S2_DT)));
+      const ev = S2_EV[k];
+      const made = new Set();
+      for (let e = 0; e <= k; e++) S2_EV[e][3].forEach((r) => made.add(r));
+      st.rows.forEach((r, idx) => {
+        r.g.style.display = made.has(idx) ? '' : 'none';
+        r.chip.set(!stat && ev[3].includes(idx) ? 'cur' : '');
+      });
+      const cur = stat ? -1 : ev[0];
+      st.tchips.forEach((c, idx) => c.set(cur < 0 ? '' : idx < cur ? 'dim' : idx === cur ? 'cur' : ''));
+      st.topSpans.forEach(([n, sp]) => sp.setAttribute('class', !stat && ev[1] === n ? 't-x t-b' : ''));
+      st.stairs.forEach((c, idx) => c.set(!stat && ev[2] === idx ? 'cur' : ''));
+      st.note.textContent = stat ? 'Program.body[1] の木。節は 8 個（Identifier 3・StringLiteral 1 が葉）。ここでは書き換えない' : 'いま: ' + ev[4];
+      st.peek.textContent = cur < 0 ? '' : (cur < S2T.length ? 'peek ＝ ' + tokRepr(S2T[cur]) : 'peek ＝ 次の文の先頭');
+    }
+  };
+
+  /* ================================================================
+     場面3 評価と環境
+     3 つめの文 target.textContent="Answer? 1 + 2 = " + add(1, 2); を eval が歩く順は、runtime.rs の腕を読んで書き出したもの
+     ================================================================ */
+  const S3_WALK = ['ExpressionStatement', 'AssignmentExpression', 'MemberExpression', 'Identifier(target)', 'Identifier(textContent)', 'AdditiveExpression', 'StringLiteral', 'CallExpression', 'Identifier(add)', 'Identifier(a)', 'NumericLiteral(1)', 'Identifier(b)', 'NumericLiteral(2)', 'BlockStatement', 'ReturnStatement', 'AdditiveExpression', 'Identifier(a)', 'Identifier(b)'];
+  const S3_LOOK = [   // [名前, 表の行で見つかるか, 結果]
+    ['document', false, 'StringLiteral("document")'],
+    ['target', true, 'HtmlElement { p#target, None }'],
+    ['add', false, 'StringLiteral("add")']
+  ];
+  const S3_ROW = '("target", Some(HtmlElement { p#target, None }))';
+  const s3 = {
+    steps: [
+      { title: 'RuntimeValue — 値に型の札を付ける', text: '評価の結果は `RuntimeValue` で、`Number(u64)`・`StringLiteral(String)`・`HtmlElement { object, property }` の 3 種。値が自分の種類を持ち歩く**動的な型**（[[26-kata.html#s4.2|第26章 場面4]]）で、V8 が Smi の印と Map で持つものを、enum の札で持つ。' },
+      { title: 'Environment — 名前と値の対の列と outer', text: '`Environment` は名前と値の対の `Vec` と `outer` を持つ。`get_variable` は列を先頭から比べ（線形探索。[[27-algorithm.html#s2.1|第27章 場面2]]）、無ければ `outer` をたどる。`add_variable` は push、`update_variable` は消して積み直す。' },
+      { title: 'eval — 木を歩く評価器', text: '`JsRuntime` は `dom_root`・`env`・`functions` を持つ。`execute` は文を順に `eval` し、`eval` は `match node.borrow()` で腕に分かれ、子を再帰で評価する。`borrow()` は `core::borrow::Borrow` で `&Node` を取り出す。' },
+      { title: '未定義の名前は、その名前の文字列になる', text: '`Identifier` の腕は `get_variable` で引き、無ければ `StringLiteral(name)` を返す。`document`・`getElementById`・`add`、仮引数の `a`・`b` はこの規則で名前の文字列として渡る。`var` は `add_variable`、`=` は `update_variable`。' },
+      { title: 'impl Add — 数どうしなら和、違えば連結', text: '`+` は `impl Add for RuntimeValue`。両方 `Number` なら `Number(left + right)`、そうでなければ `to_string()`（`Display`）して連結し `StringLiteral`。`-` は数どうし以外を `Number(u64::MIN)` ＝ 0 にする（コメントは NaN）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'runtime.rs（RuntimeValue と JsRuntime。詰めた）'],
+        [18, 'type VariableMap = Vec<(String, Option<RuntimeValue>)>;'],
+        [21, '#[derive(Debug, Clone, PartialEq)]'],
+        [22, 'pub enum RuntimeValue {'],
+        [24, '    Number(u64),'],
+        [26, '    StringLiteral(String),'],
+        [27, '    HtmlElement {'],
+        [28, '        object: Rc<RefCell<DomNode>>,'],
+        [29, '        property: Option<String>,'],
+        [30, '    },'],
+        [31, '}'],
+        [132, 'pub struct JsRuntime {'],
+        [133, '    dom_root: Rc<RefCell<DomNode>>,'],
+        [134, '    env: Rc<RefCell<Environment>>,'],
+        [135, '    functions: Vec<Function>,'],
+        [136, '}'],
+        [139, 'pub fn new(dom_root: Rc<RefCell<DomNode>>) -> Self {'],
+        [143, '  env: Rc::new(RefCell::new(Environment::new(None))), …']
+      ]).hl(3, 10);
+      panel([
+        ['', 'runtime.rs（Environment。詰めた）'],
+        [89, 'pub struct Environment {'],
+        [90, '  variables: VariableMap,   // 名前と値の対の Vec'],
+        [91, '  outer: Option<Rc<RefCell<Environment>>>,'],
+        [102, 'pub fn get_variable(&self, name: String)'],
+        [null, '    -> Option<RuntimeValue> {'],
+        [103, '  for variable in &self.variables {'],
+        [104, '    if variable.0 == name { return variable.1.clone(); } }'],
+        [108, '  if let Some(env) = &self.outer {'],
+        [109, '    env.borrow_mut().get_variable(name)'],
+        [110, '  } else { None } }'],
+        [115, 'fn add_variable(&mut self, name: String,'],
+        [null, '                value: Option<RuntimeValue>) {'],
+        [116, '  self.variables.push((name, value)); }'],
+        [119, 'fn update_variable(&mut self, name: String, value: …) {'],
+        [122, '    if self.variables[i].0 == name {  // for i in 0..len'],
+        [123, '      self.variables.remove(i);'],
+        [124, '      self.variables.push((name, value)); return; } } }']
+      ]).hl(4, 10);
+      panel([
+        ['', 'runtime.rs（execute と eval の入口。詰めた）'],
+        [373, 'pub fn execute(&mut self, program: &Program) {'],
+        [374, '  for node in program.body() {'],
+        [375, '    self.eval(&Some(node.clone()), self.env.clone()); } }'],
+        [177, 'fn eval(&mut self, node: &Option<Rc<Node>>,'],
+        [null, '    env: Rc<RefCell<Environment>>) -> Option<RuntimeValue> {'],
+        [182, '  let node = match node {Some(n) => n, None => return None};'],
+        [187, '  match node.borrow() {'],
+        [188, '    Node::ExpressionStatement(expr) =>'],
+        [null, '      return self.eval(&expr, env.clone()),'],
+        [277, '    Node::NumericLiteral(value) =>'],
+        [null, '      Some(RuntimeValue::Number(*value)),'],
+        [302, '    Node::BlockStatement { body } => {'],
+        [303, '      let mut result: Option<RuntimeValue> = None;'],
+        [304, '      for stmt in body {'],
+        [null, '        result = self.eval(&stmt, env.clone()); } result }'],
+        [309, '    Node::ReturnStatement { argument } => {'],
+        [310, '      return self.eval(&argument, env.clone()); }']
+      ]).hl(1, 7);
+      panel([
+        ['', 'runtime.rs（名前・var・代入の腕。詰めた）'],
+        [293, '    Node::Identifier(name) => {'],
+        [294, '      match env.borrow_mut().get_variable(name.to_string()) {'],
+        [295, '        Some(v) => Some(v),'],
+        [296, '        // 変数名が初めて使用される場合は、…文字列として扱う'],
+        [298, '        None => Some(RuntimeValue::StringLiteral('],
+        [null, '          name.to_string())), } }'],
+        [284, '    Node::VariableDeclarator { id, init } => {'],
+        [286, '      if let Node::Identifier(id) = node.borrow() {'],
+        [287, '        let init = self.eval(&init, env.clone());'],
+        [288, '        env.borrow_mut().add_variable('],
+        [null, '          id.to_string(), init); } }'],
+        [220, '    if let Some(node) = left {  // 代入の左が Identifier なら'],
+        [221, '      if let Node::Identifier(id) = node.borrow() {'],
+        [222, '        let new_value = self.eval(right, env.clone());'],
+        [223, '        env.borrow_mut().update_variable('],
+        [null, '          id.to_string(), new_value);'],
+        [224, '        return None; } }']
+      ]).hl(1, 6);
+      panel([
+        ['', 'runtime.rs（impl Add・Sub・Display。詰めた）'],
+        [33, 'impl Add<RuntimeValue> for RuntimeValue {'],
+        [36, '  fn add(self, rhs: RuntimeValue) -> RuntimeValue {'],
+        [37, '    if let (RuntimeValue::Number(left_num),'],
+        [null, '        RuntimeValue::Number(right_num)) = (&self, &rhs) {'],
+        [38, '      return RuntimeValue::Number(left_num + right_num); }'],
+        [41, '    RuntimeValue::StringLiteral('],
+        [null, '      self.to_string() + &rhs.to_string()) } }'],
+        [45, 'impl Sub<RuntimeValue> for RuntimeValue {'],
+        [49, '  if let (RuntimeValue::Number(left_num),…) = (&self, &rhs) {'],
+        [50, '    return RuntimeValue::Number(left_num - right_num); }'],
+        [53, '  // NaN: Not a Number'],
+        [54, '  RuntimeValue::Number(u64::MIN) } }'],
+        [58, 'impl Display for RuntimeValue {'],
+        [61, '    RuntimeValue::Number(value) => format!("{}", value),'],
+        [62, '    RuntimeValue::StringLiteral(value) => value.to_string(),'],
+        [63, '    RuntimeValue::HtmlElement { object, property: _ } => {'],
+        [67, '      format!("HtmlElement: {:#?}", object) } };']
+      ]).hl(1, 7);
+      st.tr = S.g({}, svg);
+      const g = st.g = S.g({}, svg);
+      const small = { fontSize: '10px' };
+      // 帯1: RuntimeValue の札
+      S.text(490, 30, 'RuntimeValue（値に型の札を付けて持ち歩く。3 種）', { cls: 't-xs t-dim' }, g);
+      const card = (y, tag, val, valCls) => {
+        const tw = chipW(tag, 10, 6), vw = chipW(val, 10, 6);
+        const gg = S.g({}, g);
+        const r1 = S.rect(490, y, tw, 20, { rx: 3, cls: 'f-in s-fg w1' }, gg);
+        S.text(490 + tw / 2, y + 14, tag, { cls: 't-c t-mono t-b', style: small }, gg);
+        const r2 = S.rect(490 + tw, y, vw, 20, { rx: 3, cls: valCls }, gg);
+        S.text(490 + tw + vw / 2, y + 14, val, { cls: 't-c t-mono', style: small }, gg);
+        return { g: gg, r1, r2, w: tw + vw };
+      };
+      st.cards = [
+        card(40, 'Number', '3', 'f-d-soft s-d w1'),
+        card(68, 'StringLiteral', '"Answer? 1 + 2 = "', 'f-d-soft s-d w1'),
+        card(96, 'HtmlElement', 'object: Rc<RefCell<Node>> → p#target, property: None', 'f-sf s-rule w1')
+      ];
+      S.text(490, 136, '札 ＝ enum の判別子。u64 なので小数も負数も無い。V8 は Smi の印と Map で持つ', { cls: 't-xs t-dim' }, g);
+      xlink(g, 944, 136, '26-kata.html#s4.3', '第26章 場面4', true);
+      // 帯2: Environment の表
+      S.text(490, 168, 'Environment（大域の env。JsRuntime::new が作る。outer は None）', { cls: 't-xs t-dim' }, g);
+      S.rect(490, 176, 330, 68, { rx: 5, cls: 'f-sf s-rule w1' }, g);
+      S.text(500, 192, 'variables: Vec<(String, Option<RuntimeValue>)>', { cls: 't-xs t-mono t-dim' }, g);
+      S.line(490, 198, 820, 198, { cls: 's-rule w1' }, g);
+      st.envRow = S.text(500, 216, '（まだ無い）', { cls: 't-xs t-mono t-dim' }, g);
+      st.envRow2 = S.text(500, 236, '', { cls: 't-xs t-mono' }, g);
+      st.envPtr = S.text(480, 216, '▶', { cls: 't-xs t-x t-b', style: { display: 'none' } }, g);
+      S.path('M820,210 H846', { cls: 'f-none s-dim w1 dash' }, g);
+      st.outerBox = chip(g, 848, 199, 'outer: None', 'v', { fs: 10, h: 22, pad: 6, box: 'f-in s-rule w1' });
+      st.envNote = S.text(490, 264, '', { cls: 't-xs pre' }, g);
+      st.envNote2 = S.text(490, 282, '', { cls: 't-xs t-dim pre' }, g);
+      // 帯3: 段階ごとの群
+      const G = st.G = [];
+      const grp = () => { const q = S.g({ cls: 'fade hide' }, svg); G.push(q); return q; };
+      let q = grp();   // 段階1: to_string（impl Display）
+      S.text(490, 318, 'to_string()（impl Display）: 文字列の連結や textContent に入れるときの形', { cls: 't-xs t-dim' }, q);
+      [['Number(3)', '"3"', 'format!("{}", value)'], ['StringLiteral("Answer? 1 + 2 = ")', '"Answer? 1 + 2 = "', 'value.to_string()'], ['HtmlElement { … }', '"HtmlElement: {…}"', 'format!("{:#?}") のデバッグ表示']].forEach(([a, b, c], k) => {
+        const y = 336 + k * 26;
+        const c1 = chip(q, 490, y, a, 'v', { fs: 10, h: 20, pad: 5, box: 'f-d-soft s-d w1' });
+        S.text(490 + c1.w + 6, y + 14, '→', { cls: 't-xs t-dim' }, q);
+        const c2 = chip(q, 490 + c1.w + 22, y, b, 'v', { fs: 10, h: 20, pad: 5, box: 'f-sf s-rule w1' });
+        S.text(490 + c1.w + 22 + c2.w + 8, y + 14, c, { cls: 't-xs t-dim pre' }, q);
+      });
+      S.text(490, 432, 'derive の PartialEq: callee の文字列と functions の id を == で比べる（場面4）', { cls: 't-xs t-dim' }, q);
+      S.text(490, 450, 'derive の Clone: get_variable は値を clone して返す。Rc は参照カウントが増えるだけ', { cls: 't-xs t-dim' }, q);
+      q = grp();       // 段階2: update_variable の例（runtime.rs のテスト test_reassign_variable）
+      S.text(490, 318, 'update_variable: 消して末尾に積み直す（テスト test_reassign_variable: var foo=42; foo=1; foo）', { cls: 't-xs t-dim' }, q);
+      st.upd = [0, 1, 2].map((k) => {
+        const x = 490 + k * 156;
+        S.text(x, 340, ['var foo=42;', 'foo=1;（remove → push）', 'foo → 1'][k], { cls: 't-xs t-mono' }, q);
+        S.rect(x, 348, 140, 44, { rx: 4, cls: 'f-sf s-rule w1' }, q);
+        return S.text(x + 8, 366, ['("foo", Some(42))', '("foo", Some(1))', 'get_variable("foo")'][k], { cls: 't-xs t-mono pre' }, q);
+      });
+      S.text(490, 414, 'get_variable は outer をたどるが、update_variable は今の環境の variables しか探さない、と読める', { cls: 't-xs' }, q);
+      S.text(490, 432, 'ECMAScript の Environment Record を、ハッシュ表ではなく Vec の線形探索で持つ', { cls: 't-xs t-dim' }, q);
+      xlink(q, 490, 450, '27-algorithm.html#s3.2', '第27章 場面3 ハッシュ表');
+      xlink(q, 944, 450, 'https://tc39.es/ecma262/#sec-environment-records', 'ECMAScript 9.1 Environment Records', true);
+      q = grp();       // 段階3: eval が歩いた順（3 つめの文）
+      S.text(490, 318, '3 つめの文を eval が歩く順（match の腕。18 回）', { cls: 't-xs t-dim' }, q);
+      let wx = 490, wy = 326;
+      st.walk = S3_WALK.map((n, k) => {
+        const label = (k + 1) + ' ' + n;
+        const w = chipW(label, 10, 5);
+        if (wx + w > 944) { wx = 490; wy += 25; }
+        const c = chip(q, wx, wy, label, 'v', { fs: 10, h: 20, pad: 5, box: 'f-sf s-rule w1' });
+        wx += w + 5;
+        return c;
+      });
+      st.walkNote = S.text(490, wy + 42, '', { cls: 't-xs pre' }, q);
+      S.text(490, wy + 60, '最後に + の結果 StringLiteral("Answer? 1 + 2 = 3") が textContent に入る（場面5）', { cls: 't-xs t-dim' }, q);
+      q = grp();       // 段階4: 名前の引き方
+      S.text(490, 318, 'Identifier の腕: get_variable で引き、無ければその名前の文字列', { cls: 't-xs t-dim' }, q);
+      st.look = S3_LOOK.map(([n, hit, res], k) => {
+        const y = 330 + k * 30;
+        const c1 = chip(q, 490, y, 'Identifier("' + n + '")', 'v', { fs: 10, h: 20, pad: 5, box: 'f-sf s-rule w1' });
+        const t = S.text(490 + c1.w + 8, y + 14, '', { cls: 't-xs pre' }, q);
+        return { c1, t, hit, res };
+      });
+      S.text(490, 432, 'var target=…: VariableDeclarator が add_variable("target", eval(init))', { cls: 't-xs t-dim' }, q);
+      S.text(490, 450, '関数の仮引数 a・b も同じ規則で名前になる（場面4）。名前が先に変数にあれば、その値が返る', { cls: 't-xs t-dim' }, q);
+      q = grp();       // 段階5: Add と Sub
+      S.text(490, 318, 'impl Add / impl Sub（数どうしなら計算、そうでなければ連結か 0）', { cls: 't-xs t-dim' }, q);
+      st.ops = [['Number(1)', '+', 'Number(2)', 'Number(3)', '両方 Number → left_num + right_num'], ['StringLiteral("Answer? 1 + 2 = ")', '+', 'Number(3)', 'StringLiteral("Answer? 1 + 2 = 3")', 'to_string() して連結'], ['StringLiteral("a")', '-', 'Number(1)', 'Number(0)', 'u64::MIN。コメントは NaN']].map(([a, o, b, r, note], k) => {
+        const y = 328 + k * 50;
+        const ca = chip(q, 490, y, a, 'v', { fs: 10, h: 20, pad: 5, box: 'f-d-soft s-d w1' });
+        S.text(490 + ca.w + 6, y + 14, o, { cls: 't-sm t-b' }, q);
+        const cb = chip(q, 490 + ca.w + 20, y, b, 'v', { fs: 10, h: 20, pad: 5, box: 'f-d-soft s-d w1' });
+        S.text(490, y + 38, '＝', { cls: 't-sm t-b' }, q);
+        const cr = chip(q, 508, y + 24, r, 'v', { fs: 10, h: 20, pad: 5, box: 'f-d-soft s-x w1' });
+        S.text(508 + cr.w + 8, y + 38, note, { cls: 't-xs t-dim' }, q);
+        return { ca, cb, cr };
+      });
+      S.text(490, 492, 'Number(2) - Number(3) は u64 のあふれ。Cargo の既定では debug は panic、release は 2⁶⁴ − 1', { cls: 't-xs' }, q);
+      xlink(q, 490, 510, '28-compiler.html#s3.2', '第28章 場面3 あふれの検査');
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      st.G.forEach((q, k) => S.fade(q, k === i));
+      const T = [
+        ['Number(1)・Number(2)・Number(3)　← NumericLiteral と + の結果', 'StringLiteral("Answer? 1 + 2 = ")　← 文字列。未定義の名前もこれになる（段階4）', 'HtmlElement { object: Rc<RefCell<Node>>（p#target）, property: None }', 'derive(Clone): 値は clone で写す。Rc は参照カウントが増えるだけ'],
+        ['Environment { variables: [], outer: None }　← JsRuntime::new が作る大域の環境', 'add_variable("target", Some(HtmlElement)) → variables ＝ [("target", Some(…))]', 'get_variable("target"): 先頭から比べて 1 個めで見つかる（線形探索）', 'get_variable("document"): 無い → outer は None → None（→ 段階4 の規則へ）'],
+        ['execute: for node in program.body() { eval(&Some(node.clone()), env) }', 'eval(ExpressionStatement) → eval(AssignmentExpression) → 左右の子を eval …', 'match node.borrow(): &Rc<Node> を &Node として読む（core::borrow::Borrow）', '戻り値は Option<RuntimeValue>。文（var・function・代入）は None を返す'],
+        ['Identifier("document"): get_variable → None → StringLiteral("document")', 'Identifier("target"): get_variable → Some(HtmlElement { … })', 'VariableDeclarator: add_variable("target", eval(init))', 'AssignmentExpression: 左が Identifier なら update_variable（outer は見ない、と読める）'],
+        ['Number(1) + Number(2) ＝ Number(3)　← 両方 Number のとき', 'StringLiteral("Answer? 1 + 2 = ") + Number(3) ＝ StringLiteral("Answer? 1 + 2 = 3")', 'StringLiteral("a") - Number(1) ＝ Number(u64::MIN) ＝ Number(0)（コメントは NaN）', 'Number(2) - Number(3) は u64 のあふれ（既定の debug は panic、release は折り返し）']
+      ];
+      showTrace(st.tr, T[i]);
+      // 表の行: 段階2 の前半は空、以降は target が入っている
+      st.envRow.textContent = i === 0 ? '（まだ無い）' : S3_ROW;
+      st.envRow.setAttribute('class', i === 0 ? 't-xs t-mono t-dim' : 't-xs t-mono');
+      st.envRow2.textContent = '';
+      st.cards.forEach((c) => c.r1.setAttribute('class', i === 0 ? 'f-in s-x w15' : 'f-in s-fg w1'));
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      const tt = ctx.ts;
+      st.envPtr.style.display = 'none';
+      st.envNote.textContent = '';
+      st.envNote2.textContent = '';
+      st.outerBox.set('');
+      if (i === 1) {
+        // 4 秒で 1 周: 0〜1 秒 add_variable、1〜2.5 秒 target を引く、2.5〜4 秒 document を引く（止めている人には引き終えた姿）
+        const f = playing() ? U.mod(tt, 4) : 3.9;
+        if (f < 1) { st.envRow.textContent = S3_ROW; st.envNote.textContent = 'add_variable("target", Some(HtmlElement)) → 末尾に push'; }
+        else if (f < 2.5) { st.envPtr.style.display = ''; st.envPtr.setAttribute('y', 216); st.envNote.textContent = 'get_variable("target"): variable.0 == "target" → 1 個めで一致 → 値を clone して返す'; }
+        else {
+          const toOuter = f > 3.1;
+          st.envPtr.style.display = toOuter ? 'none' : ''; st.envPtr.setAttribute('y', 216);
+          st.outerBox.set(toOuter ? 'cur' : '');
+          st.envNote.textContent = 'get_variable("document"): "target" ≠ "document" → 行が尽きる → outer は None';
+          st.envNote2.textContent = toOuter ? '→ None → Identifier の腕が StringLiteral("document") にする（段階4）' : '';
+        }
+      } else if (i === 2) {
+        // 0.45 秒に 1 歩。18 歩の後 2 秒止まる。止めている人には歩き終えた姿
+        const n = S3_WALK.length;
+        const k = playing() ? Math.floor(U.mod(tt, (n + 4) * 0.45) / 0.45) : n - 1;
+        st.walk.forEach((c, j) => c.set(j === k ? 'cur' : (j < k || k >= n ? '' : 'dim')));
+        const NOTE = ['execute が body[2] を eval。式文は中の式へ', '左が Identifier ではない → 左を eval してから右を eval', 'object と property を eval', 'env にある → HtmlElement', '無い → StringLiteral("textContent") → property に入る', '左右を eval して + ', 'StringLiteral("Answer? 1 + 2 = ")', '新しい環境を作り、callee を eval', '無い → StringLiteral("add") → functions を探す', '仮引数の名前 "a"', 'Number(1) → a に結ぶ', '仮引数の名前 "b"', 'Number(2) → b に結ぶ', '本体の文を順に eval、最後の値を返す', 'argument を eval して返す', 'a + b', '新しい環境にある → Number(1)', '新しい環境にある → Number(2) → Number(3)'];
+        st.walkNote.textContent = k < n ? 'いま ' + (k + 1) + ': ' + NOTE[k] : '歩き終わり: + が StringLiteral("Answer? 1 + 2 = 3") を作り、代入の腕が DOM に入れる';
+      } else if (i === 3) {
+        // 1 つの名前に 2.4 秒: 0〜0.8 表を見る、0.8〜1.6 outer か一致、1.6〜 結果
+        const per = 2.4, r = playing() ? Math.floor(U.mod(tt, per * 3) / per) : 2, f = playing() ? U.mod(tt, per) : per;
+        st.look.forEach((L, k) => {
+          const done = k < r || (k === r && f >= 1.6);
+          L.t.textContent = done ? '→ ' + (L.hit ? '1 個めと一致 → Some(' + L.res + ')' : '無い → outer は None → ' + L.res) : (k === r ? (f < 0.8 ? '→ get_variable: 先頭から比べる…' : (L.hit ? '→ "target" == "target"' : '→ 行が尽きた → outer → None')) : '');
+          L.c1.set(k === r ? 'cur' : '');
+        });
+        const L = st.look[r];
+        if (f < 0.8) { st.envPtr.style.display = ''; st.envPtr.setAttribute('y', 216); }
+        else if (f < 1.6 && !L.hit) st.outerBox.set('cur');
+        st.envNote.textContent = 'get_variable("' + S3_LOOK[r][0] + '")' + (f < 0.8 ? ': variables を先頭から比べる' : (L.hit ? ': 一致' : (f < 1.6 ? ': outer を見る' : ': None')));
+      }
+    }
+  };
+
+  /* ================================================================
+     場面4 関数を呼ぶ
+     add(1, 2) の評価を runtime.rs 323〜369 の順に追う。スコープの例（段階6）はコードから読んだ形で、動かして確かめてはいない
+     ================================================================ */
+  const S4_BODY = ['BlockStatement { body: [ReturnStatement] }', '└ ReturnStatement { argument }', "    └ AdditiveExpression('+')", '        ├ Identifier(a) → get_variable("a") → Number(1)', '        └ Identifier(b) → get_variable("b") → Number(2)', '→ Number(1) + Number(2) ＝ Number(3) が CallExpression の値になる'];
+  const s4 = {
+    steps: [
+      { title: 'FunctionDeclaration — functions に積む', text: '`function add(a, b) { … }` は `id` の `Identifier("add")` を評価する。変数に無いので `StringLiteral("add")` になり、それを名前にした `Function { id, params, body }` を `functions` に push。env には入らない。' },
+      { title: 'CallExpression — 新しい環境を作る', text: '`add(1, 2)` に来ると、`Environment::new(Some(env))` で新しい環境を作る。`outer` は**呼び出した側の env**。次に `callee` の `Identifier("add")` を評価し、未定義なので `StringLiteral("add")`。これが関数の名前になる。引数はまだ評価しない。' },
+      { title: 'ブラウザ API を先に、次に functions を名前で', text: '`call_browser_api` が名前を見て、`"document.getElementById"` なら DOM の API を呼ぶ（[[5|DOM に触る]]）。違えば `functions` を先頭から比べ、`id` が `"add"` の `Function` を clone して取る。無ければ `panic!`。' },
+      { title: '引数を新しい環境に結ぶ', text: '`assert!` で引数と仮引数の数（2 と 2）を確かめる。`params[0]` の `Identifier("a")` は評価すると `StringLiteral("a")` なので、名前 `"a"` と `Number(1)` を `add_variable`。`b` も同じく `Number(2)`。環境は `{ a: 1, b: 2 }`。' },
+      { title: '本体を評価し、戻り値を返す', text: '`function.body`（`BlockStatement`）を新しい環境で評価する。`BlockStatement` は文を順に評価し**最後の文の値**を返す。`ReturnStatement` は `argument` の値。`a + b` ＝ `Number(3)`。`return` の後に文があっても評価は続く、と読める。' },
+      { title: 'スコープ — ECMAScript との違い', text: '新しい環境の `outer` は呼び出した側の環境なので、関数の中で見つからない名前は**呼び出し元**の変数に届く（動的スコープ、と読める）。ECMAScript の関数は定義した場所の環境を持つ（字句的スコープ）。test.html では差は出ない。関数は env ではなく `functions` にあり、変数とは別の表。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'runtime.rs（Function と FunctionDeclaration の腕。詰めた）'],
+        [75, 'pub struct Function {'],
+        [76, '    id: String,'],
+        [77, '    params: Vec<Option<Rc<Node>>>,'],
+        [78, '    body: Option<Rc<Node>>,'],
+        [79, '}'],
+        [82, 'fn new(id: String, params: Vec<Option<Rc<Node>>>,'],
+        [null, '       body: Option<Rc<Node>>) -> Self {'],
+        [83, '    Self { id, params, body } }'],
+        [312, '    Node::FunctionDeclaration { id, params, body } => {'],
+        [313, '      if let Some(RuntimeValue::StringLiteral(id)) ='],
+        [null, '          self.eval(&id, env.clone()) {'],
+        [314, '        let cloned_body = match body {'],
+        [315, '          Some(b) => Some(b.clone()),'],
+        [316, '          None => None, };'],
+        [318, '        self.functions'],
+        [319, '      .push(Function::new(id, params.to_vec(), cloned_body));'],
+        [321, '      None }']
+      ]).hl(9, 17);
+      panel([
+        ['', 'runtime.rs（CallExpression の腕、前半。詰めた）'],
+        [323, '    Node::CallExpression { callee, arguments } => {'],
+        [324, '      // 新しいスコープを作成する'],
+        [325, '      let new_env ='],
+        [null, '        Rc::new(RefCell::new(Environment::new(Some(env))));'],
+        [327, '      let callee_value ='],
+        [null, '        match self.eval(callee, new_env.clone()) {'],
+        [328, '          Some(value) => value,'],
+        [329, '          None => return None, };'],
+        [332, '      // ブラウザAPIの呼び出しを試みる'],
+        [333, '      let api_result ='],
+        [null, '        self.call_browser_api(&callee_value, arguments,'],
+        [null, '          new_env.clone());'],
+        [334, '      if api_result.0 {'],
+        [335, '        // もしブラウザAPIを呼び出していたら、…関数は実行しない'],
+        [336, '        return api_result.1; }']
+      ]).hl(2, 4);
+      panel([
+        ['', 'runtime.rs（CallExpression の腕、関数を探す。詰めた）'],
+        [333, '      let api_result ='],
+        [null, '        self.call_browser_api(&callee_value, arguments,'],
+        [null, '          new_env.clone());'],
+        [334, '      if api_result.0 {'],
+        [336, '        return api_result.1; }   // ブラウザ API だった'],
+        [339, '      // 既に定義されている関数を探す'],
+        [340, '      let function = {'],
+        [341, '        let mut f: Option<Function> = None;'],
+        [343, '        for func in &self.functions {'],
+        [344, '          if callee_value == RuntimeValue::StringLiteral('],
+        [null, '               func.id.to_string()) {'],
+        [345, '            f = Some(func.clone()); } }'],
+        [349, '        match f {'],
+        [350, '          Some(f) => f,'],
+        [351, '          None => panic!("function {:?} doesn\'t exist",'],
+        [null, '            callee), } };']
+      ]).hl(1, 5);
+      panel([
+        ['', 'runtime.rs（CallExpression の腕、引数と本体。詰めた）'],
+        [355, '      // …引数を新しく作成したスコープのローカル変数として割り当てる'],
+        [356, '      assert!(arguments.len() == function.params.len());'],
+        [357, '      for (i, item) in arguments.iter().enumerate() {'],
+        [358, '        if let Some(RuntimeValue::StringLiteral(name)) ='],
+        [359, '          self.eval(&function.params[i], new_env.clone())'],
+        [360, '        {'],
+        [361, '          new_env.borrow_mut()'],
+        [363, '      .add_variable(name, self.eval(item, new_env.clone()));'],
+        [364, '        }'],
+        [365, '      }'],
+        [367, '      // 関数を新しいスコープと共に呼ぶ'],
+        [368, '      self.eval(&function.body.clone(), new_env.clone())'],
+        [369, '    }']
+      ]).hl(2, 10);
+      panel([
+        ['', 'runtime.rs（スコープを決める 2 か所。詰めた）'],
+        [325, '      let new_env ='],
+        [null, '        Rc::new(RefCell::new(Environment::new(Some(env))));'],
+        [null, '      // env ＝ この CallExpression を評価している環境（呼び出し側）'],
+        [95, 'fn new(outer: Option<Rc<RefCell<Environment>>>) -> Self {'],
+        [96, '    Self { variables: VariableMap::new(), outer } }'],
+        [102, 'pub fn get_variable(&self, name: String)'],
+        [null, '    -> Option<RuntimeValue> {'],
+        [103, '  for variable in &self.variables {'],
+        [104, '    if variable.0 == name { return variable.1.clone(); } }'],
+        [108, '  if let Some(env) = &self.outer {'],
+        [109, '    env.borrow_mut().get_variable(name)   // 呼び出し側へ'],
+        [110, '  } else { None } }'],
+        [75, 'pub struct Function { id: String,'],
+        [null, '  params: Vec<Option<Rc<Node>>>, body: Option<Rc<Node>> }'],
+        [null, '// 定義した場所の環境は持たない']
+      ]).hl(1, 3);
+      st.tr = S.g({}, svg);
+      const g = st.g = S.g({}, svg);
+      // 帯1: functions
+      S.text(490, 26, 'functions: Vec<Function>（FunctionDeclaration の評価で push。env には入らない）', { cls: 't-xs t-dim' }, g);
+      st.fnChip = chip(g, 490, 34, 'Function { id: "add", params: [a, b], body: BlockStatement { … } }', 'v', { fs: 10, h: 22, pad: 6, box: 'f-sf s-rule w1' });
+      st.fnEmpty = S.text(490, 49, '（まだ空）', { cls: 't-xs t-dim' }, g);
+      // 帯2: 2 つの環境
+      S.text(490, 84, 'env（大域 ＝ 呼び出し側）', { cls: 't-xs t-dim' }, g);
+      S.rect(490, 92, 200, 76, { rx: 5, cls: 'f-sf s-rule w1' }, g);
+      S.text(498, 107, 'variables', { cls: 't-xs t-mono t-dim' }, g);
+      S.line(490, 112, 690, 112, { cls: 's-rule w1' }, g);
+      st.gRow = S.text(498, 130, '("target", Some(HtmlElement))', { cls: 't-xs t-mono' }, g);   // 1 つめの文の時点ではまだ空
+      S.text(498, 160, 'outer: None', { cls: 't-xs t-mono t-dim' }, g);
+      st.gPtr = S.text(478, 130, '▶', { cls: 't-xs t-x t-b', style: { display: 'none' } }, g);
+      const ne = st.ne = S.g({}, g);
+      S.text(750, 84, 'new_env（add(1, 2) のために作る）', { cls: 't-xs t-dim' }, ne);
+      st.neRect = S.rect(750, 92, 194, 76, { rx: 5, cls: 'f-sf s-rule w1' }, ne);
+      S.text(758, 107, 'variables', { cls: 't-xs t-mono t-dim' }, ne);
+      S.line(750, 112, 944, 112, { cls: 's-rule w1' }, ne);
+      st.neRows = [S.text(758, 130, '', { cls: 't-xs t-mono' }, ne), S.text(758, 148, '', { cls: 't-xs t-mono' }, ne)];
+      st.nePtr = S.text(738, 130, '▶', { cls: 't-xs t-x t-b', style: { display: 'none' } }, ne);
+      S.arrow(ne, 750, 160, 694, 160, 'mid', { cls: 's-mid w15' });
+      S.text(720, 154, 'outer', { cls: 't-c t-xs t-b' }, ne);
+      st.envNote = S.text(490, 192, '', { cls: 't-xs pre' }, g);
+      // 帯3: 段階ごとの群
+      const G = st.G = [];
+      const grp = () => { const q = S.g({ cls: 'fade hide' }, svg); G.push(q); return q; };
+      const row = (q, y, s, cls) => S.text(490, y, s, { cls: (cls || 't-xs') + ' pre' }, q);
+      let q = grp();   // 段階1
+      row(q, 236, 'FunctionDeclaration の評価（1 つめの文）', 't-xs t-dim');
+      st.fdRows = ['FunctionDeclaration { id: Identifier("add"), params: [a, b], body }', '↓ eval(&id): "add" は env に無い → StringLiteral("add")', '↓ Function::new("add", params.to_vec(), Some(body.clone()))', '↓ self.functions.push(…)　→ 戻り値は None'].map((s, k) => row(q, 258 + k * 24, s, 't-xs t-mono'));
+      row(q, 368, 'body.clone() は Rc の参照カウントを 1 増やすだけで、木は写さない', 't-xs t-dim');
+      row(q, 386, 'functions は env と別の表。変数にも add があれば callee は値になり、関数は見つからない、と読める', 't-xs t-dim');
+      q = grp();       // 段階2
+      row(q, 236, 'CallExpression の評価（3 つめの文の右辺の中）', 't-xs t-dim');
+      st.ceRows = ['CallExpression { callee: Identifier("add"), arguments: [1, 2] }', '↓ new_env ＝ Rc::new(RefCell::new(Environment::new(Some(env))))', '↓ callee_value ＝ eval(callee, new_env) ＝ StringLiteral("add")'].map((s, k) => row(q, 258 + k * 24, s, 't-xs t-mono'));
+      row(q, 344, 'env にも new_env にも add は無い → 「未定義の名前は文字列」の規則で関数の名前になる', 't-xs t-dim');
+      row(q, 362, 'new_env は Rc<RefCell<Environment>>: 関数の本体を評価する間、変数の表を書き換える', 't-xs t-dim');
+      q = grp();       // 段階3
+      row(q, 236, '名前で探す（先にブラウザ API、次に functions）', 't-xs t-dim');
+      st.fiGroup = [0, 0, 1, 1, 2];
+      st.fiRows = [row(q, 258, 'call_browser_api: StringLiteral("add") ==', 't-xs t-mono'), row(q, 276, '    StringLiteral("document.getElementById") ? → 違う → (false, None)', 't-xs t-mono'), row(q, 300, 'for func in &self.functions:', 't-xs t-mono'), row(q, 318, '    "add" == func.id "add" → 一致 → f ＝ Some(func.clone())', 't-xs t-mono'), row(q, 342, 'f が None なら panic!("function {:?} doesn\'t exist", callee)', 't-xs t-mono')];
+      row(q, 372, 'for は最後まで回るので、同じ名前を 2 回定義すると後の定義が使われる、と読める', 't-xs t-dim');
+      row(q, 390, 'functions も Vec の線形探索。API の名前も関数の名前も、文字列の == で比べる（derive(PartialEq)）', 't-xs t-dim');
+      q = grp();       // 段階4
+      row(q, 236, '引数を新しい環境に結ぶ（assert! で個数を確かめてから）', 't-xs t-dim');
+      st.biRows = ['assert!(arguments.len() == function.params.len())  → 2 == 2 で通る', 'i ＝ 0: eval(params[0] ＝ Identifier(a), new_env) → StringLiteral("a")', '    eval(NumericLiteral(1)) → Number(1) → add_variable("a", Some(Number(1)))', 'i ＝ 1: eval(params[1] ＝ Identifier(b), new_env) → StringLiteral("b")', '    eval(NumericLiteral(2)) → Number(2) → add_variable("b", Some(Number(2)))'].map((s, k) => row(q, 258 + k * 22, s, 't-xs t-mono'));
+      row(q, 384, '仮引数の名前も「未定義なら文字列」の規則で取り出す。', 't-xs t-dim');
+      row(q, 402, '呼び出し側に同名の変数があれば値が返り、結び付かない、と読める', 't-xs t-dim');
+      row(q, 420, '個数が違えば assert! で止まる（ECMAScript は足りない引数を undefined にする）', 't-xs t-dim');
+      q = grp();       // 段階5
+      row(q, 236, '本体を new_env で評価する', 't-xs t-dim');
+      st.boRows = S4_BODY.map((s, k) => row(q, 258 + k * 22, s, 't-xs t-mono'));
+      row(q, 400, 'return の後に文があれば、その文も評価され、最後の文の値が返る、と読める（test.html には無い）', 't-xs t-dim');
+      row(q, 418, '戻った後、new_env は誰からも指されず解放される（Rc の参照カウントが 0）', 't-xs t-dim');
+      q = grp();       // 段階6
+      row(q, 236, 'スコープ: outer が呼び出し側（saba）か、作られた場所（ECMAScript）か', 't-xs t-dim');
+      row(q, 256, 'var x=1; function f() { return x; }', 't-xs t-mono');
+      row(q, 272, 'function g() { var x=2; return f(); }   g()', 't-xs t-mono');
+      S.text(490, 300, 'saba（コードから読んだ形）', { cls: 't-xs t-b' }, q);
+      st.scChain = [['f の new_env { }', 310], ['g の new_env { x: 2 }', 350], ['大域 env { x: 1 }', 390]].map(([s, y], k) => {
+        const c = chip(q, 490, y, s, 'v', { fs: 10, h: 22, pad: 6, box: 'f-sf s-rule w1' });
+        if (k < 2) { S.arrow(q, 530, y + 22, 530, y + 40, 'mid', { cls: 's-mid w15' }); S.text(538, y + 35, 'outer ＝ 呼び出し側', { cls: 't-xs t-dim' }, q); }
+        return c;
+      });
+      st.scRes = S.text(490, 434, 'x → g の new_env で 2 → g() は 2、と読める', { cls: 't-xs t-x t-b' }, q);
+      S.text(730, 300, 'ECMAScript', { cls: 't-xs t-b' }, q);
+      chip(q, 730, 310, 'f の環境 { }', 'v', { fs: 10, h: 22, pad: 6, box: 'f-sf s-rule w1' });
+      S.arrow(q, 770, 332, 770, 350, 'mid', { cls: 's-mid w15' });
+      S.text(778, 345, '作られた場所の環境', { cls: 't-xs t-dim' }, q);
+      chip(q, 730, 350, '大域 { x: 1 }', 'v', { fs: 10, h: 22, pad: 6, box: 'f-sf s-rule w1' });
+      S.text(730, 394, 'x → 大域の 1 → g() は 1（字句的スコープ）', { cls: 't-xs t-b' }, q);
+      xlink(q, 730, 414, 'https://tc39.es/ecma262/#sec-environment-records', 'ECMAScript 9.1 Environment Records');
+      st.scNote = S.text(490, 454, '', { cls: 't-xs pre' }, q);
+      row(q, 474, 'test.html の add は仮引数しか使わないので、どちらでも Number(3)', 't-xs t-dim');
+      st.scPtr = S.text(478, 325, '▶', { cls: 't-xs t-x t-b', style: { display: 'none' } }, q);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      const which = i === 0 ? 0 : i === 1 ? 1 : i === 2 ? 2 : i === 3 ? 3 : i === 4 ? 3 : 4;
+      st.C.forEach((c, k) => S.fade(c.g, k === which));
+      if (which === 3) st.C[3].p.hl(...(i === 3 ? [2, 10] : [12, 13]));
+      st.G.forEach((q, k) => S.fade(q, k === i));
+      const T = [
+        ['FunctionDeclaration { id: Identifier("add"), params: [a, b], body: BlockStatement }', 'eval(id): "add" は変数に無い → StringLiteral("add") → これが関数の名前', 'Function::new("add", params.to_vec(), Some(body.clone())) → functions.push', 'functions ＝ [Function { id: "add", … }]。env には何も入らない'],
+        ['CallExpression { callee: Identifier("add"), arguments: [1, 2] }', 'new_env ＝ Environment::new(Some(env))　← outer は呼び出した側の env', 'callee_value ＝ eval(Identifier("add"), new_env) ＝ StringLiteral("add")', '引数はまだ評価しない（名前が決まってから、段階4 で）'],
+        ['call_browser_api(&StringLiteral("add"), …) → API の名前ではない → (false, None)', 'for func in &self.functions { if callee_value == StringLiteral(func.id) … }', '"add" == "add" → f ＝ Some(func.clone()) → Function を取る', '無ければ panic!("function {:?} doesn\'t exist", callee)'],
+        ['assert!(arguments.len() == function.params.len())　2 == 2 → 通る', 'eval(params[0]) ＝ StringLiteral("a") → add_variable("a", Some(Number(1)))', 'eval(params[1]) ＝ StringLiteral("b") → add_variable("b", Some(Number(2)))', 'new_env.variables ＝ [("a", Some(Number(1))), ("b", Some(Number(2)))]'],
+        ['eval(&function.body, new_env): BlockStatement の文を順に eval し、最後の値を返す', 'ReturnStatement { argument } → eval(argument) ＝ eval(AdditiveExpression)', 'Identifier("a") → new_env で Number(1)、Identifier("b") → Number(2)', 'Number(1) + Number(2) ＝ Number(3) → CallExpression の値'],
+        ['new_env.outer ＝ 呼び出した側の env（関数を定義した場所ではない）', '見つからない名前は呼び出し元の変数に届く → 動的スコープ、と読める', 'ECMAScript: 関数は作られた場所の Environment Record を持つ（字句的スコープ）', '例（図）: g() を呼ぶと saba は 2、ECMAScript は 1、と読める']
+      ];
+      showTrace(st.tr, T[i]);
+      st.gRow.textContent = i === 0 ? '（まだ空）' : '("target", Some(HtmlElement))';
+      st.gRow.setAttribute('class', i === 0 ? 't-xs t-mono t-dim' : 't-xs t-mono');
+      st.ne.style.display = i === 0 ? 'none' : '';
+      st.fnEmpty.style.display = i === 0 ? '' : 'none';
+      st.fnChip.g.style.display = i === 0 ? 'none' : '';
+      st.fnChip.set(i === 0 ? 'cur' : '');
+      st.neRows[0].textContent = i >= 3 ? '("a", Some(Number(1)))' : '（まだ無い）';
+      st.neRows[1].textContent = i >= 3 ? '("b", Some(Number(2)))' : '';
+      st.neRows[0].setAttribute('class', i >= 3 ? 't-xs t-mono' : 't-xs t-mono t-dim');
+      st.envNote.textContent = '';
+      st.scNote.textContent = '';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, tt = ctx.ts;
+      const pl = playing();
+      st.gPtr.style.display = 'none';
+      st.nePtr.style.display = 'none';
+      if (i === 0) {
+        // 1 秒後に functions に入る（止めている人には入った後）
+        const on = !pl || tt >= 1;
+        st.fnChip.g.style.display = on ? '' : 'none';
+        st.fnEmpty.style.display = on ? 'none' : '';
+        st.fdRows.forEach((r, k) => r.setAttribute('class', 't-xs t-mono pre' + (!pl || tt >= k * 0.33 ? '' : ' hide')));
+      } else if (i === 1) {
+        const f = pl ? Math.min(tt, 3) : 3;
+        st.ne.style.display = f >= 0.8 ? '' : 'none';
+        st.ceRows.forEach((r, k) => r.setAttribute('class', 't-xs t-mono pre' + (f >= k * 0.8 ? '' : ' hide')));
+        st.envNote.textContent = f >= 1.6 ? 'callee の評価に使うのも new_env。"add" は無いので outer の env を見て、それも無いので文字列' : '';
+      } else if (i === 2) {
+        // 3.6 秒で 1 周: API と比べる → functions と比べる → 見つかる
+        const f = pl ? U.mod(tt, 3.6) : 3;
+        const k = f < 1.2 ? 0 : f < 2.4 ? 1 : 2;
+        st.fiRows.forEach((r, j) => r.setAttribute('class', 't-xs t-mono pre' + (st.fiGroup[j] === k && k < 2 ? ' t-x t-b' : (j === 3 && k === 2 ? ' t-x t-b' : (j === 4 ? ' t-dim' : '')))));
+        st.fnChip.set(k === 2 ? 'cur' : '');
+        st.envNote.textContent = k === 0 ? 'ブラウザ API ではない' : k === 1 ? 'functions の 1 個めの id "add" と一致' : 'Function { id: "add", … } を clone して取った';
+      } else if (i === 3) {
+        // 1 秒ごとに a、b が入る（止めている人には両方入った後）
+        const f = pl ? Math.min(tt, 3) : 3;
+        st.neRows[0].textContent = f >= 1 ? '("a", Some(Number(1)))' : '（まだ無い）';
+        st.neRows[0].setAttribute('class', f >= 1 ? 't-xs t-mono' : 't-xs t-mono t-dim');
+        st.neRows[1].textContent = f >= 2 ? '("b", Some(Number(2)))' : '';
+        st.biRows.forEach((r, k) => r.setAttribute('class', 't-xs t-mono pre' + (f >= (k === 0 ? 0 : k <= 2 ? 0.5 : 1.5) ? '' : ' hide')));
+        st.envNote.textContent = f < 1 ? 'assert! を通り、i ＝ 0 から結ぶ' : f < 2 ? 'add_variable("a", Some(Number(1))) → new_env の末尾に push' : 'add_variable("b", Some(Number(2))) → new_env ＝ { a: 1, b: 2 }';
+      } else if (i === 4) {
+        // 0.8 秒に 1 行。6 行の後 1.6 秒止まる
+        const n = S4_BODY.length;
+        const k = pl ? Math.min(n - 1, Math.floor(U.mod(tt, (n + 2) * 0.8) / 0.8)) : n - 1;
+        st.boRows.forEach((r, j) => r.setAttribute('class', 't-xs t-mono pre' + (j === k ? ' t-x t-b' : (j > k ? ' t-dim' : ''))));
+        if (k === 3 || k === 4) { st.nePtr.style.display = ''; st.nePtr.setAttribute('y', k === 3 ? 130 : 148); }
+        st.envNote.textContent = ['BlockStatement: 文を順に eval（ここでは 1 文）', 'ReturnStatement: argument を eval して返す', "AdditiveExpression: left と right を eval して +", 'get_variable("a"): new_env の 1 個めで一致 → Number(1)', 'get_variable("b"): new_env の 2 個めで一致 → Number(2)', 'Number(3) が本体の値 ＝ add(1, 2) の値'][k];
+      } else if (i === 5) {
+        // 3.5 秒で 1 周: f の環境 → outer → g の環境で見つかる
+        const f = pl ? U.mod(tt, 3.5) : 2;
+        const k = f < 1 ? 0 : 1;
+        st.scPtr.style.display = '';
+        st.scPtr.setAttribute('y', k === 0 ? 325 : 365);
+        st.scChain.forEach((c, j) => c.set(j === k ? 'cur' : ''));
+        st.scRes.setAttribute('class', 't-xs t-x t-b' + (f >= 1 ? '' : ' hide'));
+        st.scNote.textContent = k === 0 ? 'f の new_env に x は無い → outer（＝ f を呼んだ g の new_env）へ' : 'g の new_env に ("x", Some(Number(2))) → 2 を返す';
+      }
+    }
+  };
+
+  /* ================================================================
+     場面5 DOM に触る
+     DOM の木は第33章の値（common の §4.4）。get_element_by_id が通る順は api.rs 11〜33 を読んで書き出した
+     ================================================================ */
+  const S5_DOM = [   // [深さ, 表示, 探索で通る順（-1 は表示だけ）]
+    [0, 'Document', 0], [1, 'html', 1], [2, 'head', 2], [3, 'style', 3], [3, 'script', 4],
+    [2, 'body', 5], [3, 'h1 id="title"', 6], [3, 'p class="first"', 7], [3, 'p class="links"', 8], [3, 'p class="hidden"', 9],
+    [3, 'p id="target"', 10], [4, 'Text("original text")', -1]
+  ];
+  const S5_NEW = 'Text("Answer? 1 + 2 = 3")';
+  /* 札の文字を替え、幅と中心を合わせ直す（fs 10・pad 5 の札） */
+  function setChipText(c, s) {
+    if (c.t.textContent === s) return;
+    const w = chipW(s, 10, 5);
+    c.t.textContent = s;
+    c.r.setAttribute('width', w);
+    c.t.setAttribute('x', w / 2);
+  }
+  const s5 = {
+    steps: [
+      { title: 'MemberExpression — HtmlElement でなければ文字列にする', text: '`MemberExpression` は `object` と `property` を評価する。`document` は未定義なので文字列。HtmlElement でなければ `object + "." + property` で `"document.getElementById"` という**1 つの文字列**になる。' },
+      { title: 'call_browser_api — 文字列が一致したら DOM を探す', text: '`CallExpression` は関数を探す前に `call_browser_api` を呼ぶ。`callee` が `StringLiteral("document.getElementById")` に等しければ、引数を評価して `"target"` を取り、`get_element_by_id` を呼ぶ。API はこれだけ。' },
+      { title: 'get_element_by_id — 木を再帰で探す', text: '`get_element_by_id` は、そのノードが要素で `id` 属性が一致すれば返し、違えば `first_child` と `next_sibling` に再帰する（[[33-saba-dom.html#s6|第33章 場面6]]）。下りて `p id="target"` に着く。返るのは `Rc<RefCell<Node>>` の clone で、DOM と同じノードを指す。' },
+      { title: 'HtmlElement — JS の変数が DOM のノードを共有する', text: '結果は `HtmlElement { object, property: None }` で、`var target` の値として env に入る。`object` は `Rc<RefCell<Node>>` の clone なので、DOM の木と JS の変数が**同じノード**を持つ（[[33-saba-dom.html#s2|第33章 場面2]]）。' },
+      { title: 'textContent への代入 — Text を差し替える', text: '`target.textContent` は object が HtmlElement なので、`property` に `"textContent"` を入れた HtmlElement になる。代入の腕は左がそれなら、右の値を `to_string()` して `Text` ノードを作り、`set_first_child` で差し込む。' },
+      { title: 'DOM Standard との差と、この版の API', text: 'DOM Standard の `textContent` への代入は子を全部置き換える。`set_first_child` は `first_child` だけを替え、新しい Text の `parent` と要素の `last_child` は更新されない、と読める。API は[[10-browser.html#s2.5|第10章 場面2]]の `getElementById` だけ。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'runtime.rs（MemberExpression の腕。詰めた）'],
+        [250, '    Node::MemberExpression { object, property } => {'],
+        [251, '      let object_value ='],
+        [null, '        match self.eval(object, env.clone()) {'],
+        [252, '          Some(value) => value,'],
+        [253, '          None => return None, };'],
+        [255, '      let property_value ='],
+        [null, '        match self.eval(property, env.clone()) {'],
+        [258, '          None => return Some(object_value), … };'],
+        [262, '      if let RuntimeValue::HtmlElement { object, property }'],
+        [null, '          = object_value {'],
+        [263, '        assert!(property.is_none());'],
+        [265, '        return Some(RuntimeValue::HtmlElement { object,'],
+        [267, '          property: Some(property_value.to_string()), }); }'],
+        [271, '      // document.getElementByIdは、…一つの文字列として扱う。'],
+        [273, '      return Some(object_value'],
+        [274, '        + RuntimeValue::StringLiteral(".".to_string())'],
+        [null, '        + property_value); }']
+      ]).hl(14, 17);
+      panel([
+        ['', 'runtime.rs（call_browser_api。詰めた）'],
+        [147, '/// (bool, Option<RuntimeValue>) のタプルを返す'],
+        [150, 'fn call_browser_api(&mut self, func: &RuntimeValue,'],
+        [153, '    arguments: &[Option<Rc<Node>>],'],
+        [154, '    env: Rc<RefCell<Environment>>,'],
+        [155, ') -> (bool, Option<RuntimeValue>) {'],
+        [156, '  if func == &RuntimeValue::StringLiteral('],
+        [null, '      "document.getElementById".to_string()) {'],
+        [157, '    let arg = match self.eval(&arguments[0], env.clone()) {'],
+        [158, '      Some(a) => a,'],
+        [159, '      None => return (true, None), };'],
+        [161, '    let target = match get_element_by_id('],
+        [null, '        Some(self.dom_root.clone()), &arg.to_string()) {'],
+        [162, '      Some(n) => n,'],
+        [163, '      None => return (true, None), };'],
+        [165, '    return (true, Some(RuntimeValue::HtmlElement {'],
+        [168, '      object: target, property: None, })); }'],
+        [174, '  (false, None) }']
+      ]).hl(6, 12);
+      panel([
+        ['', 'api.rs（get_element_by_id。詰めた）'],
+        [11, 'pub fn get_element_by_id('],
+        [12, '  node: Option<Rc<RefCell<Node>>>, id_name: &String,'],
+        [14, ') -> Option<Rc<RefCell<Node>>> {'],
+        [15, '  match node {'],
+        [16, '    Some(n) => {'],
+        [17, '      if let NodeKind::Element(e) = n.borrow().kind() {'],
+        [18, '        for attr in &e.attributes() {'],
+        [19, '          if attr.name() == "id"'],
+        [null, '              && attr.value() == *id_name {'],
+        [20, '            return Some(n.clone()); } } }'],
+        [24, '      let result1 = get_element_by_id('],
+        [null, '        n.borrow().first_child(), id_name);'],
+        [25, '      let result2 = get_element_by_id('],
+        [null, '        n.borrow().next_sibling(), id_name);'],
+        [26, '      if result1.is_none() { return result2; }'],
+        [29, '      result1 }'],
+        [31, '    None => None, } }']
+      ]).hl(6, 10);
+      panel([
+        ['', 'runtime.rs（AssignmentExpression の腕、DOM を書き換える方。詰めた）'],
+        [211, '    Node::AssignmentExpression { operator, left, right } => {'],
+        [216, "      if operator != &'=' { return None; }"],
+        [220, '      if let Some(node) = left { … }   // 左が Identifier なら'],
+        [228, '      // もし左辺の値が…HtmlElementならば、DOMツリーを更新する'],
+        [229, '      if let Some(RuntimeValue::HtmlElement { object,'],
+        [null, '          property }) = self.eval(left, env.clone()) {'],
+        [232, '        let right_value ='],
+        [null, '          match self.eval(right, env.clone()) {'],
+        [233, '            Some(value) => value,'],
+        [234, '            None => return None, };'],
+        [237, '        if let Some(p) = property {'],
+        [238, '          // target.textContent = "foobar"; のように…'],
+        [239, '          if p == "textContent" {'],
+        [240, '            object.borrow_mut().set_first_child(Some(Rc::new('],
+        [null, '              RefCell::new(DomNode::new(DomNodeKind::Text('],
+        [null, '                right_value.to_string()), ))))); } } }'],
+        [248, '      None }']
+      ]).hl(11, 16);
+      panel([
+        ['', 'dom/node.rs（Node の欄と set_first_child。抜粋）'],
+        [37, 'pub struct Node {'],
+        [38, '    pub kind: NodeKind,'],
+        [39, '    window: Weak<RefCell<Window>>,'],
+        [40, '    parent: Weak<RefCell<Node>>,'],
+        [41, '    first_child: Option<Rc<RefCell<Node>>>,'],
+        [42, '    last_child: Weak<RefCell<Node>>,'],
+        [43, '    previous_sibling: Weak<RefCell<Node>>,'],
+        [44, '    next_sibling: Option<Rc<RefCell<Node>>>,'],
+        [45, '}'],
+        [78, 'pub fn set_first_child(&mut self,'],
+        [null, '      first_child: Option<Rc<RefCell<Node>>>) {'],
+        [79, '    self.first_child = first_child;'],
+        [80, '}'],
+        ['', 'runtime.rs 240〜244 が渡すのは Rc::new(RefCell::new(DomNode::new('],
+        ['', '  DomNodeKind::Text(right_value.to_string()))))。new の parent は Weak::new()'],
+        ['', '→ 新しい Text の parent と、p の last_child は更新されない、と読める']
+      ]).hl(10, 13);
+      st.tr = S.g({}, svg);
+      const g = st.g = S.g({}, svg);
+      // 左: DOM の木（第33章の木。body の下を中心に）
+      S.text(490, 26, 'DOM の木（第33章。Text と a は一部省略）', { cls: 't-xs t-dim' }, g);
+      st.dom = S5_DOM.map(([d, s, order], k) => {
+        const y = 36 + k * 20, x = 490 + d * 16;
+        const isTarget = k === 10, isText = k === 11;
+        const c = (isTarget || isText) ? chip(g, x, y, s, 'v', { fs: 10, h: 18, pad: 5, box: isText ? 'f-d-soft s-d w1' : 'f-sf s-rule w1' }) : null;
+        const t = c ? null : S.text(x, y + 13, s, { cls: 't-xs t-mono' }, g);
+        return { c, t, order, y, x };
+      });
+      st.domPtr = S.text(478, 49, '▶', { cls: 't-xs t-x t-b', style: { display: 'none' } }, g);
+      st.oldText = S.text(740, 36 + 11 * 20 + 13, '', { cls: 't-xs t-dim pre' }, g);
+      // 右: JS の env と、ノードへの矢印
+      S.text(730, 26, 'JS の env（大域）', { cls: 't-xs t-dim' }, g);
+      st.envBox = S.rect(730, 34, 214, 58, { rx: 5, cls: 'f-sf s-rule w1' }, g);
+      st.envL1 = S.text(738, 52, '（まだ無い）', { cls: 't-xs t-mono t-dim' }, g);
+      st.envL2 = S.text(738, 70, '', { cls: 't-xs t-mono' }, g);
+      st.envL3 = S.text(738, 86, '', { cls: 't-xs t-mono' }, g);
+      st.rcArrow = S.path('M730,78 C 690,78 690,' + (36 + 10 * 20 + 9) + ' 646,' + (36 + 10 * 20 + 9), { cls: 'f-none s-fg w15', 'marker-end': mk('fg'), style: { display: 'none' } }, g);
+      st.rcNote = S.text(730, 112, '', { cls: 't-xs pre' }, g);
+      st.rcNote2 = S.text(730, 130, '', { cls: 't-xs t-dim pre' }, g);
+      // 下: 段階ごとの群
+      const G = st.G = [];
+      const grp = () => { const q = S.g({ cls: 'fade hide' }, svg); G.push(q); return q; };
+      const row = (q, y, s, cls) => S.text(490, y, s, { cls: (cls || 't-xs') + ' pre' }, q);
+      let q = grp();   // 段階1
+      row(q, 300, 'MemberExpression { object: Identifier("document"), property: Identifier("getElementById") }', 't-xs t-dim');
+      st.meRows = ['object_value ＝ StringLiteral("document")（env に無い → 名前の文字列）', 'property_value ＝ StringLiteral("getElementById")（同じく）', 'object_value は HtmlElement ではない → object_value + "." + property_value'].map((s, k) => row(q, 320 + k * 20, s, 't-xs t-mono'));
+      let mx = 490;
+      st.meChips = [['"document"', 'StringLiteral'], ['+', null], ['"."', 'StringLiteral'], ['+', null], ['"getElementById"', 'StringLiteral'], ['＝', null], ['"document.getElementById"', 'StringLiteral']].map(([s, k]) => {
+        if (!k) { S.text(mx + 4, 400, s, { cls: 't-sm t-b' }, q); mx += 22; return null; }
+        const c = chip(q, mx, 386, s, k, { fs: 10, h: 20, pad: 5 }); mx += c.w + 6; return c;
+      });
+      row(q, 434, 'impl Add: 両方 Number でなければ to_string() して連結（場面3）。メソッド名が 1 つの文字列になる', 't-xs t-dim');
+      row(q, 452, 'property が評価できなければ object_value をそのまま返す（258 行）', 't-xs t-dim');
+      q = grp();       // 段階2
+      row(q, 300, 'CallExpression の中で、関数を探す前に', 't-xs t-dim');
+      st.caRows = ['callee_value ＝ StringLiteral("document.getElementById")', 'call_browser_api: func == &StringLiteral("document.getElementById") → 一致', 'arg ＝ eval(&arguments[0]) ＝ StringLiteral("target") → arg.to_string()', 'get_element_by_id(Some(self.dom_root.clone()), &"target") → Some(node)', 'return (true, Some(HtmlElement { object: target, property: None }))'].map((s, k) => row(q, 320 + k * 20, s, 't-xs t-mono'));
+      row(q, 434, 'call_browser_api が知る名前はこの 1 つ。他の名前は (false, None) → functions を探す（場面4）', 't-xs t-dim');
+      row(q, 452, 'dom_root は JsRuntime::new で渡された Document の Rc<RefCell<Node>>（場面6）', 't-xs t-dim');
+      row(q, 470, 'head の script から p#target が見つかるのは、木が全部できてから JS が動くため（第33章 場面6）。', 't-xs t-dim');
+      row(q, 488, '仕様どおりに script で止まるブラウザなら、この時点で p#target は無く null', 't-xs t-dim');
+      q = grp();       // 段階3
+      row(q, 300, 'get_element_by_id が通る順（自分 → first_child の側 → next_sibling の側）', 't-xs t-dim');
+      st.geNote = row(q, 320, '', 't-xs t-mono');
+      row(q, 344, '通る順: Document → html → head → style → Text → script → Text → body', 't-xs t-mono');
+      row(q, 362, '→ h1 → Text → p.first → Text → p.links → a → Text → a → Text', 't-xs t-mono');
+      row(q, 380, '→ p.hidden → Text → p id="target"（20 ノードめ、と読める）→ 一致', 't-xs t-mono');
+      row(q, 408, 'h1 の id="title" は "target" と違うので進む。result1（子の側）が Some ならそれ、None なら result2', 't-xs t-dim');
+      row(q, 426, '両方を先に計算するので、見つかった後も木の残りを歩く、と読める。第33章 場面6 と同じ再帰', 't-xs t-dim');
+      xlink(q, 490, 450, '33-saba-dom.html#s6', '第33章 場面6');
+      q = grp();       // 段階4
+      row(q, 300, 'HtmlElement — JS の値が DOM のノードを指す', 't-xs t-dim');
+      st.heChips = [chip(q, 490, 312, 'HtmlElement { object: p#target の Rc, property: None }', 'v', { fs: 10, h: 20, pad: 5, box: 'f-sf s-rule w1' })];
+      row(q, 352, 'VariableDeclarator: add_variable("target", Some(HtmlElement { … }))', 't-xs t-mono');
+      row(q, 380, 'Rc の clone: p.hidden の next_sibling（DOM の側）と env の値（JS の側）が同じノードを指す', 't-xs t-dim');
+      row(q, 398, 'RefCell: 後から borrow_mut() で中身を書き換えられる（段階5）', 't-xs t-dim');
+      row(q, 416, 'Rc<RefCell<Node>> の形は第31章で、中身は第33章で読んだ', 't-xs t-dim');
+      xlink(q, 490, 440, '33-saba-dom.html#s2', '第33章 場面2 Rc<RefCell<Node>> と Weak');
+      q = grp();       // 段階5
+      row(q, 300, 'target.textContent = … の評価', 't-xs t-dim');
+      st.asRows = ['eval(left) ＝ HtmlElement { object: p#target, property: Some("textContent") }', 'right_value ＝ StringLiteral("Answer? 1 + 2 = 3")（場面3・4）', 'p == "textContent" → DomNode::new(Text(right_value.to_string()))', 'object.borrow_mut().set_first_child(Some(Rc::new(RefCell::new(…))))'].map((s, k) => row(q, 320 + k * 20, s, 't-xs t-mono'));
+      row(q, 416, '古い Text("original text") は誰からも強く指されず、解放される、と読める（参照カウント 0）', 't-xs t-dim');
+      row(q, 434, 'Rc<RefCell<Node>> を共有しているから書き換えられる。Rc<Node> の構文木（場面2）では無理', 't-xs t-dim');
+      row(q, 452, 'env の target は property: None のまま。eval(left) は clone から別の値を作る', 't-xs t-dim');
+      q = grp();       // 段階6
+      row(q, 300, 'DOM Standard と saba', 't-xs t-dim');
+      [['getElementById', 'Document のメソッド', '"document.getElementById" と一致'], ['textContent ＝', '子を全部外して Text 1 つに', 'first_child の欄だけを替える'], ['他の API', 'querySelector など多数', '無い（この版の唯一の口）']].forEach(([a, b, c], k) => {
+        const y = 330 + k * 24;
+        S.text(490, y, a, { cls: 't-xs t-mono t-b' }, q);
+        S.text(600, y, b, { cls: 't-xs' }, q);
+        S.text(750, y, c, { cls: 't-xs' }, q);
+      });
+      S.text(600, 310, 'DOM Standard', { cls: 't-xs t-dim' }, q);
+      S.text(750, 310, 'saba', { cls: 't-xs t-dim' }, q);
+      row(q, 408, '新しい Text の parent は Weak::new() のまま、p の last_child は古い Text を指したまま、と読める', 't-xs t-dim');
+      row(q, 426, 'レイアウト（第35章）は first_child と next_sibling だけをたどるので、表示は同じ', 't-xs t-dim');
+      xlink(q, 490, 450, 'https://dom.spec.whatwg.org/#dom-node-textcontent', 'DOM Standard textContent');
+      xlink(q, 700, 450, '10-browser.html#s2.5', '第10章 場面2 DOM ができた');
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      const which = i === 0 ? 0 : i === 1 ? 1 : i === 2 ? 2 : i === 3 ? 1 : i === 4 ? 3 : 4;
+      st.C.forEach((c, k) => S.fade(c.g, k === which));
+      if (which === 1) st.C[1].p.hl(...(i === 1 ? [6, 12] : [15, 16]));   // 段階4 は HtmlElement を作る 165〜168 行
+      st.G.forEach((q, k) => S.fade(q, k === i));
+      const T = [
+        ['MemberExpression { object: document, property: getElementById }', 'object_value ＝ StringLiteral("document")（env に無い → 名前の文字列）', 'property_value ＝ StringLiteral("getElementById")', 'HtmlElement ではない → "document" + "." + "getElementById"'],
+        ['callee_value ＝ StringLiteral("document.getElementById") → call_browser_api', 'func == &StringLiteral("document.getElementById") → 一致（PartialEq）', 'arg ＝ eval(&arguments[0]) ＝ StringLiteral("target") → arg.to_string()', 'get_element_by_id(Some(self.dom_root.clone()), &"target")'],
+        ['Document: 要素ではない → first_child（html）へ', 'html → head → style → Text → script → Text → body → h1（id="title"）→ …', 'p id="target": attr.name() == "id" && attr.value() == "target" → Some(n.clone())', '20 ノードめで見つかる、と読める。result1 が Some ならそれ、無ければ result2'],
+        ['(true, Some(HtmlElement { object: p#target の Rc, property: None }))', 'VariableDeclarator: add_variable("target", Some(HtmlElement { … }))', 'Rc の clone: DOM の p.hidden.next_sibling と env の値が同じノードを指す', 'RefCell: 後で borrow_mut() して書き換えられる（第33章 場面2）'],
+        ['eval(left) ＝ HtmlElement { object: p#target, property: Some("textContent") }', 'right_value ＝ StringLiteral("Answer? 1 + 2 = 3")（場面3・4）', 'set_first_child(Some(Rc::new(RefCell::new(DomNode::new(Text(…))))))', '古い Text("original text") は誰からも指されず解放される、と読める'],
+        ['DOM Standard: textContent の設定は子を全部外して Text 1 つにする', 'saba: first_child の欄だけを替える。parent・last_child は古いまま、と読める', 'レイアウト（第35章）は first_child と next_sibling をたどるので表示は同じ', '第10章 場面2 段階5 の document.getElementById が、この版の唯一の API']
+      ];
+      showTrace(st.tr, T[i]);
+      const has = i >= 3;
+      st.envL1.textContent = has ? '("target", Some(HtmlElement {' : '（まだ無い）';
+      st.envL1.setAttribute('class', has ? 't-xs t-mono' : 't-xs t-mono t-dim');
+      st.envL2.textContent = has ? '   object: ●（p#target）,' : '';
+      // env の値は property: None のまま。target.textContent の評価は Some("textContent") の HtmlElement を別に作る（get_variable は clone を返す）
+      st.envL3.textContent = has ? '   property: None }))' : '';
+      st.rcArrow.style.display = has ? '' : 'none';
+      st.rcNote.textContent = has ? 'object は同じ Rc<RefCell<Node>> の clone' : '';
+      st.rcNote2.textContent = has ? '（強い参照が 1 つ増える。DOM の側と JS の側）' : '';
+      st.dom[10].c.set(i === 2 || i === 3 || i === 4 ? 'cur' : '');
+      setChipText(st.dom[11].c, i === 5 ? S5_NEW : 'Text("original text")');
+      st.dom[11].c.set('');
+      st.oldText.textContent = '';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, tt = ctx.ts, pl = playing();
+      st.domPtr.style.display = 'none';
+      if (i === 2) {
+        // 0.5 秒に 1 ノード。p#target で 2 秒止まる（止めている人には見つけた姿）
+        const k = pl ? Math.min(10, Math.floor(U.mod(tt, 11 * 0.5 + 2) / 0.5)) : 10;
+        const row = st.dom.find((r) => r.order === k);
+        if (row) { st.domPtr.style.display = ''; st.domPtr.setAttribute('y', row.y + 13); }
+        st.dom[10].c.set(k === 10 ? 'cur' : '');
+        st.geNote.textContent = k === 10 ? 'いま: p id="target" → id 属性が "target" と一致 → Some(n.clone()) を返す' : 'いま: ' + S5_DOM[st.dom.indexOf(row)][1] + (k === 0 ? '（要素ではない）' : k === 6 ? '（id="title" ≠ "target"）' : '（id 属性が無い）') + ' → 次へ';
+      } else if (i === 4) {
+        // 3 秒で差し替わる（止めている人には差し替わった後）
+        const f = pl ? Math.min(tt, 4) : 4;
+        const done = f >= 2.4;
+        st.asRows.forEach((r, k) => r.setAttribute('class', 't-xs t-mono pre' + (f >= k * 0.6 ? (k === 3 && done ? ' t-x t-b' : '') : ' hide')));
+        setChipText(st.dom[11].c, done ? S5_NEW : 'Text("original text")');
+        st.dom[11].c.set(done ? 'cur' : '');
+        st.oldText.textContent = done ? '← 古い Text("original text") は外れる' : '';
+      }
+    }
+  };
+
+  /* ================================================================
+     場面6 全体を通す
+     窓の絵は constants.rs（600×400、内容領域 590×340）と第35章の値（common の §4.6）を 0.56 倍にした模式。
+     文字の色は saba が描く実際の値（red・#0000ff・#00ffff・black。背景 WHITE、ツールバー LIGHTGREY）なので、テーマで変えない
+     ================================================================ */
+  const S6_K = 0.56;
+  const S6_PIPE = [['create_frame', 'HTML → DOM', 'CSS → CSSOM', '第32〜34章'], ['execute_js', 'JS を 1 回', 'DOM を書き換える', 'この章'], ['set_layout_view', 'レイアウトの木', '箱の大きさと位置', '第35章'], ['paint_tree', '表示項目', 'Rect と Text', '第35章']];
+  const S6_ROAD = [['31', 'URL・HTTP', '31-saba-http.html', 'GET /test.html'], ['32', 'トークン', '32-saba-tokenizer.html', 'StartTag …'], ['33', 'DOM', '33-saba-dom.html', '21 ノード'], ['34', 'スタイル', '34-saba-css.html', 'color: red'], ['35', 'レイアウト', '35-saba-layout.html', 'body 590×120'], ['36', 'JS', '#s1', '1 + 2 = 3']];
+  const s6 = {
+    steps: [
+      { title: 'receive_response — 4 つの手順の順', text: '応答が届くと `Page::receive_response` が `create_frame`、`execute_js`、`set_layout_view`、`paint_tree` の順に呼ぶ。JS は **DOM が全部できてから**動く。だから画面には最初から "Answer? 1 + 2 = 3" が出る。' },
+      { title: 'execute_js — 3 つの部品をつなぐ 15 行', text: '`get_js_content` が最初の `script` 要素の `first_child` の Text を取り出し、`JsLexer` → `JsParser` → `JsRuntime::new(dom).execute(&ast)` とつなぐ。`dom` は第33章の木の `Rc` の clone で、評価器が触るのはその木そのもの。' },
+      { title: 'Chromium との距離 — 止まらない、二度と走らない', text: 'Chromium は同期の `<script>` でパーサを止めて実行し（[[10-browser.html#s2.4|第10章 場面2]]）、後はクリックやタイマーのたびにイベントループが JS を走らせる（[[10-browser.html#s5.3|第10章 場面5]]）。saba にイベントループは無く、JS は読み込みで 1 回走って終わる。[[35-saba-layout.html#s6.1|第35章 場面6]]の poll するループは JS を呼ばない。' },
+      { title: 'V8 との距離 — 木を歩くだけ', text: 'V8 はバイトコードにして走らせ、熱い関数を JIT で機械語にする（[[10-browser.html#s5.1|第10章 場面5]]）。saba の `eval` は構文木をそのまま再帰で歩き、[[28-compiler.html#s2|第28章 場面2]]のような実行前の型検査も、型の統計による最適化も無い。値は 1 つずつ `match` で札を見る。この大きさだから 1 行ずつ読める。' },
+      { title: 'この版が扱わないもの', text: '`if`・`for`・`while`、オブジェクトと配列、クロージャ、イベントと `setTimeout`、例外、`let`・`const`、`\'…\'` の文字列、コメントは、この版の字句・構文・評価のどこにも無い。知らない文字は `unimplemented!`、知らない関数は `panic!` で止まる。差は、無い機能を数え上げられる大きさである。' },
+      { title: '最後の画面と、第IX部の道', text: '内容領域には、赤い大きな "My Browser!"、青い 1 行、水色の帯に下線つきの 2 つのリンク、黒い "Answer? 1 + 2 = 3" が並ぶ（`none` は出ない）。第10章が Chromium で追った道を、5,077 行の実物で歩き終えた。第IX部の 6 章は図の道のとおり。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      const C = st.C = [];
+      const panel = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+      panel([
+        ['', 'page.rs（receive_response と execute_js。詰めた）'],
+        [67, 'pub fn receive_response(&mut self, response: HttpResponse) {'],
+        [68, '    self.create_frame(response.body());'],
+        [70, '    self.execute_js();'],
+        [72, '    self.set_layout_view();'],
+        [74, '    self.paint_tree();'],
+        [75, '}'],
+        [77, 'fn execute_js(&mut self) {'],
+        [78, '    let dom = match &self.frame {'],
+        [79, '        Some(frame) => frame.borrow().document(),'],
+        [80, '        None => return, };'],
+        [83, '    let js = get_js_content(dom.clone());'],
+        [84, '    let lexer = JsLexer::new(js);'],
+        [86, '    let mut parser = JsParser::new(lexer);'],
+        [87, '    let ast = parser.parse_ast();'],
+        [89, '    let mut runtime = JsRuntime::new(dom);'],
+        [90, '    runtime.execute(&ast);'],
+        [91, '}']
+      ]).hl(1, 6);
+      panel([
+        ['', 'api.rs（get_js_content と get_target_element_node。詰めた）'],
+        [73, 'pub fn get_js_content(root: Rc<RefCell<Node>>) -> String {'],
+        [74, '  let js_node = match get_target_element_node(Some(root),'],
+        [null, '      ElementKind::Script) {'],
+        [75, '    Some(node) => node,'],
+        [76, '    None => return "".to_string(), };'],
+        [78, '  let text_node = match js_node.borrow().first_child() { … };'],
+        [82, '  let content = match &text_node.borrow().kind() {'],
+        [83, '    NodeKind::Text(ref s) => s.clone(),'],
+        [84, '    _ => "".to_string(), };'],
+        [86, '  content }'],
+        [35, 'pub fn get_target_element_node('],
+        [36, '    node: Option<Rc<RefCell<Node>>>,'],
+        [37, '    element_kind: ElementKind) -> Option<Rc<RefCell<Node>>> {'],
+        [41, '  if n.borrow().kind() == NodeKind::Element(Element::new('],
+        [42, '      &element_kind.to_string(), Vec::new())) {'],
+        [44, '    return Some(n.clone()); }'],
+        [46, '  let result1 = get_target_element_node(… first_child(), …);']
+      ]).hl(1, 10);
+      panel([
+        ['', 'runtime.rs（eval の 13 の腕。木を歩くだけ。詰めた）'],
+        [177, 'fn eval(&mut self, node: &Option<Rc<Node>>,'],
+        [null, '    env: Rc<RefCell<Environment>>) -> Option<RuntimeValue> {'],
+        [187, '  match node.borrow() {'],
+        [188, '    Node::ExpressionStatement(expr) => …'],
+        [189, '    Node::AdditiveExpression { operator, left, right } => …'],
+        [211, '    Node::AssignmentExpression { operator, left, right } => …'],
+        [250, '    Node::MemberExpression { object, property } => …'],
+        [277, '    Node::NumericLiteral(value) => …'],
+        [278, '    Node::VariableDeclaration { declarations } => …'],
+        [284, '    Node::VariableDeclarator { id, init } => …'],
+        [293, '    Node::Identifier(name) => …'],
+        [301, '    Node::StringLiteral(value) => …'],
+        [302, '    Node::BlockStatement { body } => …'],
+        [309, '    Node::ReturnStatement { argument } => …'],
+        [312, '    Node::FunctionDeclaration { id, params, body } => …'],
+        [323, '    Node::CallExpression { callee, arguments } => …'],
+        [370, '  } }']
+      ]).hl(3, 17);
+      panel([
+        ['', 'この版の限り（止まる所と None を返す所。token.rs・ast.rs・runtime.rs から。詰めた）'],
+        [5, 'static RESERVED_WORDS: [&str; 3] ='],
+        [null, '    ["var", "function", "return"];   // token.rs'],
+        [148, "    '+' | '-' | ';' | '=' | '(' | ')'"],
+        [null, "    | '{' | '}' | ',' | '.' => { … }    // 記号はこの 10 文字"],
+        [156, '    _ => unimplemented!("char {:?} is not supported yet", c),'],
+        [342, '    } else { None }    // ast.rs statement: var と return 以外'],
+        [364, '    _ => unimplemented!("function should have open curly'],
+        [null, '        blacket but got {:?}", t),'],
+        [203, "    if operator == &'+' { … } else if operator == &'-' { … }"],
+        [207, '    } else { None }    // runtime.rs: + と - 以外の演算子'],
+        [216, "    if operator != &'=' { return None; }"],
+        [351, '    None => panic!("function {:?} doesn\'t exist", callee),'],
+        [356, '    assert!(arguments.len() == function.params.len());'],
+        ['', 'if・for・while・try・let・const は RESERVED_WORDS に無い → Identifier'],
+        ['', 'オブジェクト・配列・クロージャ・イベント・setTimeout は、どのファイルにも無い']
+      ]).hl(5, 5);
+      st.tr = S.g({}, svg);
+      const g = st.g = S.g({}, svg);
+      // 帯1: receive_response の 4 つの手順
+      S.text(490, 26, 'Page::receive_response（page.rs 67〜75）の順', { cls: 't-xs t-dim' }, g);
+      st.pipe = S6_PIPE.map(([n, a, b, ch], k) => {
+        const x = 490 + k * 116;
+        const bx = box(g, x, 34, 104, 54, n, a, 'f-sf s-rule w1', 't-xs t-mono t-b');
+        bx.t.setAttribute('y', 50); bx.s.setAttribute('y', 64);
+        S.text(x + 52, 78, b, { cls: 't-c t-xs t-dim' }, g);
+        S.text(x + 52, 100, ch, { cls: 't-c t-xs t-dim' }, g);
+        if (k < 3) S.path('M' + (x + 104) + ',61 H' + (x + 114), { cls: 'f-none s-dim w15', 'marker-end': mk('dim') }, g);
+        return bx;
+      });
+      // 帯2: 窓の最終画面（0.56 倍）
+      const W = Math.round(600 * S6_K), H = Math.round(400 * S6_K), TB = Math.round(24 * S6_K), TOOL = Math.round(26 * S6_K);
+      const wx = 490, wy = 118;
+      const win = st.win = S.g({}, svg);
+      S.rect(wx, wy, W, H, { rx: 4, cls: 'f-in s-rule w1' }, win);
+      S.text(wx + W / 2, wy + 10, 'saba', { cls: 't-c t-xs t-dim' }, win);
+      // ツールバーと内容領域。塗りは saba が描く実際の色（constants.rs の LIGHTGREY・WHITE）なのでテーマで変えない
+      // 文字は 10px（10px より小さくしない）。"Address:" が 10px で 48px 幅になるので、アドレスバーは実際の x ＝ 70 の 0.56 倍より右から描く
+      S.rect(wx, wy + TB, W, TOOL, { style: { fill: '#d3d3d3' } }, win);
+      S.rect(wx + 54, wy + TB + 2, W - 57, TOOL - 4, { style: { fill: '#ffffff' } }, win);
+      S.text(wx + 56, wy + TB + TOOL - 4, 'http://host.test:8000/test.html', { style: { fill: '#000000', fontSize: '10px' }, cls: 't-mono' }, win);
+      S.text(wx + 4, wy + TB + TOOL - 4, 'Address:', { style: { fill: '#000000', fontSize: '10px' }, cls: 't-mono' }, win);
+      const cy0 = wy + TB + TOOL;
+      S.rect(wx, cy0, W, H - TB - TOOL, { style: { fill: '#ffffff' } }, win);
+      const cont = st.cont = S.g({}, win);
+      const cx = (x) => wx + Math.round((x + 5) * S6_K), cyy = (y) => cy0 + Math.round((y + 5) * S6_K);
+      // 内容（第35章の座標。文字の色・背景は saba が描く値）
+      // 文字は 10px の等幅（実際の 8×16 を 0.56 倍すると 9px より小さいので、行の間隔と 2 つめのリンクの位置は少し広げてある）
+      S.text(cx(0), cyy(0) + 24, 'My Browser!', { cls: 't-mono t-b', style: { fill: '#ff0000', fontSize: '26px' } }, cont);
+      S.text(cx(0), cyy(60) + 8, 'HTML, CSS and JavaScript are working on my browser :)', { cls: 't-mono', style: { fill: '#0000ff', fontSize: '10px' } }, cont);
+      S.rect(cx(0), cyy(80), Math.round(590 * S6_K), Math.round(20 * S6_K), { style: { fill: '#00ffff' } }, cont);
+      S.text(cx(0), cyy(80) + 9, 'Test page1 ', { cls: 't-mono', style: { fill: '#000000', fontSize: '10px', textDecoration: 'underline' } }, cont);
+      S.text(cx(0) + 70, cyy(80) + 9, 'Test page2', { cls: 't-mono', style: { fill: '#000000', fontSize: '10px', textDecoration: 'underline' } }, cont);
+      st.ans = S.text(cx(0), cyy(100) + 13, 'Answer? 1 + 2 = 3', { cls: 't-mono', style: { fill: '#000000', fontSize: '10px' } }, cont);
+      st.winNote = S.text(wx, wy + H + 16, '窓 600×400、内容領域 590×340 を 0.56 倍（第35章の値）。色は saba が描く値', { cls: 't-xs t-dim' }, g);
+      st.winState = S.text(wx, wy + H + 32, '', { cls: 't-xs t-x t-b pre' }, g);
+      // 窓の右: 段階ごとの短い説明の置き場（x 840〜）
+      st.side = S.text(840, 134, '', { cls: 't-xs pre' }, g);
+      // 帯3: 段階ごとの群
+      const G = st.G = [];
+      const grp = () => { const q = S.g({ cls: 'fade hide' }, svg); G.push(q); return q; };
+      const row = (q, y, s, cls) => S.text(490, y, s, { cls: (cls || 't-xs') + ' pre' }, q);
+      let q = grp();   // 段階1
+      row(q, 400, '4 つの手順と、この章の位置', 't-xs t-dim');
+      ['create_frame: HTML → トークン → DOM（第32・33章）、CSS → CSSOM（第34章）', 'execute_js: この章。DOM の p#target の Text が "Answer? 1 + 2 = 3" に替わる', 'set_layout_view: LayoutView::new(dom, &style)。JS が替えた Text で箱を作る', 'paint_tree: display_items。app.rs が窓に描く（第35章）'].forEach((s, k) => row(q, 420 + k * 20, s, 't-xs t-mono'));
+      row(q, 512, 'JS が走る前に描くことは無い。だから "original text" が画面に出る瞬間は無い、と読める', 't-xs t-dim');
+      row(q, 530, 'head の script が body の p#target を見つけるのも、この順のため（第33章 場面6）。', 't-xs t-dim');
+      row(q, 548, '仕様どおりに script で止まるブラウザなら、この時点で p#target は無く null', 't-xs t-dim');
+      q = grp();       // 段階2
+      row(q, 400, 'execute_js の中（page.rs 77〜91）', 't-xs t-dim');
+      let ex = 490;
+      st.exChips = [['get_js_content', 'v'], ['String（166 文字）', 'StringLiteral'], ['JsLexer', 'v'], ['37 個', 'Number'], ['JsParser', 'v'], ['Program（文 3 つ）', 'v'], ['JsRuntime::new(dom)', 'v'], ['execute', 'v']].map(([s, k], i) => {
+        const w = chipWJ(s, 10, 5);
+        if (i && ex + w > 944) { ex = 490; }
+        const y = i < 5 ? 412 : 442;
+        if (i === 5) ex = 490;
+        const c = chip(q, ex, y, s, k === 'v' ? 'v' : k, { fs: 10, h: 20, pad: 5, w, box: 'f-sf s-rule w1' });
+        ex += c.w + 18;
+        if (i !== 4 && i !== 7) S.text(ex - 13, y + 14, '→', { cls: 't-xs t-dim' }, q);
+        return c;
+      });
+      row(q, 486, 'get_js_content: 最初の script 要素の first_child の Text。script が 2 つあっても最初の 1 つだけ', 't-xs t-dim');
+      row(q, 504, 'Text が無ければ ""（空の Program）。dom は Document の Rc<RefCell<Node>> の clone', 't-xs t-dim');
+      q = grp();       // 段階3
+      S.text(600, 400, 'Chromium（第10章）', { cls: 't-xs t-dim' }, q);
+      S.text(780, 400, 'saba', { cls: 't-xs t-dim' }, q);
+      [['<script> に出会うと', 'パーサを止めて取得・実行', 'DOM が全部できてから 1 回'], ['その後', 'イベントループが何度も走らせる', '二度と走らない'], ['クリック', 'ハンドラ（JS）を呼ぶ', 'Page::clicked が href を返す'], ['スレッド', 'メイン＋ Worker、別プロセス', '1 スレッド（Wasabi OS）']].forEach(([a, b, c], k) => {
+        const y = 420 + k * 22;
+        S.text(490, y, a, { cls: 't-xs t-b' }, q);
+        S.text(600, y, b, { cls: 't-xs' }, q);
+        S.text(780, y, c, { cls: 't-xs' }, q);
+      });
+      xlink(q, 490, 520, '10-browser.html#s2.4', '第10章 場面2 <script> で止まる');
+      xlink(q, 700, 520, '10-browser.html#s5.3', '第10章 場面5 イベントループ');
+      q = grp();       // 段階4
+      S.text(600, 400, 'V8（第10章 場面5）', { cls: 't-xs t-dim' }, q);
+      S.text(790, 400, 'saba', { cls: 't-xs t-dim' }, q);
+      [['実行の形', 'バイトコード → JIT で機械語', '構文木を再帰で歩く eval'], ['値の型', 'Smi の印と Map', 'enum RuntimeValue の札'], ['型の統計・最適化', '統計で推して決め打ち（脱最適化も）', '無い。値ごとに match'], ['大きさ', '桁違いに大きい', 'JS の 3 ファイルで 1,011 行']].forEach(([a, b, c], k) => {
+        const y = 420 + k * 22;
+        S.text(490, y, a, { cls: 't-xs t-b' }, q);
+        S.text(600, y, b, { cls: 't-xs' }, q);
+        S.text(790, y, c, { cls: 't-xs' }, q);
+      });
+      xlink(q, 490, 520, '10-browser.html#s5.1', '第10章 場面5 V8');
+      xlink(q, 640, 520, '26-kata.html#s4.3', '第26章 場面4 Smi と Map');
+      xlink(q, 790, 520, '28-compiler.html#s2', '第28章 場面2 実行前の型検査');
+      q = grp();       // 段階5
+      row(q, 400, 'この版に無いもの（字句・構文・評価のどこにも無い）', 't-xs t-dim');
+      let nx = 490, ny = 408;
+      ['if / for / while', 'オブジェクト・配列', 'クロージャ', 'イベント・setTimeout', 'イベントループ', '例外（try）', 'let / const', "'…' の文字列", '小数・負数', 'コメント', '* / % と比較'].forEach((s) => {
+        const w = chipW(s, 10, 6) + (/[^\x00-\x7f]/.test(s) ? 30 : 0);
+        if (nx + w > 944) { nx = 490; ny += 26; }
+        const c = chip(q, nx, ny, s, 'v', { fs: 10, h: 20, pad: 6, w, box: 'f-in s-rule w1' });
+        nx += c.w + 6;
+      });
+      row(q, ny + 44, 'token.rs 156: 知らない文字は unimplemented!。ast.rs 364: 関数の { が無ければ unimplemented!', 't-xs t-dim');
+      row(q, ny + 62, 'runtime.rs 351: 知らない関数は panic!、356: 引数の数が違えば assert!。ブラウザごと止まる', 't-xs t-dim');
+      row(q, ny + 80, 'if・for は予約語に無いので Identifier として読まれる。test.html の script にはどれも出てこない', 't-xs t-dim');
+      q = grp();       // 段階6
+      row(q, 400, '第IX部の道（各章へ）。下は各章で追った値', 't-xs t-dim');
+      let rx = 490;
+      st.road = S6_ROAD.map(([n, t, href, val], k) => {
+        const label = n + ' ' + t;
+        const w = chipW(label, 10, 4) + (/[^\x00-\x7f]/.test(t) ? 18 : 0);
+        const a = S.el('a', { href, 'aria-label': '第' + n + '章 ' + t }, q);
+        const c = chip(a, rx, 410, label, 'v', { fs: 10, h: 22, pad: 4, w, box: k === 5 ? 'f-sf s-x w15' : 'f-sf s-rule w1' });
+        c.t.setAttribute('class', 't-c t-mono t-b');
+        S.text(rx + w / 2, 448, val, { cls: 't-c t-xs t-dim' }, q);
+        if (k < 5) S.path('M' + (rx + w) + ',421 H' + (rx + w + 10), { cls: 'f-none s-dim w15', 'marker-end': mk('dim') }, q);
+        rx += w + 12;
+        return c;
+      });
+      row(q, 480, '第10章が Chromium で追った道（URL → HTTP → DOM → CSS → レイアウト → 描画 → JS）を、', 't-xs');
+      row(q, 498, 'テストを除いて 5,077 行の saba で、同じ test.html を追って歩いた（読んだのは要の行）', 't-xs');
+      xlink(q, 490, 524, '10-browser.html', '第10章 ブラウザ');
+      xlink(q, 944, 524, 'https://github.com/d0iasm/sababook', 'd0iasm/sababook（ch7/saba）', true);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      const which = i === 0 ? 0 : i === 1 ? 1 : i === 2 ? 0 : i === 3 ? 2 : i === 4 ? 3 : 0;
+      st.C.forEach((c, k) => S.fade(c.g, k === which));
+      if (which === 0) st.C[0].p.hl(...(i === 0 ? [1, 6] : i === 2 ? [2, 3] : [4, 5]));
+      st.G.forEach((q, k) => S.fade(q, k === i));
+      const T = [
+        ['receive_response(response): create_frame(response.body()) → DOM と CSSOM', 'execute_js() → この章。DOM の p#target の Text が替わる', 'set_layout_view() → LayoutView::new(dom, &style)（第35章）', 'paint_tree() → display_items（第35章）。JS の後なので最初から "Answer? 1 + 2 = 3"'],
+        ['dom ＝ frame.borrow().document()　← Document の Rc<RefCell<Node>>', 'js ＝ get_js_content(dom.clone()) ＝ "function add(a, b) {…"（166 文字）', 'JsLexer::new(js) → JsParser::new(lexer).parse_ast() → Program（文 3 つ）', 'JsRuntime::new(dom).execute(&ast) → 場面3〜5 の評価'],
+        ['Chromium: <script> でパーサが止まる → 取得・実行 → 再開（第10章 場面2 段階4）', 'Chromium: クリック・タイマー・応答のたびにイベントループが JS を呼ぶ', 'saba: DOM が全部できてから execute_js が 1 回。イベントループは無い', 'saba: クリックは Page::clicked がレイアウトの木から href を返す（第35章）'],
+        ['V8: 構文木 → バイトコード（Ignition）→ 熱い関数を機械語に（JIT）', 'V8: Smi の印と Map、型の統計で決め打ち（第26章 場面4）', 'saba: eval が Rc<Node> の木を再帰で歩く。バイトコードも機械語も無い', 'saba: 実行前の型検査（第28章 場面2）も型の統計も無く、値ごとに札を見る'],
+        ["token.rs 156: 知らない文字 → unimplemented!（タブ・'・< …）", 'token.rs: 予約語は 3 語。if・for は Identifier として読まれる', 'runtime.rs 351: 知らない関数 → panic!、356: 引数の数 → assert!', 'イベント・タイマー・例外・オブジェクトは、どのファイルにも無い'],
+        ['h1: draw_string(0xff0000, 5, 31, "My Browser!", XLarge)（第35章）', 'p.links: fill_rect(0x00ffff, 5, 111, 590, 20) と下線つきの 2 つのリンク', 'p#target: "Answer? 1 + 2 = 3"（17 字、136×20）。p.hidden の "none" は出ない', '31 URL と HTTP → 32 → 33 → 34 → 35 → 36。テストを除いて 5,077 行']
+      ];
+      showTrace(st.tr, T[i]);
+      st.pipe.forEach((b, k) => b.r.setAttribute('class', (i === 1 && k === 1) || (i === 5 && k === 3) ? 'f-sf s-x w2' : 'f-sf s-rule w1'));
+      st.side.textContent = '';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, tt = ctx.ts, pl = playing();
+      if (i === 0) {
+        // 7 秒で 1 周: 1.5 秒ずつ 4 つの手順を照らし、paint_tree で内容領域が描かれる。止めている人には描き終えた姿
+        const f = pl ? U.mod(tt, 7) : 6.5;
+        const k = Math.min(3, Math.floor(f / 1.5));
+        st.pipe.forEach((b, j) => b.r.setAttribute('class', j === k ? 'f-sf s-x w2' : 'f-sf s-rule w1'));
+        st.cont.style.display = k === 3 ? '' : 'none';
+        st.winState.textContent = ['create_frame: DOM と CSSOM を作る（画面はまだ白いまま）', 'execute_js: p#target の Text が "Answer? 1 + 2 = 3" に（画面はまだ白いまま）', 'set_layout_view: 箱の大きさと位置を決める（画面はまだ白いまま）', 'paint_tree → app.rs が描く。最初から "Answer? 1 + 2 = 3"'][k];
+      } else {
+        st.cont.style.display = '';
+        st.winState.textContent = i === 1 ? 'execute_js の後、set_layout_view と paint_tree がこの画面を作る' : '';
+      }
+      if (i === 1) {
+        const f = pl ? Math.min(tt, 5) : 5;
+        st.exChips.forEach((c, k) => { c.g.style.display = f >= k * 0.55 ? '' : 'none'; c.set(f >= k * 0.55 && f < (k + 1) * 0.55 ? 'cur' : ''); });
+      }
+    }
+  };
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第IX部 ブラウザを読む ／ 第36章',
+      title: 'JavaScript エンジン',
+      home: '../index.html',
+      prev: { href: '35-saba-layout.html', title: 'レイアウトと描画' },
+      legend: [{ c: 'd', label: 'データ（文字列・トークン・値・ノード）' }, { c: 'x', label: '注目・変化' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>

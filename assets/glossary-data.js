@@ -1,7 +1,7 @@
-/* 用語索引のデータ。tools/build-glossary.mjs が全章の用語表から作る（手で直さない）。作成 2026-11-01、用語 294 件 */
+/* 用語索引のデータ。tools/build-glossary.mjs が全章の用語表から作る（手で直さない）。作成 2026-11-14、用語 354 件 */
 window.YT_GLOSSARY = {
- "built": "2026-11-01",
- "total": 294,
+ "built": "2026-11-14",
+ "total": 354,
  "chapters": [
   {
    "n": 1,
@@ -2034,6 +2034,420 @@ window.YT_GLOSSARY = {
      "k": "分割借用",
      "d": "同じ構造体でも別の欄なら &amp;mut を同時に取れる規則。joypad と cpu.interrupts を同時に渡せる理由。全体を &amp;mut で渡すと E0499。",
      "c": ""
+    }
+   ]
+  },
+  {
+   "n": 31,
+   "file": "31-saba-http.html",
+   "title": "URL と HTTP",
+   "part": "IX",
+   "partTitle": "ブラウザを読む",
+   "terms": [
+    {
+     "t": "クレート（crate）",
+     "k": "クレート（crate）",
+     "d": "Rust のコンパイルの単位。saba（実行ファイル）、saba_core・net_wasabi・ui_wasabi（path で指す）、noli（git で取る）。Cargo.toml の [dependencies] と features で結ぶ。",
+     "c": ""
+    },
+    {
+     "t": "#![no_std] と alloc",
+     "k": "#![no_std] と alloc",
+     "d": "std を使わない宣言。core は常に使え、ヒープがあれば extern crate alloc で String・Vec・Rc・format! が使える。Wasabi の上で動く saba の全クレートに付く。",
+     "c": ""
+    },
+    {
+     "t": "noli",
+     "k": "noli",
+     "d": "hikalium/wasabi の for_saba ブランチにある、Wasabi の上のプログラム用のライブラリ。lookup_host・TcpStream・Window・Api::read_key・entry_point!。第9章 場面3 のシステムコールの入口に当たる。",
+     "c": ""
+    },
+    {
+     "t": "関数ポインタ型",
+     "k": "関数ポインタ型",
+     "d": "fn(String) -&gt; Result&lt;HttpResponse, Error&gt; のように「この形の関数」を値として受け渡す型。外の変数を捕まえないのでクロージャ（第30章 場面5）より単純。ui_wasabi が net_wasabi を知らずに済む。",
+     "c": ""
+    },
+    {
+     "t": "Rc&lt;RefCell&lt;T&gt;&gt;",
+     "k": "Rc<RefCell<T>>",
+     "d": "持ち主を数えて共有する Rc と、借用を実行時に検査して中を書き換えられる RefCell の組。Browser・Page・WasabiUI がこの形。仕組みは第33章 場面2。",
+     "c": ""
+    },
+    {
+     "t": "Url",
+     "k": "Url",
+     "d": "url・host・port・path・searchpart の 5 つの String。例は host \"host.test\"、port \"8000\"、path \"test.html\"（先頭の / なし）、searchpart \"\"。parse は Result&lt;Self, String&gt;。",
+     "c": "d"
+    },
+    {
+     "t": "&amp;str と String",
+     "k": "&str と String",
+     "d": "&amp;str は文字列を借りた断片（先頭の位置と長さ）、String はヒープの持ち主。splitn の各片や [..i] は &amp;str で、to_string() で String に写す。",
+     "c": ""
+    },
+    {
+     "t": "splitn・split_once",
+     "k": "splitn・split_once",
+     "d": "splitn(n, pat) は最大 n 個に切る反復子、split_once(pat) は最初の pat の前後の組を Option で返す。url.rs と http.rs の切り分けはこの 2 つと find・split で書かれている。",
+     "c": ""
+    },
+    {
+     "t": "Error",
+     "k": "Error",
+     "d": "saba_core の enum。Network・UnexpectedInput・InvalidUI・Other（各 String を持つ）。Url::parse の Err(String) は main.rs で UnexpectedInput に包み直す。",
+     "c": "x"
+    },
+    {
+     "t": "HttpResponse と Connection: close",
+     "k": "HttpResponse と Connection: close",
+     "d": "version・status_code（u32）・reason・headers（Vec&lt;Header&gt;）・body の 5 欄。要求に close を付けたのでサーバーは応答の後に接続を閉じ（RFC 9112 §9.6）、saba は Content-Length を読まず、read が 0 を返すまでを本文にする。",
+     "c": "d"
+    }
+   ]
+  },
+  {
+   "n": 32,
+   "file": "32-saba-tokenizer.html",
+   "title": "HTML トークナイザ",
+   "part": "IX",
+   "partTitle": "ブラウザを読む",
+   "terms": [
+    {
+     "t": "トークナイザ",
+     "k": "トークナイザ",
+     "d": "文字の列を状態機械でトークンに切る部品。saba では token.rs（509 行）の HtmlTokenizer。木を作るのはパーサ（第33章）。",
+     "c": ""
+    },
+    {
+     "t": "HtmlToken",
+     "k": "HtmlToken",
+     "d": "トークンの enum。StartTag { tag, self_closing, attributes }・EndTag { tag }・Char(char)・Eof の 4 種。仕様の DOCTYPE・コメント・処理命令は無い。",
+     "c": "d"
+    },
+    {
+     "t": "状態機械と State",
+     "k": "状態機械と State",
+     "d": "読んだ文字と「いまの状態」で次の動作が決まる機械。saba の State は 18 の場合（仕様の名前 17 ＋ TemporaryBuffer）。HTML Standard の tokenizer は 84 状態（2026 年 11 月）。",
+     "c": "x"
+    },
+    {
+     "t": "reconsume",
+     "k": "reconsume",
+     "d": "いま読んだ文字を次の状態でもう一度読むこと。saba は旗を立て、次の周で input[pos − 1] を返す。test.html では 842 回の消費のうち 32 回。",
+     "c": ""
+    },
+    {
+     "t": "開始タグ・終了タグ・自己終了",
+     "k": "開始タグ・終了タグ・自己終了",
+     "d": "&lt;p&gt;・&lt;/p&gt;・&lt;img /&gt;。名前は小文字に直す。自己終了は self_closing の旗になるが、この版のパーサは読まない。",
+     "c": ""
+    },
+    {
+     "t": "属性（Attribute）",
+     "k": "属性（Attribute）",
+     "d": "開始タグの name=\"value\" の組。attribute.rs の struct Attribute { name, value }。名前は小文字化、値はそのまま。引用符は二重・単・無しの 3 通り。",
+     "c": ""
+    },
+    {
+     "t": "Iterator トレイト",
+     "k": "Iterator トレイト",
+     "d": "関連型 Item と fn next(&amp;mut self) -&gt; Option&lt;Item&gt; を持つ Rust の標準トレイト。実装すると呼ぶ側は next() を繰り返すだけでよい。",
+     "c": ""
+    },
+    {
+     "t": "Vec&lt;char&gt;",
+     "k": "Vec<char>",
+     "d": "文字（Unicode のスカラ値、1 つ 4 バイト）の伸びる配列。String（UTF-8 のバイト列）から chars().collect() で作る。添字で 1 文字を引ける。",
+     "c": ""
+    },
+    {
+     "t": "take（Option を取り出して None に）",
+     "k": "take（Option を取り出して None に）",
+     "d": "Option の中身を出して、元を None に戻す操作。saba は as_ref().cloned() と ＝ None で手書きしている。std の Option::take も同じ。",
+     "c": ""
+    },
+    {
+     "t": "EOF",
+     "k": "EOF",
+     "d": "入力の終わり。仕様では各状態が EOF を受けて EOF トークンを出す。saba は next() の冒頭で None を返し、Eof トークンは返らないと読める。",
+     "c": ""
+    }
+   ]
+  },
+  {
+   "n": 33,
+   "file": "33-saba-dom.html",
+   "title": "HTML パーサと DOM",
+   "part": "IX",
+   "partTitle": "ブラウザを読む",
+   "terms": [
+    {
+     "t": "DOM（saba の Node）",
+     "k": "DOM（saba の Node）",
+     "d": "文書の木。saba では struct Node を Rc&lt;RefCell&lt;Node&gt;&gt; で包んだもの。test.html から 21 個（Document 1・Element 12・Text 8）。",
+     "c": "d"
+    },
+    {
+     "t": "NodeKind と ElementKind",
+     "k": "NodeKind と ElementKind",
+     "d": "ノードの種類 3 つ（Document・Element(Element)・Text(String)）と、要素の種類 9 つ（html head style script body p h1 h2 a）。",
+     "c": ""
+    },
+    {
+     "t": "Rc（参照カウント）",
+     "k": "Rc（参照カウント）",
+     "d": "持ち主を数える単一スレッド用のポインタ。clone で数が 1 増え、最後の 1 つが消えると値を解放する。Rc::strong_count で読める。",
+     "c": ""
+    },
+    {
+     "t": "RefCell（実行時の借用検査）",
+     "k": "RefCell（実行時の借用検査）",
+     "d": "borrow()（読む）と borrow_mut()（書く）で中身を貸し、「書く借用は 1 つ、読むと同時は不可」を実行時に確かめる。破れば panic、try_borrow なら Err。",
+     "c": ""
+    },
+    {
+     "t": "Weak（弱い参照）",
+     "k": "Weak（弱い参照）",
+     "d": "数えない参照。Rc::downgrade で作り、upgrade() が Option&lt;Rc&gt; を返す。parent・previous_sibling・last_child に使い、参照の輪を断つ。",
+     "c": ""
+    },
+    {
+     "t": "挿入モード",
+     "k": "挿入モード",
+     "d": "パーサの状態。saba は enum の 9 つ、HTML Standard は 21（2026 年 11 月時点）。original_insertion_mode は Text モードからの戻り先。",
+     "c": ""
+    },
+    {
+     "t": "開いている要素のスタック",
+     "k": "開いている要素のスタック",
+     "d": "Vec&lt;Rc&lt;RefCell&lt;Node&gt;&gt;&gt;。末尾が current。saba は Text ノードも積む。",
+     "c": ""
+    },
+    {
+     "t": "insert_element と insert_char",
+     "k": "insert_element と insert_char",
+     "d": "要素・文字を current の子として木に付け、スタックに push する関数。文字は、Text が無いときの '\\n' と ' ' を捨てる。",
+     "c": ""
+    },
+    {
+     "t": "pop_until",
+     "k": "pop_until",
+     "d": "その種類に当たるまで pop する。無ければ assert! で panic。InBody で pop_until する終了タグは p・h1・h2・a と body。",
+     "c": ""
+    },
+    {
+     "t": "Window と document",
+     "k": "Window と document",
+     "d": "木の根 Document を持つ構造体。construct_tree が Rc&lt;RefCell&lt;Window&gt;&gt; を返し、Page が frame として持つ。",
+     "c": ""
+    }
+   ]
+  },
+  {
+   "n": 34,
+   "file": "34-saba-css.html",
+   "title": "CSS とスタイル",
+   "part": "IX",
+   "partTitle": "ブラウザを読む",
+   "terms": [
+    {
+     "t": "CssToken",
+     "k": "CssToken",
+     "d": "CSS の字句。saba は 12 種（HashToken・Delim・Number・Colon・SemiColon・括弧 4 種・Ident・StringToken・AtKeyword）。CSS Syntax 3 は 25 種。#title は HashToken(\"#title\")。",
+     "c": "d"
+    },
+    {
+     "t": "StyleSheet・QualifiedRule",
+     "k": "StyleSheet・QualifiedRule",
+     "d": "CSSOM の saba 版。StyleSheet は rules: Vec&lt;QualifiedRule&gt;、QualifiedRule は selector と declarations。test.html では規則 4 つ、宣言は各 1 つ。",
+     "c": ""
+    },
+    {
+     "t": "Declaration・ComponentValue",
+     "k": "Declaration・ComponentValue",
+     "d": "プロパティ名（String）と値。値の型 ComponentValue は type で CssToken の別名にしてあり、トークン 1 個だけ（仕様は入れ子を持てる）。",
+     "c": ""
+    },
+    {
+     "t": "Selector",
+     "k": "Selector",
+     "d": "TypeSelector(String)・ClassSelector(String)・IdSelector(String)・UnknownSelector の enum。Selectors 4 の単純セレクタのうち 3 種。",
+     "c": ""
+    },
+    {
+     "t": "Peekable",
+     "k": "Peekable",
+     "d": "反復子を包み、次の要素を消費せずに見る peek() を足す型（core::iter）。CssParser は t: Peekable&lt;CssTokenizer&gt; を持つ。",
+     "c": ""
+    },
+    {
+     "t": "カスケード（saba）",
+     "k": "カスケード（saba）",
+     "d": "当たった規則の宣言を書かれた順に上書きすること。出所・詳細度・!important は見ない。実際の CSS は出所 → 詳細度 → 書かれた順。",
+     "c": "x"
+    },
+    {
+     "t": "ComputedStyle",
+     "k": "ComputedStyle",
+     "d": "ノードごとの計算済みの値。7 欄（background_color・color・display・font_size・text_decoration・height・width）がすべて Option で、埋めてから読む。",
+     "c": ""
+    },
+    {
+     "t": "defaulting",
+     "k": "defaulting",
+     "d": "規則で決まらなかった欄を埋める手順。親の値が初期値と違えば写し（継承の近似）、残りを初期値（白・黒・要素の種類で決まる display・font_size・text_decoration、0.0）で埋める。",
+     "c": ""
+    },
+    {
+     "t": "Color",
+     "k": "Color",
+     "d": "name: Option&lt;String&gt; と code: String（#rrggbb）。from_name と from_code は 18 色だけを受け付け、外れると Err。code_u32 で 0x0000ff などの数に。",
+     "c": ""
+    },
+    {
+     "t": "DisplayType・FontSize",
+     "k": "DisplayType・FontSize",
+     "d": "display の値 Block・Inline・DisplayNone と、文字の大きさ Medium・XLarge（h2）・XXLarge（h1）。どちらも Copy の小さな enum。",
+     "c": ""
+    }
+   ]
+  },
+  {
+   "n": 35,
+   "file": "35-saba-layout.html",
+   "title": "レイアウトと描画",
+   "part": "IX",
+   "partTitle": "ブラウザを読む",
+   "terms": [
+    {
+     "t": "LayoutObject",
+     "k": "LayoutObject",
+     "d": "レイアウトの木の節。kind（Block・Inline・Text）、DOM ノードへの Rc、子・兄弟・親（Weak）、計算済みスタイル、位置、大きさを持つ。",
+     "c": "d"
+    },
+    {
+     "t": "レイアウトツリー",
+     "k": "レイアウトツリー",
+     "d": "描くノードだけの木。saba では body から下で display が none でないもの。test.html で 12 個。Chromium のレイアウトツリー（第10章）に相当。",
+     "c": ""
+    },
+    {
+     "t": "CONTENT_AREA",
+     "k": "CONTENT_AREA",
+     "d": "内容領域。幅 600 − 5 × 2 ＝ 590、高さ 400 − 24 − 26 − 5 × 2 ＝ 340。レイアウト座標の原点はその左上。",
+     "c": ""
+    },
+    {
+     "t": "CHAR_WIDTH・CHAR_HEIGHT_WITH_PADDING",
+     "k": "CHAR_WIDTH・CHAR_HEIGHT_WITH_PADDING",
+     "d": "字の升目 8 × 16 と、行の高さ 20（16 ＋ 4）。XLarge は 2 倍、XXLarge は 3 倍。幅は 8 × 倍率 × バイト数。",
+     "c": ""
+    },
+    {
+     "t": "compute_size",
+     "k": "compute_size",
+     "d": "大きさを決める。Block は幅 ＝ 親の幅、高さ ＝ 子の和（横並びは最初だけ）。Inline は子の和。Text はバイト数から、590 を超えたら行を増やす。",
+     "c": ""
+    },
+    {
+     "t": "compute_position",
+     "k": "compute_position",
+     "d": "位置を決める。(自分の kind, 前の兄弟の kind) の match で、Block が絡めば兄の下へ、Inline どうしは兄の右へ、最初の子は親の位置。",
+     "c": ""
+    },
+    {
+     "t": "DisplayItem",
+     "k": "DisplayItem",
+     "d": "描画命令の enum。Rect { style, layout_point, layout_size }（Block の要素の背景）と Text { text, style, layout_point }（折り返し行ごと）。test.html で 10 個。",
+     "c": "d"
+    },
+    {
+     "t": "noli の Window",
+     "k": "noli の Window",
+     "d": "Wasabi OS の窓。fill_rect・draw_string・draw_line で窓のシートに描き、flush で画面へ。タイトルバー 24 は noli が描き、座標をその分ずらす。",
+     "c": ""
+    },
+    {
+     "t": "InputMode",
+     "k": "InputMode",
+     "d": "UI の状態。Normal（キーを捨てる）と Editing（ツールバーをクリックした後。キーで URL を編み、Enter で読み込む）。",
+     "c": ""
+    },
+    {
+     "t": "find_node_by_position",
+     "k": "find_node_by_position",
+     "d": "ヒットテスト。内容領域の座標が入る箱を、子・兄弟を先に探して最も奥のものを返す。親が a なら href へ。",
+     "c": ""
+    }
+   ]
+  },
+  {
+   "n": 36,
+   "file": "36-saba-js.html",
+   "title": "JavaScript エンジン",
+   "part": "IX",
+   "partTitle": "ブラウザを読む",
+   "terms": [
+    {
+     "t": "JsLexer と Token",
+     "k": "JsLexer と Token",
+     "d": "文字の列を Punctuator(char)・Number(u64)・Identifier・Keyword・StringLiteral の 5 種のトークンに切る反復子（impl Iterator）。test.html の script は 37 個。",
+     "c": "d"
+    },
+    {
+     "t": "予約語（RESERVED_WORDS）",
+     "k": "予約語（RESERVED_WORDS）",
+     "d": "var・function・return の 3 語。先頭一致で見る。ECMAScript の ReservedWord は 38 語（2026 年 11 月閲覧）。",
+     "c": ""
+    },
+    {
+     "t": "構文木（Node・Program）",
+     "k": "構文木（Node・Program）",
+     "d": "13 種の enum Node を Rc&lt;Node&gt; でつないだ木。Program.body は文の列（例では 3 つ）。作った後で書き換えないので RefCell は無い。",
+     "c": ""
+    },
+    {
+     "t": "再帰下降",
+     "k": "再帰下降",
+     "d": "文法の規則ごとに関数を 1 つ書き、互いに呼び合って木を組む解析法。parse_ast → source_element → statement → 式の関数の順に呼ぶ。",
+     "c": ""
+    },
+    {
+     "t": "優先順位（呼び出しの深さ）",
+     "k": "優先順位（呼び出しの深さ）",
+     "d": "assignment → additive → left_hand_side → member → primary の順に呼び、深い関数ほど強く結び付く。右辺が assignment_expression なので右結合、と読める。",
+     "c": ""
+    },
+    {
+     "t": "RuntimeValue",
+     "k": "RuntimeValue",
+     "d": "評価の結果。Number(u64)・StringLiteral(String)・HtmlElement { object, property } の 3 種の札を持つ enum。値が型を持ち歩く動的な型。",
+     "c": "d"
+    },
+    {
+     "t": "Environment",
+     "k": "Environment",
+     "d": "variables: Vec&lt;(String, Option&lt;RuntimeValue&gt;)&gt; と outer。get_variable は線形探索し、無ければ outer へ。関数の呼び出しごとに新しく作る。",
+     "c": ""
+    },
+    {
+     "t": "関数呼び出し",
+     "k": "関数呼び出し",
+     "d": "functions の Vec から名前（文字列）で探し、引数を新しい環境に add_variable し、BlockStatement の最後の文の値（ReturnStatement の argument）を返す。",
+     "c": ""
+    },
+    {
+     "t": "ブラウザ API（call_browser_api）",
+     "k": "ブラウザ API（call_browser_api）",
+     "d": "callee が \"document.getElementById\" という文字列に等しければ get_element_by_id を呼ぶ。この版の唯一の API。",
+     "c": ""
+    },
+    {
+     "t": "HtmlElement と textContent",
+     "k": "HtmlElement と textContent",
+     "d": "DOM のノードへの Rc&lt;RefCell&lt;Node&gt;&gt; と property を持つ値。property が \"textContent\" のとき、代入が set_first_child で Text ノードを差し替える。",
+     "c": "x"
     }
    ]
   }

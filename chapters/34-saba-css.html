@@ -1,0 +1,1764 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>CSS とスタイル — YouTubeが見えるまで</title>
+<meta name="description" content="Rust で書かれた小さなブラウザ saba の CSS を読む。style 要素の文字列をトークンに切り、規則の木（CSSOM）に組み、セレクタで要素を選び、書かれた順に上書きし、親の値と初期値で埋めて、各ノードの ComputedStyle ができるまでを、test.html の具体的な値を入れて 1 行ずつ追う。">
+<meta property="og:title" content="CSS とスタイル — YouTubeが見えるまで">
+<meta property="og:description" content="Rust で書かれた小さなブラウザ saba の CSS を読む。style 要素の文字列が各ノードの ComputedStyle になるまでを、具体的な値を入れて 1 行ずつ追う。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+  svg a { cursor: pointer; }
+  svg a:hover text, svg a:focus-visible text { text-decoration: underline; text-underline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第IX部 ブラウザを読む ／ 第34章 ／ 全36章</p>
+    <h1 id="h-s0">CSS とスタイル</h1>
+    <p class="standfirst">第33章で DOM ができ、style 要素の中の CSS の文字列が取り出せるようになった。この章はその文字列が、各ノードの ComputedStyle（色・背景・表示の種類・文字の大きさ・下線）になるまでを追う。saba の CSS の処理はテストを除いて約 920 行（layout_object.rs は該当部分だけ数えた）で、プロパティは 3 つ、色は 18、セレクタは 3 種に絞られている。カスケードは書かれた順の上書き、継承は「初期値と違えば写す」の近似で、場面ごとに実際の CSS と対比する。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>字句に切る</a><p>style の Text を 1 文字ずつ見て 12 種の CssToken にする。空白は捨てる。171 文字 → 31 個。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>規則の木（CSSOM）</a><p>Peekable で先読みしながら、規則 → セレクタ → 宣言と降りる再帰下降。4 つの QualifiedRule。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>セレクタ</a><p>型・クラス・ID の 3 種と Unknown。#title は IdSelector("title")。is_node_selected で要素と比べる。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>当てはめる</a><p>当たった規則を書かれた順に上書き。色は 18 色の表、display は 3 値。#0000ff → blue。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>継承と初期値</a><p>親の値が初期値と違えば写し、残りを初期値で埋める。h1 の Text は red と XXLarge を受け取る。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>扱わないものと第10章との距離</a><p>body 以下の 13 ノードの ComputedStyle の表と、この版に無いもの。値は次の章のレイアウトへ。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の章（レイアウトと描画）へ。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードは <a href="https://github.com/d0iasm/sababook">d0iasm/sababook</a>（Asami Doi、MIT ライセンス）の ch7/saba から引用した（2025 年 1 月 6 日のコミット c87dc64。行番号は元のファイルのもので、長い行は折り返し、省いた行は … で示した。「詰めた」と書いた板は空行を落とし、複数の行を 1 行に並べている。板の中で // に続く日本語は教材の注記で、元のコメントは cssom.rs の 111〜113 行と 256 行だけ引いた）。このリポジトリは書籍『［作って学ぶ］ブラウザのしくみ』のサンプルコードだが、この章の説明はコードと、Web で公開されている仕様（CSS Syntax 3・Selectors 4・CSS Cascade・CSS Fonts 4・CSS Text Decoration 3・CSSOM・HTML Standard。2026 年 11 月に閲覧）だけから書き、書籍の文章は使っていない。この教材の担当は saba をビルドも実行もしておらず、トークンや値の列はコードの手順を手で追ったもの。図は模式図。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 字句に切る ================= -->
+<section class="scene sc-anim" id="s1" data-tab="字句" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>字句に切る — CssTokenizer</h2>
+    <p class="sh-meta"><span class="chip">css/token.rs</span><span class="chip">171 文字</span><span class="chip">31 トークン</span><span class="chip">match c</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">第33章の木では、style 要素の下に CSS の文字列が Text ノードとして入っている。saba はその文字列を取り出し、1 文字ずつ見て CssToken の列に切る。空白と改行はここで捨てる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">next() が 1 回に 1 トークンを返す Iterator の形は、<a class="xref" href="32-saba-tokenizer.html#s1">第32章 場面1</a>の HTML のトークナイザと同じ。違いは状態機械が無いこと。CSS の字句は先頭の数文字で種類が決まるため、match の腕と consume_* の小さな関数で足りる。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="dom/api.rs と css/token.rs のコード、style の Text の先頭 32 文字と pos の位置、出てきた 7 つのトークン、段階ごとの補足"></svg></div>
+    <figcaption>図1　左は段階ごとのコード（dom/api.rs と css/token.rs）。右上は style の Text の先頭 32 文字（␣ は空白、↵ は改行）と pos の位置、その下が next() の返すトークン。右下は段階ごとの補足。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 規則の木 ================= -->
+<section class="scene sc-anim" id="s2" data-tab="規則" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>規則の木 — CssParser と CSSOM</h2>
+    <p class="sh-meta"><span class="chip">css/cssom.rs</span><span class="chip">Peekable</span><span class="chip">4 規則</span><span class="chip">再帰下降</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">トークンの列を、規則 → セレクタと宣言 → プロパティと値、と降りながら構造体に組む。先読み（peek）で次のトークンを見てから消費を決める、再帰下降のパーサである。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">saba の関数名は CSS Syntax 3 の構文解析の節の名前で、doc コメントに節の URL がある。現行の版（2026 年 10 月）は入れ子の規則のために書き直され、規則の列・宣言の列は stylesheet の中身・ブロックの中身に変わった。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="css/cssom.rs のコード、呼び出しの入れ子、できあがる StyleSheet の 4 つの規則"></svg></div>
+    <figcaption>図2　左は段階ごとのコード（css/cssom.rs）。右上は関数の呼び出しの入れ子（いま動いている所を照らす）、右下は組み上がる StyleSheet（4 つの QualifiedRule）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 セレクタ ================= -->
+<section class="scene sc-anim" id="s3" data-tab="セレクタ" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>セレクタ — 3 種と is_node_selected</h2>
+    <p class="sh-meta"><span class="chip">enum Selector</span><span class="chip">#id .class 型</span><span class="chip">layout_object.rs 307〜336</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">規則がどの要素に当たるかを決めるのがセレクタ。saba は型・クラス・ID の 3 種だけを持ち、要素の名前と class・id 属性の値を文字列として比べる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Selectors 4 では、セレクタは単純セレクタ（型・クラス・ID・属性・擬似クラスなど）、それを並べた複合セレクタ、結合子でつないだ複雑セレクタ、コンマで並べたリストの 4 段。saba にあるのは単純セレクタ 3 種だけで、並べる・つなぐ・列挙するの 3 つは無い。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="css/cssom.rs と layout_object.rs のコード、セレクタの 4 つの形、test.html の要素との照合の表"></svg></div>
+    <figcaption>図3　左は段階ごとのコード（css/cssom.rs と layout/layout_object.rs）。右上はトークンからできる Selector、右下は 4 つの規則と test.html の要素の照合（✓ が true）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 当てはめる ================= -->
+<section class="scene sc-anim" id="s4" data-tab="当てはめ" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>当てはめる — 上書きのカスケード</h2>
+    <p class="sh-meta"><span class="chip">create_layout_object</span><span class="chip">cascading_style</span><span class="chip">Color 18 色</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">DOM の各ノードに規則を当てはめて ComputedStyle を作る。saba のカスケードは、当たった規則を書かれた順に上書きするだけで、詳細度も出所も見ない。色は 18 色の表、display は 3 値。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">CSS Cascade の勝ち負けは、出所と !important → 詳細度 → 書かれた順で決まる（<a class="xref" href="10-browser.html#s3.2">第10章 場面3</a>）。saba は同じ文書の style 要素 1 つしか読まないので出所は 1 つで、詳細度も見ないため、残るのは書かれた順だけになる。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="layout_object.rs と computed_style.rs のコード、p.first に規則を当てる流れ、Color の 18 色の表"></svg></div>
+    <figcaption>図4　左は段階ごとのコード（layout/layout_object.rs と layout/computed_style.rs）。右はノード（p.first・h1・p.hidden）に 4 つの規則を順に当てる流れと、できていく ComputedStyle。下は段階ごとの補足（18 色は実際の色）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 継承と初期値 ================= -->
+<section class="scene sc-anim" id="s5" data-tab="継承" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>継承と初期値 — defaulting</h2>
+    <p class="sh-meta"><span class="chip">ComputedStyle</span><span class="chip">Option</span><span class="chip">Copy と Clone</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">規則が触らなかった欄は、親の値を写すか初期値で埋める。saba は「親の値が初期値と違えば写す」の 1 規則で継承を近似し、残りを要素の種類から決めた初期値で埋める。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">CSS の継承はプロパティごとに決まる。color と font-size は継承し、background-color はしない。text-decoration は継承せず、装飾が箱の木を伝わる。saba はこの違いを「初期値と違えば写す」の 1 規則で近似する。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="computed_style.rs のコード、h1 とその Text の ComputedStyle の 7 欄が継承と初期値で埋まる図"></svg></div>
+    <figcaption>図5　左は段階ごとのコード。右は親と子の ComputedStyle（段階5 は p.links と a1、他は h1 とその Text）。規則で決まった欄、親から写した欄、初期値で埋めた欄を色分けする。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 扱わないもの ================= -->
+<section class="scene sc-anim" id="s6" data-tab="距離" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>この版が扱わないもの — 第10章との距離</h2>
+    <p class="sh-meta"><span class="chip">3 プロパティ</span><span class="chip">18 色</span><span class="chip">3 セレクタ</span><span class="chip">Vec&lt;QualifiedRule&gt;</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">test.html の body 以下の 13 ノードの ComputedStyle を並べ、この版が扱うものと扱わないものを数える。第10章の Chromium との距離を測り、値は次の章のレイアウトへ渡す。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Chromium の計算済みスタイルは DOM の各ノードに付き、全プロパティに値が入る（<a class="xref" href="10-browser.html#s3.2">第10章 場面3</a>）。saba の ComputedStyle は LayoutObject の欄で、木に入らない p.hidden の値は作られた後に捨てられる。大きさと位置は次の章。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="test.html の body 以下の 13 ノードの ComputedStyle の表と、この版が扱わないものの一覧"></svg></div>
+    <figcaption>図6　左は段階ごとのコード。右上はノードごとの ComputedStyle（色は実際の値。p.hidden は木に入らない）。右下は段階ごとに、扱うもの・読み飛ばすもの・止まるもの・第10章との対応。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — CSS とスタイル</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>style の Text（171 文字）を 1 文字ずつ match で分け、12 種の CssToken にする。空白と改行は捨て、31 個になる。対応しない文字は unimplemented! で止まる（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>CssParser は Peekable で次のトークンを先読みし、規則 → セレクタ → 宣言 → 値と降りる再帰下降。結果は StyleSheet { rules: Vec&lt;QualifiedRule&gt; }、test.html で 4 つ（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>セレクタは TypeSelector・ClassSelector・IdSelector と Unknown。a:hover は a、@ 規則は読み飛ばし、並べたセレクタは最後の 1 つが残る。照合は名前と属性の文字列の一致（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>当たった規則を書かれた順に上書きする。background-color・color・display だけを見て、色は 18 色の表で Color { name, code } に、display は 3 値に。失敗は黒・白・none に落ちる（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>defaulting は、親の値が初期値と違えば写し、残りを要素の種類から決めた初期値で埋める。h1 の Text は red と XXLarge、a の Text は Underline を受け取る（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>この版はプロパティ 3 つ・色 18・セレクタ 3 種。CSSOM の木は Vec、カスケードは順序だけ、継承は近似。各ノードの ComputedStyle は LayoutObject の欄として次の章へ（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th><i class="sw d"></i>CssToken</th><td>CSS の字句。saba は 12 種（HashToken・Delim・Number・Colon・SemiColon・括弧 4 種・Ident・StringToken・AtKeyword）。CSS Syntax 3 は 25 種。#title は HashToken("#title")。</td></tr>
+        <tr><th>StyleSheet・QualifiedRule</th><td>CSSOM の saba 版。StyleSheet は rules: Vec&lt;QualifiedRule&gt;、QualifiedRule は selector と declarations。test.html では規則 4 つ、宣言は各 1 つ。</td></tr>
+        <tr><th>Declaration・ComponentValue</th><td>プロパティ名（String）と値。値の型 ComponentValue は type で CssToken の別名にしてあり、トークン 1 個だけ（仕様は入れ子を持てる）。</td></tr>
+        <tr><th>Selector</th><td>TypeSelector(String)・ClassSelector(String)・IdSelector(String)・UnknownSelector の enum。Selectors 4 の単純セレクタのうち 3 種。</td></tr>
+        <tr><th>Peekable</th><td>反復子を包み、次の要素を消費せずに見る peek() を足す型（core::iter）。CssParser は t: Peekable&lt;CssTokenizer&gt; を持つ。</td></tr>
+        <tr><th><i class="sw x"></i>カスケード（saba）</th><td>当たった規則の宣言を書かれた順に上書きすること。出所・詳細度・!important は見ない。実際の CSS は出所 → 詳細度 → 書かれた順。</td></tr>
+        <tr><th>ComputedStyle</th><td>ノードごとの計算済みの値。7 欄（background_color・color・display・font_size・text_decoration・height・width）がすべて Option で、埋めてから読む。</td></tr>
+        <tr><th>defaulting</th><td>規則で決まらなかった欄を埋める手順。親の値が初期値と違えば写し（継承の近似）、残りを初期値（白・黒・要素の種類で決まる display・font_size・text_decoration、0.0）で埋める。</td></tr>
+        <tr><th>Color</th><td>name: Option&lt;String&gt; と code: String（#rrggbb）。from_name と from_code は 18 色だけを受け付け、外れると Err。code_u32 で 0x0000ff などの数に。</td></tr>
+        <tr><th>DisplayType・FontSize</th><td>display の値 Block・Inline・DisplayNone と、文字の大きさ Medium・XLarge（h2）・XXLarge（h1）。どちらも Copy の小さな enum。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <p class="note">読んだコードは <a href="https://github.com/d0iasm/sababook/tree/main/ch7/saba/saba_core/src/renderer">saba_core/src/renderer</a> の css/token.rs・css/cssom.rs・layout/computed_style.rs・layout/layout_object.rs。次の第35章では、この ComputedStyle から各ノードの大きさと位置を決め、画面に描く。</p>
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg, A = YT.anim;
+
+  /* ---------- この章で使う部品（第30章と同じ作り） ---------- */
+
+  const op = (el, v) => { el.style.opacity = v; };
+  const playing = () => YT.motion.playing;
+  const KW = /\b(fn|let|mut|pub|struct|impl|use|mod|const|match|if|else|for|in|loop|while|break|continue|return|move|self|Self|crate|as|dyn|ref|where|enum|type|true|false)\b/g;
+
+  /* 等幅のコードの 1 行。予約語は太字、// から後ろは薄い色。空白は詰めない（pre） */
+  function codeLine(parent, x, y, s, cls) {
+    const t = S.text(x, y, '', { cls: 't-mono pre ' + (cls || 't-sm') }, parent);
+    const ci = s.indexOf('//');
+    const code = ci >= 0 ? s.slice(0, ci) : s, cm = ci >= 0 ? s.slice(ci) : '';
+    let last = 0, m;
+    KW.lastIndex = 0;
+    while ((m = KW.exec(code))) {
+      if (m.index > last) S.el('tspan', { text: code.slice(last, m.index) }, t);
+      S.el('tspan', { text: m[0], cls: 't-b' }, t);
+      last = m.index + m[0].length;
+    }
+    if (last < code.length) S.el('tspan', { text: code.slice(last) }, t);
+    if (cm) S.el('tspan', { text: cm, cls: 't-dim' }, t);
+    return t;
+  }
+  /* コードの板。lines は [行番号, 文字列]（行番号 null は折り返しの続き、'' は見出しの行）。
+     hl(a, b) で a〜b 行め（0 始まり）を照らす。hl() で消す */
+  function codePanel(parent, x, y, w, lines, opts) {
+    opts = opts || {};
+    const lh = opts.lh || 16, pad = 10;
+    const g = S.g({}, parent);
+    const h = pad * 2 + lines.length * lh + 2;
+    S.rect(x, y, w, h, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+    const band = S.rect(x + 3, y, w - 6, lh, { rx: 3, cls: 'f-x-soft', style: { display: 'none' } }, g);
+    const y0 = y + pad + 11;
+    lines.forEach(([ln, s], k) => {
+      const yy = y0 + k * lh;
+      if (ln === '') { S.text(x + pad, yy, s, { cls: 't-xs t-dim' }, g); return; }
+      if (ln != null) S.text(x + pad + 26, yy, String(ln), { cls: 't-xs t-dim t-mono t-end' }, g);
+      codeLine(g, x + pad + 34, yy, s, opts.cls);
+    });
+    const api = {
+      g, h,
+      hl(a, b) {
+        if (a == null) { band.style.display = 'none'; return api; }
+        if (b == null) b = a;
+        S.attrs(band, { y: y0 + a * lh - 12, height: (b - a + 1) * lh });
+        band.style.display = '';
+        return api;
+      }
+    };
+    return api;
+  }
+  /* 枠と題（と小さな説明）の箱 */
+  function box(parent, x, y, w, h, title, sub, cls, tcls) {
+    const g = S.g({}, parent);
+    const r = S.rect(x, y, w, h, { rx: 5, cls: cls || 'f-sf s-rule w1' }, g);
+    const t = S.text(x + w / 2, y + (sub ? h / 2 - 2 : h / 2 + 4), title, { cls: 't-c ' + (tcls || 't-sm t-b') }, g);
+    const s = sub ? S.text(x + w / 2, y + h / 2 + 12, sub, { cls: 't-c t-xs t-dim' }, g) : null;
+    return { g, r, t, s, x, y, w, h };
+  }
+  /* 他の章の場面へのリンク（SVG の a） */
+  function xlink(parent, x, y, href, label, end) {
+    const a = S.el('a', { href, 'aria-label': label }, parent);
+    S.text(x, y, label + ' ↗', { cls: 't-xs t-mid' + (end ? ' t-end' : '') }, a);
+    return a;
+  }
+  /* 文の列（段階ごとの具体的な値の追跡） */
+  function trace(parent, x, y, lines, lh) {
+    return lines.map((s, k) => {
+      const cls = typeof s === 'string' ? 't-sm' : s[1];
+      return S.text(x, y + k * (lh || 20), typeof s === 'string' ? s : s[0], { cls: cls + ' pre' }, parent);
+    });
+  }
+  /* トークンの札（等幅・データの色）。x は左端、y は中央 */
+  function chip(parent, x, y, w, text, cls) {
+    const g = S.g({}, parent);
+    const r = S.rect(x, y - 11, w, 22, { rx: 4, cls: cls || 'f-d-soft s-d w1' }, g);
+    const t = S.text(x + w / 2, y + 4, text, { cls: 't-c t-xs t-mono t-b' }, g);
+    return { g, r, t, x, y, w };
+  }
+  /* 段階ごとに差し替える板を作る（fade/hide の g に codePanel を置く） */
+  function panelSet(svg) {
+    const C = [];
+    const add = (lines) => { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines); C.push({ g, p }); return p; };
+    add.list = C;
+    return add;
+  }
+  /* 実際の色（CSS の値そのものなので、テーマで変えない固定の色） */
+  const REAL = { red: '#ff0000', blue: '#0000ff', aqua: '#00ffff', white: '#ffffff', black: '#000000' };
+
+  /* ================================================================
+     場面1 字句に切る
+     例は style の Text の先頭 32 文字 "#title {\n      color: red;\n    }"。
+     Text は 171 文字、空白と改行は 76 文字、トークンは 31 個（token.rs の手順を手で追った値）
+     ================================================================ */
+  const S1_SRC = '#title {\n      color: red;\n    }';
+  // [表示, そのトークンの最後の文字の次の添字]
+  const S1_TOK = [['HashToken("#title")', 6], ['OpenCurly', 8], ['Ident("color")', 20], ['Colon', 21], ['Ident("red")', 25], ['SemiColon', 26], ['CloseCurly', 32]];
+  const S1_POS = [[492, 166, 134], [636, 166, 84], [730, 166, 104], [844, 166, 58], [492, 200, 92], [594, 200, 84], [688, 200, 90]];
+  const s1 = {
+    steps: [
+      { title: 'style の Text を取り出し、Vec<char> にする', text: '`get_style_content` は木から最初の `style` 要素を探し、その最初の子が Text ならその文字列を返す（無ければ空文字列）。`CssTokenizer::new(css)` は `css.chars().collect()` で**文字の配列**にし、`pos` を 0 に置く。test.html では 171 文字。' },
+      { title: '1 文字で決まる記号と、捨てる空白', text: '`next()` は `self.input[self.pos]` を 1 文字見て `match c` で分ける。`{` `}` `:` `;` `(` `)` は 1 文字でトークンが決まる。空白と改行は `pos += 1; continue` で捨てる。CSS Syntax 3 は whitespace-token を出すが、saba は作らない。' },
+      { title: '# は consume_ident_token で HashToken に', text: '`#` を見ると `consume_ident_token` が `#` と、続く英数字・`-`・`_` を 1 つの String に集める（`#title`）。集め終わった時点で `pos` は次の文字を指すので `pos -= 1` で戻し、`next()` の最後の `pos += 1` と打ち消す。`consume_*` の後の `-= 1` はこの癖。' },
+      { title: '英字は Ident、ピリオドは Delim', text: '英字か `_` で始まれば `Ident`。`color` `background-color` はこれで、`-` も識別子の文字。`.` は `Delim(\'.\')` という 1 文字のトークンで、`.first` は `Delim(\'.\')` と `Ident("first")` の 2 個に割れる。2 つをクラスのセレクタに結ぶのはパーサ（[[3:1|セレクタ]]）。' },
+      { title: '数・文字列・@', text: '数字で始まれば `consume_numeric_token` が `f64` に読む。`40px` は `Number(40.0)` と `Ident("px")` に割れる（仕様の dimension-token なら 1 個）。`"` か `\'` は閉じまで `StringToken`。`@` は次の 3 文字が識別子なら `AtKeyword`。' },
+      { title: '対応しない文字は unimplemented! で止まる', text: '最後の腕 `_ => unimplemented!(…)` に落ちる文字は `/`（コメント）`>` `*` `[` やタブで、そこで止まる、と読める。style の 171 文字にはどれも無く、空白 76 文字を捨てて **31 個**のトークンになる。CSS Syntax 3 のトークンは 25 種、saba は 12 種。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const panel = panelSet(svg);
+      st.C = panel.list;
+      panel([
+        ['', 'dom/api.rs（get_style_content。詰めた）'],
+        [57, 'pub fn get_style_content(root: Rc<RefCell<Node>>)'],
+        [null, '    -> String {'],
+        [58, '  let style_node = match get_target_element_node('],
+        [null, '      Some(root), ElementKind::Style) {'],
+        [59, '    Some(node) => node, None => return "".to_string(), };'],
+        [62, '  let text_node = match style_node.borrow().first_child() {'],
+        [63, '    Some(node) => node, None => return "".to_string(), };'],
+        [66, '  let content = match &text_node.borrow().kind() {'],
+        [67, '    NodeKind::Text(ref s) => s.clone(),'],
+        [68, '    _ => "".to_string(), };'],
+        [70, '  content'],
+        [71, '}'],
+        ['', 'css/token.rs（詰めた）'],
+        [33, 'pub struct CssTokenizer { pos: usize, input: Vec<char>, }'],
+        [39, '  pub fn new(css: String) -> Self {'],
+        [40, '    Self { pos: 0, input: css.chars().collect(), }'],
+        [44, '  }']
+      ]).hl(1, 12);
+      panel([
+        ['', 'css/token.rs（impl Iterator の next。詰めた）'],
+        [126, 'fn next(&mut self) -> Option<Self::Item> {'],
+        [127, '  loop {'],
+        [128, '    if self.pos >= self.input.len() { return None; }'],
+        [132, '    let c = self.input[self.pos];'],
+        [134, '    let token = match c {'],
+        [137, "      ',' => CssToken::Delim(','),"],
+        [138, "      '.' => CssToken::Delim('.'),"],
+        [139, "      ':' => CssToken::Colon,"],
+        [140, "      ';' => CssToken::SemiColon,"],
+        [141, "      '{' => CssToken::OpenCurly,"],
+        [142, "      '}' => CssToken::CloseCurly,"],
+        [143, "      ' ' | '\\n' => { self.pos += 1; continue; }"],
+        [null, '      …'],
+        [190, '      _ => { unimplemented!('],
+        [null, '        "char {} is not supported yet", c); } };'],
+        [195, '    self.pos += 1;'],
+        [196, '    return Some(token); } }']
+      ]).hl(6, 12);
+      panel([
+        ['', 'css/token.rs（next の # の腕。詰めた）'],
+        [156, "      '#' => {"],
+        [158, '        let value = self.consume_ident_token();'],
+        [159, '        self.pos -= 1;'],
+        [160, '        CssToken::HashToken(value) }'],
+        ['', 'css/token.rs（consume_ident_token。詰めた）'],
+        [103, 'fn consume_ident_token(&mut self) -> String {'],
+        [104, '  let mut s = String::new();'],
+        [105, '  s.push(self.input[self.pos]);'],
+        [107, '  loop {'],
+        [108, '    self.pos += 1;'],
+        [109, '    let c = self.input[self.pos];'],
+        [110, '    match c {'],
+        [111, "      'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' => {"],
+        [112, '        s.push(c); }'],
+        [114, '      _ => break, } }'],
+        [118, '  s }']
+      ]).hl(1, 4);
+      panel([
+        ['', 'css/token.rs（next の腕。詰めた）'],
+        [162, "      '-' => {"],
+        [164, '        let t = CssToken::Ident(self.consume_ident_token());'],
+        [165, '        self.pos -= 1; t }'],
+        [185, "      'a'..='z' | 'A'..='Z' | '_' => {"],
+        [186, '        let t = CssToken::Ident(self.consume_ident_token());'],
+        [187, '        self.pos -= 1; t }'],
+        ['', 'css/token.rs（テスト test_class_selector の期待値）'],
+        [253, 'let style = ".class { color: red; }".to_string();'],
+        [256, "  CssToken::Delim('.'),"],
+        [257, '  CssToken::Ident("class".to_string()),'],
+        [258, '  CssToken::OpenCurly,'],
+        [259, '  CssToken::Ident("color".to_string()),'],
+        [260, '  CssToken::Colon,'],
+        [261, '  CssToken::Ident("red".to_string()),'],
+        [262, '  CssToken::SemiColon,'],
+        [263, '  CssToken::CloseCurly,']
+      ]).hl(4, 6);
+      panel([
+        ['', 'css/token.rs（next の腕。詰めた）'],
+        [147, "      '\"' | '\\'' => {"],
+        [148, '        let value = self.consume_string_token();'],
+        [149, '        CssToken::StringToken(value) }'],
+        [151, "      '0'..='9' => {"],
+        [152, '        let t = CssToken::Number('],
+        [null, '          self.consume_numeric_token());'],
+        [153, '        self.pos -= 1; t }'],
+        [168, "      '@' => {"],
+        [172, '        if self.input[self.pos + 1].is_ascii_alphabetic()'],
+        [173, '          && self.input[self.pos + 2].is_alphanumeric()'],
+        [174, '          && self.input[self.pos + 3].is_alphanumeric() {'],
+        [177, '          self.pos += 1;'],
+        [178, '          let t = CssToken::AtKeyword('],
+        [null, '            self.consume_ident_token());'],
+        [179, '          self.pos -= 1; t'],
+        [181, "        } else { CssToken::Delim('@') } }"]
+      ]).hl(4, 7);
+      panel([
+        ['', 'css/token.rs（enum CssToken。doc コメントの行は省いた）'],
+        [5, 'pub enum CssToken {'],
+        [7, '  HashToken(String),'],
+        [9, '  Delim(char),'],
+        [11, '  Number(f64),'],
+        [13, '  Colon,'],
+        [15, '  SemiColon,'],
+        [17, '  OpenParenthesis,'],
+        [19, '  CloseParenthesis,'],
+        [21, '  OpenCurly,'],
+        [23, '  CloseCurly,'],
+        [25, '  Ident(String),'],
+        [27, '  StringToken(String),'],
+        [29, '  AtKeyword(String),'],
+        [30, '}'],
+        ['', 'css/token.rs（next の最後の腕。詰めた）'],
+        [190, '      _ => {'],
+        [191, '        unimplemented!("char {} is not supported yet", c); }']
+      ]).hl(16, 17);
+      st.tr = S.g({}, svg);
+      // 右上: 文字の配列と pos
+      const g = st.g = S.g({}, svg);
+      S.text(490, 40, 'input: Vec<char>（Text 171 文字の先頭 32 文字。␣ は空白、↵ は改行）', { cls: 't-xs t-dim' }, g);
+      st.cells = [...S1_SRC].map((c, k) => {
+        const x = 492 + k * 14;
+        const ws = c === ' ' || c === '\n';
+        const r = S.rect(x, 50, 13, 22, { rx: 2, cls: ws ? 'f-in s-rule w1' : 'f-sf s-rule w1' }, g);
+        const t = S.text(x + 6.5, 65, c === ' ' ? '␣' : c === '\n' ? '↵' : c, { cls: 't-c t-xs t-mono' + (ws ? ' t-dim' : '') }, g);
+        return { r, t, ws };
+      });
+      [0, 7, 15, 20, 22, 25, 31].forEach((k) => S.text(492 + k * 14 + 6.5, 86, String(k), { cls: 't-c t-xs t-dim t-mono' }, g));
+      st.cursor = S.rect(492, 48, 13, 26, { rx: 2, cls: 'f-none s-x w2' }, g);
+      st.posLbl = S.text(492, 106, 'pos ＝ 0', { cls: 't-sm t-mono t-x t-b' }, g);
+      st.stateLbl = S.text(490, 124, '', { cls: 't-xs pre' }, g);
+      S.text(490, 146, 'next() が返す CssToken（ためずに 1 個ずつパーサへ渡る）', { cls: 't-xs t-dim' }, g);
+      st.chips = S1_TOK.map(([name], k) => { const [x, y, w] = S1_POS[k]; return chip(g, x, y, w, name); });
+      // 右下: 段階ごとの補足（D[0]〜D[5]）
+      const D = st.D = [];
+      const det = () => { const gg = S.g({ cls: 'fade hide' }, svg); D.push(gg); return gg; };
+      let d = det();
+      S.text(490, 240, 'DOM（第33章）の中の style 要素と、その下の Text', { cls: 't-sm t-b' }, d);
+      const tb = (x, name, cls) => box(d, x, 254, 72, 24, name, null, cls || 'f-sf s-rule w1', 't-xs t-mono');
+      tb(490, 'Document'); tb(580, 'html'); tb(670, 'head'); const stb = tb(760, 'style', 'f-sf s-x w2');
+      [[562, 580], [652, 670], [742, 760]].forEach(([a, b]) => S.path(`M${a},266 H${b}`, { cls: 'f-none s-dim w1' }, d));
+      S.path('M796,278 V296', { cls: 'f-none s-dim w1' }, d);
+      box(d, 760, 296, 176, 24, 'Text（171 文字）', null, 'f-d-soft s-d w1', 't-xs t-mono t-b');
+      S.text(490, 348, 'get_target_element_node(Some(root), ElementKind::Style)', { cls: 't-xs t-mono' }, d);
+      S.text(490, 366, '→ 子・兄弟の順に探し、最初に見つかった style。2 つめの style は読まない', { cls: 't-xs' }, d);
+      S.text(490, 390, 'style.first_child() → NodeKind::Text(s) → s.clone()', { cls: 't-xs t-mono' }, d);
+      S.text(490, 408, '→ script の Text は読まない（get_js_content は第36章）', { cls: 't-xs' }, d);
+      S.text(490, 432, "CssTokenizer { pos: 0, input: ['#','t','i','t','l','e',' ','{','\\n', …] }", { cls: 't-xs t-mono pre' }, d);
+      S.text(490, 450, 'input.len() ＝ 171（char の数。ASCII だけなのでバイト数と同じ）', { cls: 't-xs' }, d);
+      void stb;
+      d = det();
+      S.text(490, 240, 'CSS Syntax 3 の「consume a token」と saba の next()', { cls: 't-sm t-b' }, d);
+      ["( ) : ; { }  → 1 文字でトークンが決まる 6 種。, と . は Delim(char)", "空白は ' ' と '\\n' だけ。タブは _ の腕で止まる（仕様の whitespace は LF・タブ・空白）", '仕様: 空白の並びを 1 つの whitespace-token にする。saba: トークンにしない', '仕様: /* … */ はトークンの前に捨てる。saba: / を知らないので止まる（と読める）', '仕様: 入力を先に前処理（CR LF → LF など）。saba: HTTP の受信で \\r\\n → \\n にしてある（第31章）'].forEach((s, k) => S.text(490, 266 + k * 22, s, { cls: 't-xs pre' }, d));
+      d = det();
+      S.text(490, 240, "consume_ident_token の中（input[0] ＝ '#' から）", { cls: 't-sm t-b' }, d);
+      st.sLbl = S.text(490, 268, '', { cls: 't-sm t-mono t-b t-x pre' }, d);
+      ["s.push(input[pos]) で先頭の '#' を入れ、pos を進めながら英数字・-・_ を足す", "input[6] ＝ ' ' は腕に無い → break。このとき pos ＝ 6", 'next() に戻って pos -= 1 → 5、最後の pos += 1 → 6（次は 6 から）', '仕様の hash-token は ID の形かの旗を持つ。saba は常に ID 扱い（157 行のコメント）', '色の #0000ff も同じ腕。0〜9 と a〜f は識別子の文字なので 1 つにまとまる'].forEach((s, k) => S.text(490, 296 + k * 22, s, { cls: 't-xs pre' }, d));
+      d = det();
+      S.text(490, 240, '".first {" の 8 文字（規則 2 の先頭）', { cls: 't-sm t-b' }, d);
+      [...'.first {'].forEach((c, k) => { const x = 490 + k * 16; S.rect(x, 250, 15, 22, { rx: 2, cls: c === ' ' ? 'f-in s-rule w1' : 'f-sf s-rule w1' }, d); S.text(x + 7.5, 265, c === ' ' ? '␣' : c, { cls: 't-c t-xs t-mono' + (c === ' ' ? ' t-dim' : '') }, d); });
+      chip(d, 640, 261, 76, "Delim('.')"); chip(d, 724, 261, 104, 'Ident("first")'); chip(d, 836, 261, 84, 'OpenCurly');
+      ["'.' は match の腕で 1 文字のトークン。'f' から Ident が始まる", '"background-color" → Ident 1 個（- は consume_ident_token の腕にある）', "'-' で始まる並びも Ident（負の数は扱わない。163 行のコメント）", '仕様の ident-token は、エスケープや ASCII 外の文字も名前に含められる。saba は英数字・-・_ だけ'].forEach((s, k) => S.text(490, 300 + k * 22, s, { cls: 't-xs pre' }, d));
+      d = det();
+      S.text(490, 240, 'テストの文字列（token.rs 273 行）から', { cls: 't-sm t-b' }, d);
+      S.text(490, 260, 'p { content: "Hey"; } h1 { font-size: 40; color: blue; }', { cls: 't-xs t-mono pre' }, d);
+      chip(d, 490, 284, 126, 'StringToken("Hey")'); chip(d, 626, 284, 96, 'Number(40.0)'); chip(d, 732, 284, 92, 'Ident("blue")');
+      ['"40px" → Number(40.0), Ident("px")　仕様なら dimension-token（40, px）1 個', '"1.5" → Number(1.5)。小数点の後は floating_digit を 1/10 ずつ小さくして足す', '仕様の number-token は + − と指数（1e3）も読む。saba は 0〜9 と . だけ', '"@media" → AtKeyword("media")　"@ " → Delim(\'@\')（次の 3 文字で決める）', 'test.html の style には数・文字列・@ はどれも無い'].forEach((s, k) => S.text(490, 316 + k * 22, s, { cls: 't-xs pre' }, d));
+      d = det();
+      S.text(490, 240, '171 文字 ＝ 空白と改行 76 ＋ トークンの文字 95 → 31 個', { cls: 't-sm t-b' }, d);
+      ['規則 1（#title）7 個、規則 2〜4（.first .hidden .links）8 個ずつ', '', '止まる文字の例（_ の腕。と読める）: / * > [ ] + ~ = ! % とタブ', '→ コメント /* … */ や子セレクタ > を含む CSS は、この版では読めない', '', 'CSS Syntax 3 の 25 種のうち saba に無い 13 種:', 'function url percentage dimension unicode-range whitespace CDO CDC', 'comma（saba は Delim）[ ] bad-string bad-url'].forEach((s, k) => { if (s) S.text(490, 266 + k * 20, s, { cls: 't-xs pre' + (k >= 5 ? ' t-mono' : '') }, d); });
+      S.text(490, 440, 'saba の 12 種: Ident AtKeyword HashToken StringToken Delim Number', { cls: 't-xs t-mono pre' }, d);
+      S.text(490, 458, 'Colon SemiColon OpenParenthesis CloseParenthesis OpenCurly CloseCurly', { cls: 't-xs t-mono pre' }, d);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      if (i === 0) st.C[0].p.hl(1, 12);
+      if (i === 1) st.C[1].p.hl(6, 12);
+      if (i === 5) st.C[5].p.hl(16, 17);
+      const T = [
+        ['get_style_content(document) → 最初の <style> の最初の子 Text', 'Text: "#title {\\n      color: red;\\n    }\\n    .first {…"（171 文字）', 'CssTokenizer::new(style): input ＝ 171 個の char、pos ＝ 0', "先頭の改行と空白は Text に入らないので、input[0] は '#'"],
+        ["input[7] ＝ '{' → OpenCurly　　input[20] ＝ ':' → Colon", "input[25] ＝ ';' → SemiColon　　input[31] ＝ '}' → CloseCurly", "input[6] ＝ ' '、input[8] ＝ '\\n' → pos += 1 して continue（捨てる）", '171 文字のうち空白と改行は 76 文字。トークンにはならない'],
+        ["input[0] ＝ '#' → consume_ident_token()：s ＝ \"#\"", 'input[1..6] ＝ t i t l e → s ＝ "#title"。input[6] ＝ \' \' で break', 'pos ＝ 6 → pos -= 1 で 5 → next() の最後で pos += 1 → 6', '→ HashToken("#title")（# を含む。外すのはパーサ。場面3）'],
+        ["input[15] ＝ 'c' → Ident(\"color\")　　input[22] ＝ 'r' → Ident(\"red\")", '".first {" → Delim(\'.\'), Ident("first"), OpenCurly（3 個）', '".hidden {" ".links {" も同じ形。4 規則で Delim(\'.\') は 3 個', '"background-color" → Ident 1 個（16 文字。- は識別子の文字）'],
+        ['"40" → Number(40.0)　　"1.5" → Number(1.5)（どちらも f64）', '"40px" → Number(40.0), Ident("px")　← 仕様なら dimension-token 1 個', '"\\"Hey\\"" → StringToken("Hey")　　"@media" → AtKeyword("media")', 'test.html の style には、数・文字列・@ は出てこない'],
+        ['171 文字 → 空白 76 文字を捨て、31 個のトークン（7 ＋ 8 ＋ 8 ＋ 8）', '規則 2〜4 は . と名前で 2 個になるぶん、規則 1 より 1 個多い', '止まる文字の例: / * > [ ] ! とタブ（_ の腕。と読める）', 'CSS Syntax 3 の 25 種のうち、saba にあるのは 12 種']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 352, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+      st.D.forEach((g, k) => S.fade(g, k === i));
+      // 注目するトークン
+      const focus = i === 1 ? [1, 3, 5, 6] : i === 2 ? [0] : i === 3 ? [2, 4] : [];
+      st.chips.forEach((c, k) => c.r.setAttribute('class', focus.indexOf(k) >= 0 ? 'f-d-soft s-x w2' : 'f-d-soft s-d w1'));
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      // 6.5 秒で 1 周: 0.125 秒に 1 文字進め（4 秒で 32 文字）、2.5 秒止まる。止めている人には読み終えた姿
+      const tt = playing() ? U.mod(ctx.ts, 6.5) : 5;
+      const idx = Math.min(32, Math.floor(tt / 0.125));
+      st.cells.forEach((c, k) => {
+        const read = k < idx;
+        c.r.setAttribute('class', c.ws ? 'f-in s-rule w1' : (read ? 'f-d-soft s-d w1' : 'f-sf s-rule w1'));
+        op(c.r, c.ws && read ? 0.35 : '');
+        op(c.t, c.ws && read ? 0.35 : '');
+      });
+      const atEnd = idx >= 32;
+      st.cursor.setAttribute('x', 492 + Math.min(idx, 31) * 14);
+      op(st.cursor, atEnd ? 0 : 1);
+      st.posLbl.textContent = 'pos ＝ ' + idx;
+      let msg;
+      if (atEnd) msg = 'pos ≥ input.len() → None（例の 32 文字の終わり。本物の Text は続く）';
+      else {
+        const c = S1_SRC[idx];
+        if (c === ' ' || c === '\n') msg = "input[" + idx + "] ＝ '" + (c === ' ' ? '␣' : '\\n') + "' → pos += 1; continue（捨てる）";
+        else if (c === '#') msg = "input[" + idx + "] ＝ '#' → consume_ident_token → HashToken";
+        else if (/[a-z]/.test(c)) msg = "input[" + idx + "] ＝ '" + c + "' → " + (idx > 0 && /[a-z#]/.test(S1_SRC[idx - 1]) ? 'consume_ident_token の loop で s に足す' : 'consume_ident_token → Ident');
+        else msg = "input[" + idx + "] ＝ '" + c + "' → 1 文字で決まる";
+      }
+      st.stateLbl.textContent = msg;
+      st.chips.forEach((c, k) => op(c.g, idx >= S1_TOK[k][1] ? 1 : 0.15));
+      if (i === 2) st.sLbl.textContent = idx < 1 ? 's ＝ ""（まだ）' : idx <= 6 ? 's ＝ "' + S1_SRC.slice(0, idx) + '"' : 's ＝ "#title" → HashToken("#title")';
+    }
+  };
+
+  /* ================================================================
+     場面2 規則の木（CSSOM）
+     31 個のトークンを 0.28 秒に 1 個ずつ読み、呼び出しの入れ子と StyleSheet の育ち方を見せる
+     ================================================================ */
+  // [トークンの表示, 入れ子の深さの列（行番号 r0〜r6）, 効果（規則の番号, 何が決まるか）]
+  const S2_ROWS = [
+    ['parse_stylesheet', '192', 'StyleSheet::new() → set_rules(consume_list_of_rules())'],
+    ['consume_list_of_rules', '162', 'peek: None → 終わり ／ AtKeyword → 読んで捨てる ／ 他 → 規則を 1 つ'],
+    ['consume_qualified_rule', '139', 'peek: OpenCurly → next して宣言の列へ ／ 他 → set_selector(consume_selector())'],
+    ['consume_selector', '96', "next: HashToken → Id ／ Delim('.') → Class ／ Ident → Type（場面3）"],
+    ['consume_list_of_declarations', '66', 'peek: CloseCurly → 終わり ／ SemiColon → 飛ばす ／ Ident → 宣言 ／ 他 → 捨てる'],
+    ['consume_declaration', '40', 'consume_ident で名前 → next が Colon か → 値をトークン 1 個'],
+    ['consume_ident ／ consume_component_value', '25 ／ 19', 'next() を 1 回だけ呼ぶ。Ident でなければ panic! ／ 無ければ expect で止まる']
+  ];
+  const S2_RULES = [
+    ['IdSelector("title")', 'property "color", value Ident("red")'],
+    ['ClassSelector("first")', 'property "color", value HashToken("#0000ff")'],
+    ['ClassSelector("hidden")', 'property "display", value Ident("none")'],
+    ['ClassSelector("links")', 'property "background-color", value HashToken("#00ffff")']
+  ];
+  // 31 個のトークン: [表示, 動いている関数の行の列, 規則の番号, 段階（sel: セレクタが決まる, decl: 宣言が決まる, done: 規則が入る）]
+  const S2_TOKENS = (() => {
+    const out = [];
+    const rule = (k, selTokens) => {
+      selTokens.forEach(([t, rows], j) => out.push([t, rows, k, j === selTokens.length - 1 ? 'sel' : null]));
+      out.push(['OpenCurly', [0, 1, 2], k, null]);
+      out.push([S2_RULES[k][1].split(',')[0].replace('property ', 'Ident(') + ')', [0, 1, 2, 4, 5, 6], k, null]);
+      out.push(['Colon', [0, 1, 2, 4, 5], k, null]);
+      out.push([S2_RULES[k][1].split('value ')[1], [0, 1, 2, 4, 5, 6], k, 'decl']);
+      out.push(['SemiColon', [0, 1, 2, 4], k, null]);
+      out.push(['CloseCurly', [0, 1, 2, 4], k, 'done']);
+    };
+    rule(0, [['HashToken("#title")', [0, 1, 2, 3]]]);
+    rule(1, [["Delim('.')", [0, 1, 2, 3]], ['Ident("first")', [0, 1, 2, 3, 6]]]);
+    rule(2, [["Delim('.')", [0, 1, 2, 3]], ['Ident("hidden")', [0, 1, 2, 3, 6]]]);
+    rule(3, [["Delim('.')", [0, 1, 2, 3]], ['Ident("links")', [0, 1, 2, 3, 6]]]);
+    out.push(['None（終わり）', [0, 1], 4, null]);
+    return out;
+  })();
+  const s2 = {
+    steps: [
+      { title: 'CssParser は Peekable で先読みする', text: '`CssParser` の欄は `t: Peekable<CssTokenizer>`。`t.peekable()` が反復子を包み、`peek()`（次を見るが消費しない）と `next()`（消費する）を使えるようにする。パーサは `peek` で分岐を決めてから `next` で取る。トークンを Vec にためず、必要なぶんだけ引き出す。' },
+      { title: 'parse_stylesheet → consume_list_of_rules', text: '`parse_stylesheet` は空の `StyleSheet` に `consume_list_of_rules` の結果を入れる。規則の列は `loop` で、`peek` が `None` なら終わり、`AtKeyword` なら読んだ規則を `_rule` に受けて捨て、それ以外なら 1 規則を読んで `push` する。' },
+      { title: 'consume_qualified_rule：{ が来るまでセレクタ', text: '`peek` が `OpenCurly` なら `next` で消費し、宣言の列を読んで `Some(rule)` を返す。それ以外は `consume_selector` の結果を `set_selector`。`{` が来るまでこれを繰り返すので、セレクタが 2 つ並ぶと後の方で**上書き**される（[[3|セレクタ]]）。' },
+      { title: 'consume_list_of_declarations：} まで', text: '`peek` が `CloseCurly` なら `next` で消費して終わり、`SemiColon` なら消費して次へ、`Ident` なら `consume_declaration` を呼んで `Some` なら `push`、それ以外のトークンは `next` で捨てる。`None` が返る宣言（名前の次が `:` でない）は黙って落ちる。' },
+      { title: 'consume_declaration：名前、コロン、値 1 個', text: '名前は `consume_ident`、次が `Colon` でなければ `None`、値は `consume_component_value` が `next` で取る**トークン 1 個**。`type ComponentValue = CssToken;` は型の**別名**で、仕様では入れ子を持てるコンポーネント値を 1 個に切り詰めた印。' },
+      { title: 'できあがる StyleSheet', text: '`StyleSheet { rules }`、`QualifiedRule { selector, declarations }`、`Declaration { property, value }`。値はまだ `HashToken("#0000ff")` のままで、色として読むのは[[4|当てはめる]]。[[28-compiler.html#s1|第28章 場面1]]の構文木にあたる。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const panel = panelSet(svg);
+      st.C = panel.list;
+      panel([
+        ['', 'css/cssom.rs（詰めた）'],
+        [9, 'pub struct CssParser {'],
+        [10, '  t: Peekable<CssTokenizer>,'],
+        [11, '}'],
+        [14, 'pub fn new(t: CssTokenizer) -> Self {'],
+        [15, '  Self { t: t.peekable() }'],
+        [16, '}'],
+        ['', 'css/cssom.rs（parse_stylesheet。コメントは省き、詰めた）'],
+        [192, 'pub fn parse_stylesheet(&mut self) -> StyleSheet {'],
+        [194, '  let mut sheet = StyleSheet::new();'],
+        [197, '  sheet.set_rules(self.consume_list_of_rules());'],
+        [198, '  sheet }'],
+        ['', 'renderer/page.rs（create_frame の抜粋。第33章の続き）'],
+        [98, 'let style = get_style_content(dom);'],
+        [99, 'let css_tokenizer = CssTokenizer::new(style);'],
+        [100, 'let cssom = CssParser::new(css_tokenizer)'],
+        [null, '  .parse_stylesheet();']
+      ]).hl(1, 6);
+      panel([
+        ['', 'css/cssom.rs（consume_list_of_rules。コメントは省き、詰めた）'],
+        [162, 'fn consume_list_of_rules(&mut self) -> Vec<QualifiedRule> {'],
+        [164, '  let mut rules = Vec::new();'],
+        [166, '  loop {'],
+        [167, '    let token = match self.t.peek() {'],
+        [168, '      Some(t) => t,'],
+        [169, '      None => return rules,'],
+        [170, '    };'],
+        [171, '    match token {'],
+        [174, '      CssToken::AtKeyword(_keyword) => {'],
+        [175, '        let _rule = self.consume_qualified_rule();'],
+        [178, '      }'],
+        [179, '      _ => {'],
+        [181, '        let rule = self.consume_qualified_rule();'],
+        [182, '        match rule {'],
+        [183, '          Some(r) => rules.push(r),'],
+        [184, '          None => return rules,'],
+        [185, '        } } } } }']
+      ]).hl(4, 7);
+      panel([
+        ['', 'css/cssom.rs（consume_qualified_rule。詰めた）'],
+        [139, 'fn consume_qualified_rule(&mut self)'],
+        [null, '    -> Option<QualifiedRule> {'],
+        [140, '  let mut rule = QualifiedRule::new();'],
+        [142, '  loop {'],
+        [143, '    let token = match self.t.peek() {'],
+        [144, '      Some(t) => t, None => return None, };'],
+        [148, '    match token {'],
+        [149, '      CssToken::OpenCurly => {'],
+        [150, '        assert_eq!(self.t.next(), Some(CssToken::OpenCurly));'],
+        [151, '        rule.set_declarations('],
+        [null, '          self.consume_list_of_declarations());'],
+        [152, '        return Some(rule);'],
+        [153, '      }'],
+        [154, '      _ => {'],
+        [155, '        rule.set_selector(self.consume_selector());'],
+        [156, '      } } } }']
+      ]).hl(8, 16);
+      panel([
+        ['', 'css/cssom.rs（consume_list_of_declarations。抜粋、詰めた）'],
+        [66, 'fn consume_list_of_declarations(&mut self)'],
+        [null, '    -> Vec<Declaration> {'],
+        [69, '  loop { let token = match self.t.peek() {'],
+        [71, '      Some(t) => t, None => return declarations, };'],
+        [75, '    match token {'],
+        [76, '      CssToken::CloseCurly => {'],
+        [77, '        assert_eq!(self.t.next(),'],
+        [null, '          Some(CssToken::CloseCurly));'],
+        [78, '        return declarations; }'],
+        [80, '      CssToken::SemiColon => {'],
+        [81, '        assert_eq!(self.t.next(),'],
+        [null, '          Some(CssToken::SemiColon)); }'],
+        [84, '      CssToken::Ident(ref _ident) => {'],
+        [85, '        if let Some(declaration)'],
+        [null, '            = self.consume_declaration() {'],
+        [86, '          declarations.push(declaration); } }'],
+        [89, '      _ => { self.t.next(); } } } }']
+      ]).hl(5, 17);
+      panel([
+        ['', 'css/cssom.rs（consume_declaration。コメントは省き、詰めた）'],
+        [40, 'fn consume_declaration(&mut self) -> Option<Declaration> {'],
+        [41, '  if self.t.peek().is_none() { return None; }'],
+        [46, '  let mut declaration = Declaration::new();'],
+        [48, '  declaration.set_property(self.consume_ident());'],
+        [51, '  match self.t.next() {'],
+        [52, '    Some(token) => match token {'],
+        [53, '      CssToken::Colon => {}  _ => return None, },'],
+        [56, '    None => return None, }'],
+        [60, '  declaration.set_value(self.consume_component_value());'],
+        [62, '  Some(declaration)'],
+        [63, '}'],
+        ['', 'css/cssom.rs（consume_component_value と型の別名。詰めた）'],
+        [19, 'fn consume_component_value(&mut self) -> ComponentValue {'],
+        [20, '  self.t.next()'],
+        [22, '    .expect('],
+        [null, '      "should have a token in consume_component_value") }'],
+        [284, 'pub type ComponentValue = CssToken;']
+      ]).hl(3, 10);
+      panel([
+        ['', 'css/cssom.rs（型。doc コメントと derive は省き、詰めた）'],
+        [204, 'pub struct StyleSheet {'],
+        [206, '  pub rules: Vec<QualifiedRule>,'],
+        [207, '}'],
+        [221, 'pub struct QualifiedRule {'],
+        [224, '  pub selector: Selector,'],
+        [227, '  pub declarations: Vec<Declaration>,'],
+        [228, '}'],
+        [231, 'pub fn new() -> Self {'],
+        [232, '  Self { selector: Selector::TypeSelector("".to_string()),'],
+        [234, '         declarations: Vec::new(), } }'],
+        [262, 'pub struct Declaration {'],
+        [263, '  pub property: String,'],
+        [264, '  pub value: ComponentValue,'],
+        [265, '}'],
+        [284, 'pub type ComponentValue = CssToken;']
+      ]).hl(1, 3);
+      st.tr = S.g({}, svg);
+      // 右上: 呼び出しの入れ子（7 行）
+      const g = st.g = S.g({}, svg);
+      S.text(490, 32, '呼び出しの入れ子（いま動いている関数を照らす。cssom.rs の行番号）', { cls: 't-xs t-dim' }, g);
+      st.rows = S2_ROWS.map(([name, ln, note], k) => {
+        const depth = k <= 2 ? k : k === 3 ? 3 : k === 4 ? 3 : k === 5 ? 4 : 5;
+        const x = 490 + depth * 12, y = 40 + k * 34;
+        const r = S.rect(x, y, 944 - x, 31, { rx: 4, cls: 'f-sf s-rule w1' }, g);
+        const t = S.text(x + 8, y + 13, name, { cls: 't-xs t-mono t-b' }, g);
+        S.text(940, y + 13, ln, { cls: 't-end t-xs t-mono t-dim' }, g);
+        S.text(x + 8, y + 26, note, { cls: 't-xs t-dim pre' }, g);
+        return { r, t };
+      });
+      st.tokLbl = S.text(490, 296, '', { cls: 't-xs t-mono pre' }, g);
+      // 右下: 組み上がる StyleSheet
+      S.text(490, 322, 'StyleSheet { rules: Vec<QualifiedRule> }', { cls: 't-sm t-b t-mono' }, g);
+      st.lenLbl = S.text(944, 322, 'rules.len() ＝ 0', { cls: 't-end t-sm t-mono' }, g);
+      st.rules = S2_RULES.map((_, k) => {
+        const y = 332 + k * 54;
+        const r = S.rect(490, y, 454, 48, { rx: 5, cls: 'f-sf s-rule w1 dash' }, g);
+        const t1 = S.text(498, y + 18, 'rules[' + k + ']', { cls: 't-xs t-mono t-dim pre' }, g);
+        const t2 = S.text(498, y + 36, '', { cls: 't-xs t-mono pre' }, g);
+        return { r, t1, t2 };
+      });
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['CssParser::new(CssTokenizer::new(style)) → t: Peekable<CssTokenizer>', 't.peek() → Some(&HashToken("#title"))　← 消費しない。もう一度 peek しても同じ', 't.next() → Some(HashToken("#title"))　← 消費する。次は OpenCurly', 'Peekable は core::iter の型。peek で見た 1 個（None も）を中に覚えておく'],
+        ['parse_stylesheet(): sheet ＝ StyleSheet { rules: [] } → consume_list_of_rules()', 'peek ＝ HashToken → _ の腕 → consume_qualified_rule() → Some(r) → rules.push(r)', '… を 4 回。5 回目の peek ＝ None → return rules（4 個）', 'AtKeyword なら consume_qualified_rule() の結果を _rule に受けて捨てる'],
+        ['rule ＝ QualifiedRule::new()（selector は TypeSelector("")、declarations は空）', 'peek ＝ HashToken → _ → rule.set_selector(consume_selector()) ＝ IdSelector("title")', 'peek ＝ OpenCurly → next() で消費 → consume_list_of_declarations()', '→ set_declarations → return Some(rule)。{ が来るまで set_selector を繰り返す'],
+        ['peek ＝ Ident("color") → consume_declaration() → Some → declarations.push', 'peek ＝ SemiColon → next() で捨てる（宣言の区切り）', 'peek ＝ CloseCurly → next() で消費 → return declarations（1 個）', '"font-size: 40px;" なら Ident("px") が名前と読まれ、次が Colon でないので None'],
+        ['consume_ident() → next() ＝ Ident("color") → property ＝ "color"', 'next() ＝ Colon → 続行（Colon 以外なら None を返して宣言ごと捨てる）', 'consume_component_value() → next() ＝ Ident("red") → value', '→ Declaration { property: "color", value: Ident("red") }'],
+        ['StyleSheet { rules: [4 個] }。宣言は各 1 個', 'rules[1].declarations[0].value ＝ HashToken("#0000ff")（まだ字句のまま）', '値の意味（色か、表示の種類か）はここでは見ない。見るのは場面4', '第10章 場面3 の CSSOM の木 → saba では Vec<QualifiedRule> の 1 段']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 352, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+      // 段階で注目する行（枠を強める）
+      const focus = [[0], [0, 1], [2, 3], [4], [5, 6], []][i];
+      st.rows.forEach((r, k) => r.t.setAttribute('class', 't-xs t-mono t-b' + (focus.indexOf(k) >= 0 ? ' t-x' : '')));
+      st.focus = focus;
+    },
+    frame(ctx) {
+      const st = ctx.state;
+      // 0.28 秒に 1 トークン。31 個で 8.7 秒、終わりの None を 2.3 秒見せる。止めている人には読み終えた姿
+      const tt = playing() ? U.mod(ctx.ts, 11) : 10;
+      const n = Math.min(S2_TOKENS.length - 1, Math.floor(tt / 0.28));
+      const cur = S2_TOKENS[n];
+      st.rows.forEach((r, k) => {
+        const on = cur[1].indexOf(k) >= 0, deepest = cur[1][cur[1].length - 1] === k;
+        r.r.setAttribute('class', deepest ? 'f-x-soft s-x w2' : on ? 'f-x-soft s-rule w1' : 'f-sf s-rule w1');
+      });
+      st.tokLbl.textContent = n === S2_TOKENS.length - 1 ? 't.peek() ＝ None → rules を返す → StyleSheet ができる' : 'トークン ' + (n + 1) + ' / 31：' + cur[0] + (cur[3] === 'sel' ? '　→ selector が決まる' : cur[3] === 'decl' ? '　→ 宣言が決まる' : cur[3] === 'done' ? '　→ 規則を push' : '');
+      // 規則の箱: どこまでできたか
+      let len = 0;
+      st.rules.forEach((rb, k) => {
+        const selDone = S2_TOKENS.slice(0, n + 1).some((t) => t[2] === k && t[3] === 'sel');
+        const declDone = S2_TOKENS.slice(0, n + 1).some((t) => t[2] === k && t[3] === 'decl');
+        const done = S2_TOKENS.slice(0, n + 1).some((t) => t[2] === k && t[3] === 'done');
+        if (done) len++;
+        rb.r.setAttribute('class', done ? 'f-d-soft s-d w1' : cur[2] === k ? 'f-sf s-x w2 dash' : 'f-sf s-rule w1 dash');
+        rb.t1.textContent = 'rules[' + k + ']  selector ＝ ' + (selDone ? S2_RULES[k][0] : '（まだ）');
+        rb.t1.setAttribute('class', 't-xs t-mono pre' + (selDone ? ' t-b' : ' t-dim'));
+        rb.t2.textContent = declDone ? 'declarations[0] ＝ ' + S2_RULES[k][1] : 'declarations ＝ []';
+        rb.t2.setAttribute('class', 't-xs t-mono pre' + (declDone ? '' : ' t-dim'));
+      });
+      st.lenLbl.textContent = 'rules.len() ＝ ' + len;
+    }
+  };
+
+  /* ================================================================
+     場面3 セレクタ
+     照合の表は、body から作るレイアウトの木の順（build_layout_tree）。p.hidden の子の Text は訪ねない
+     ================================================================ */
+  const S3_ELEMS = [
+    ['body', [0, 0, 0, 0]], ['h1  id="title"', [1, 0, 0, 0]], ['p  class="first"', [0, 1, 0, 0]], ['p  class="links"', [0, 0, 0, 1]],
+    ['a  href="…/test1.html"', [0, 0, 0, 0]], ['a  href="…/test2.html"', [0, 0, 0, 0]], ['p  class="hidden"', [0, 0, 1, 0]], ['p  id="target"', [0, 0, 0, 0]], ['Text（5 個）', [0, 0, 0, 0]]
+  ];
+  const s3 = {
+    steps: [
+      { title: 'enum Selector：3 種と Unknown', text: '`Selector` は `TypeSelector`・`ClassSelector`・`IdSelector`（中は `String`）と、失敗用の `UnknownSelector` の 4 つの列挙子を持つ enum。String は比べる相手の名前で、`#` や `.` は含まない。`QualifiedRule` が持つのはこの 1 個だけ。' },
+      { title: 'consume_selector：トークン 1 個で形が決まる', text: '`next` で 1 個取る。`HashToken` なら `value[1..]` で `#` を落として `IdSelector`、`Delim(\'.\')` なら `consume_ident` で名前を取って `ClassSelector`、`Ident` なら `TypeSelector`。[[1|字句]]で割れた `.first` はここで 1 つになる。' },
+      { title: 'a:hover は a、@ は読み飛ばし', text: '`Ident` の後ろを `peek` して `Colon` なら、`OpenCurly` の直前までトークンを捨てる。だから `a:hover` は `a` と同じ規則になる。`AtKeyword` も `{` の直前まで捨てて `UnknownSelector`。他のトークンなら次の 1 個も捨てて同じく `UnknownSelector`。' },
+      { title: '並べたセレクタ：最後の 1 つが残る', text: '`{` が来るまで `set_selector` を繰り返すので、`p a` は `TypeSelector("a")`、`.a.b` は `ClassSelector("b")` と、**最後の 1 つ**だけが残る、と読める。`h1, p` の `,` は `Delim` の腕に入り、`.` でないため `panic!` で止まる、と読める。' },
+      { title: 'is_node_selected：名前と属性の値を比べる', text: 'ノードが要素なら、`TypeSelector` は `e.kind().to_string()`（[[33-saba-dom.html#s1|第33章 場面1]]の Display）と、`ClassSelector`・`IdSelector` は属性から `class`・`id` を探して値と比べる。関数はレイアウトの側にあり、Text と Document は `false`。' },
+      { title: 'test.html では 32 回比べて 4 回 true', text: '照合は body 以下の要素 8 個と Text 5 個。要素との 32 回で true は 4 回、Text との 20 回は `_ => false`。クラスは属性の値**全体**と比べるので、`class="first big"` は `.first` に当たらない、と読める（Selectors 4 は空白区切りの 1 語に一致）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const panel = panelSet(svg);
+      st.C = panel.list;
+      panel([
+        ['', 'css/cssom.rs（enum Selector。URL の doc コメントは省いた）'],
+        [248, '#[derive(Debug, Clone, PartialEq, Eq)]'],
+        [249, 'pub enum Selector {'],
+        [251, '  TypeSelector(String),'],
+        [253, '  ClassSelector(String),'],
+        [255, '  IdSelector(String),'],
+        [256, '  /// パース中にエラーが起こったときに使用されるセレクタ'],
+        [257, '  UnknownSelector,'],
+        [258, '}'],
+        ['', 'css/cssom.rs（QualifiedRule の欄と new() の初期値。詰めた）'],
+        [221, 'pub struct QualifiedRule {'],
+        [224, '  pub selector: Selector,'],
+        [227, '  pub declarations: Vec<Declaration>,'],
+        [228, '}'],
+        [232, '  Self { selector: Selector::TypeSelector("".to_string()),'],
+        [234, '         declarations: Vec::new(), }']
+      ]).hl(2, 8);
+      panel([
+        ['', 'css/cssom.rs（consume_selector の前半。コメントは省き、詰めた）'],
+        [96, 'fn consume_selector(&mut self) -> Selector {'],
+        [97, '  let token = match self.t.next() { Some(t) => t,'],
+        [null, '    None => panic!("should have a token but got None"), };'],
+        [102, '  match token {'],
+        [103, '    CssToken::HashToken(value) =>'],
+        [null, '      Selector::IdSelector(value[1..].to_string()),'],
+        [104, "    CssToken::Delim(delim) => { if delim == '.' {"],
+        [106, '      return Selector::ClassSelector(self.consume_ident()); }'],
+        [108, '      panic!("Parse error: {:?} is an unexpected token.",'],
+        [null, '        token); }'],
+        [110, '    CssToken::Ident(ident) => {'],
+        [114, '      if self.t.peek() == Some(&CssToken::Colon) {'],
+        [115, '        while self.t.peek() != Some(&CssToken::OpenCurly) {'],
+        [116, '          self.t.next(); } }'],
+        [119, '      Selector::TypeSelector(ident.to_string()) }'],
+        [null, '    …']
+      ]).hl(5, 15);
+      panel([
+        ['', 'css/cssom.rs（consume_selector の後半。詰めた）'],
+        [110, '    CssToken::Ident(ident) => {'],
+        [114, '      if self.t.peek() == Some(&CssToken::Colon) {'],
+        [115, '        while self.t.peek() != Some(&CssToken::OpenCurly) {'],
+        [116, '          self.t.next();'],
+        [117, '        } }'],
+        [119, '      Selector::TypeSelector(ident.to_string()) }'],
+        [121, '    CssToken::AtKeyword(_keyword) => {'],
+        [124, '      while self.t.peek() != Some(&CssToken::OpenCurly) {'],
+        [125, '        self.t.next(); }'],
+        [127, '      Selector::UnknownSelector }'],
+        [129, '    _ => {'],
+        [130, '      self.t.next();'],
+        [131, '      Selector::UnknownSelector } } }'],
+        ['', 'css/cssom.rs 111〜113（Ident の腕のコメント）'],
+        [111, '// a:hoverのようなセレクタはタグ名のセレクタとして扱うため、'],
+        [112, '// もしコロン（:）が出てきた場合は宣言ブロックの開始直前まで'],
+        [113, '// トークンを進める']
+      ]).hl(1, 6);
+      panel([
+        ['', 'css/cssom.rs（consume_qualified_rule の loop。詰めた）'],
+        [142, '  loop {'],
+        [143, '    let token = match self.t.peek() {'],
+        [144, '      Some(t) => t, None => return None, };'],
+        [148, '    match token {'],
+        [149, '      CssToken::OpenCurly => { … return Some(rule); }'],
+        [154, '      _ => {'],
+        [155, '        rule.set_selector(self.consume_selector());'],
+        [156, '      } } }'],
+        ['', 'css/cssom.rs（set_selector。前の値は上書きされる。詰めた）'],
+        [238, 'pub fn set_selector(&mut self, selector: Selector) {'],
+        [239, '  self.selector = selector; }'],
+        ['', "css/cssom.rs（consume_selector の Delim の腕。',' は token.rs 137 で Delim）"],
+        [104, '    CssToken::Delim(delim) => {'],
+        [105, "      if delim == '.' {"],
+        [106, '      return Selector::ClassSelector(self.consume_ident()); }'],
+        [108, '      panic!("Parse error: {:?} is an unexpected token.",'],
+        [null, '        token); }']
+      ]).hl(6, 8);
+      panel([
+        ['', 'layout/layout_object.rs（is_node_selected。詰めた）'],
+        [307, 'pub fn is_node_selected(&self, selector: &Selector)'],
+        [null, '    -> bool {'],
+        [308, '  match &self.node_kind() {'],
+        [309, '    NodeKind::Element(e) => match selector {'],
+        [310, '      Selector::TypeSelector(type_name) => {'],
+        [311, '        if e.kind().to_string() == *type_name {'],
+        [312, '          return true; } false }'],
+        [316, '      Selector::ClassSelector(class_name) => {'],
+        [317, '        for attr in &e.attributes() {'],
+        [318, '          if attr.name() == "class"'],
+        [null, '            && attr.value() == *class_name { return true; } }'],
+        [322, '        false }'],
+        [324, '      Selector::IdSelector(id_name) => {'],
+        [null, '        …  // class と同じ形。属性名が "id"、値を id_name と比べる'],
+        [332, '      Selector::UnknownSelector => false, },'],
+        [334, '    _ => false, } }']
+      ]).hl(8, 12);
+      panel([
+        ['', 'layout/layout_object.rs（create_layout_object の抜粋。詰めた。全体は場面4）'],
+        [60, 'for rule in &cssom.rules {'],
+        [61, '  if layout_object.borrow()'],
+        [null, '      .is_node_selected(&rule.selector) {'],
+        [62, '    layout_object.borrow_mut()'],
+        [64, '      .cascading_style(rule.declarations.clone());'],
+        [65, '  }'],
+        [66, '}'],
+        ['', 'dom/node.rs（impl Display for ElementKind。腕は抜粋、詰めた）'],
+        [215, 'impl Display for ElementKind {'],
+        [216, '  fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {'],
+        [217, '    let s = match self {'],
+        [218, '      ElementKind::Html => "html",'],
+        [222, '      ElementKind::Body => "body",'],
+        [223, '      ElementKind::H1 => "h1",'],
+        [225, '      ElementKind::P => "p",'],
+        [226, '      ElementKind::A => "a", };'],
+        [228, '    write!(f, "{}", s) } }']
+      ]).hl(1, 7);
+      st.tr = S.g({}, svg);
+      // 右上: トークン → Selector
+      const g = st.g = S.g({}, svg);
+      S.text(490, 32, 'トークン → Selector（consume_selector。例の 5 行）', { cls: 't-xs t-dim' }, g);
+      const mk = S.markers(svg);
+      const conv = (y, left, result, note, resCls) => {
+        const gg = S.g({}, g);
+        left.forEach(([w, text, plain]) => {
+          if (plain) S.text(conv.x, y + 4, text, { cls: 't-xs t-dim pre' }, gg);
+          else chip(gg, conv.x, y, w, text);
+          conv.x += w + 6;
+        });
+        conv.x = 490;
+        S.path(`M672,${y} H686`, { cls: 'f-none s-dim w15', 'marker-end': mk('dim') }, gg);
+        const rc = chip(gg, 690, y, 148, result, resCls || 'f-x-soft s-x w1');
+        S.text(842, y + 4, note, { cls: 't-xs t-dim pre' }, gg);
+        return { g: gg, rc };
+      };
+      conv.x = 490;
+      st.conv = [
+        conv(52, [[134, 'HashToken("#title")']], 'IdSelector("title")', 'value[1..]'),
+        conv(84, [[70, "Delim('.')"], [100, 'Ident("first")']], 'ClassSelector("first")', 'consume_ident()'),
+        conv(116, [[74, 'Ident("p")']], 'TypeSelector("p")', 'peek は : でない'),
+        conv(148, [[66, 'Ident("a")'], [100, 'Colon Ident は捨てる', true]], 'TypeSelector("a")', ': → { まで捨てる'),
+        conv(180, [[118, 'AtKeyword("media")'], [50, '… 捨てる', true]], 'UnknownSelector', '{ まで捨てる', 'f-in s-rule w1')
+      ];
+      // 右下: 照合の表
+      S.text(490, 222, 'is_node_selected（レイアウトの木を作る順。✓ ＝ true）', { cls: 't-xs t-dim' }, g);
+      const colX = [727, 789, 851, 913];
+      ['Id', 'Class', 'Class', 'Class'].forEach((s, k) => S.text(colX[k], 240, s, { cls: 't-c t-xs t-mono t-dim' }, g));
+      ['"title"', '"first"', '"hidden"', '"links"'].forEach((s, k) => S.text(colX[k], 253, s, { cls: 't-c t-xs t-mono t-b' }, g));
+      S.text(492, 253, 'ノード（kind と属性）', { cls: 't-xs t-dim' }, g);
+      S.line(490, 259, 944, 259, { cls: 's-rule w1' }, g);
+      st.rows = S3_ELEMS.map(([label, hits], k) => {
+        const y = 276 + k * 20;
+        const bg = S.rect(490, y - 13, 454, 19, { rx: 3, cls: 'f-x-soft', style: { opacity: 0 } }, g);
+        const t = S.text(492, y, label, { cls: 't-xs t-mono pre' }, g);
+        const cells = hits.map((h, j) => S.text(colX[j], y, h ? '✓' : '–', { cls: 't-c t-xs t-b ' + (h ? 't-d' : 't-dim') }, g));
+        return { bg, t, cells, hits };
+      });
+      st.hitLbl = S.text(944, 462, '', { cls: 't-end t-xs t-b' }, g);
+      // 段階ごとの補足（4 行）
+      st.notes = [0, 1, 2, 3].map((k) => S.text(490, 484 + k * 18, '', { cls: 't-xs pre' }, g));
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['rules[0].selector ＝ IdSelector("title")', 'rules[1..4].selector ＝ ClassSelector("first" / "hidden" / "links")', 'TypeSelector は test.html に無い（例: p { … } → TypeSelector("p")）', 'QualifiedRule::new() の初期値は TypeSelector("")（何にも当たらない）'],
+        ['next() ＝ HashToken("#title") → value[1..] ＝ "title" → IdSelector("title")', "next() ＝ Delim('.') → consume_ident() ＝ \"first\" → ClassSelector(\"first\")", 'next() ＝ Ident("p") → peek は Colon でない → TypeSelector("p")', 'value[1..] は 2 文字め以降（# を落とす。ASCII なので 1 バイト）'],
+        ['"a:hover {" → Ident("a") → peek ＝ Colon → { の直前まで捨てる → TypeSelector("a")', '"@media … { … }" → consume_list_of_rules が規則ごと読んで捨てる', '　（consume_selector 側も AtKeyword → { の直前まで捨てて UnknownSelector）', 'Number など他のトークン → 次の 1 個も捨てて UnknownSelector（何にも当たらない）'],
+        ['"p a { … }" → Type("p") → peek はまだ { でない → Type("a") で上書き', '".a.b { … }" → Class("a") → Class("b")。最後の 1 つだけ残る、と読める', '"h1, p { … }" → Delim(\',\') が Delim の腕へ → \'.\' でないので panic!、と読める', 'Selectors 4: 複合 .a.b、複雑 p a、リスト h1, p。saba は単純セレクタ 1 つ'],
+        ['p.first と ClassSelector("first")：e.attributes() ＝ [class="first"]', '→ attr.name() == "class" かつ attr.value() == "first" → true', 'h1 と IdSelector("title")：[id="title"] → true　p#target と → false', 'Text は NodeKind::Element でないので _ => false'],
+        ['要素 8 個 × 規則 4 個 ＝ 32 回の照合で、true は 4 回', 'h1 → rules[0]、p.first → rules[1]、p.hidden → rules[2]、p.links → rules[3]', 'Text 5 個は全部 false。p.hidden の子の Text は訪ねない（第35章）', 'html・head・style・script は body の外。照合の対象にならない']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 352, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+      const N = [
+        ['Selector は Debug・Clone・PartialEq・Eq を derive。中の文字列が等しければ等しい', 'UnknownSelector は is_node_selected で常に false（何にも当たらない規則になる）', 'Selectors 4 の単純セレクタ: 型・全称 *・属性 [ ]・クラス・ID・擬似クラス :hover など', 'saba にあるのは型・クラス・ID の 3 つ'],
+        ['HashToken の value は "#title"（# 込み）。value[1..] で 2 文字め以降 → "title"', "Delim('.') の後の consume_ident() は、next() が Ident でなければ panic!", 'Ident の後ろは peek だけ（消費しない）。Colon でなければそのまま TypeSelector', '結果はどれも String を 1 つ持つだけ。要素と比べるのは段階5'],
+        ['a:hover { color: red; } → TypeSelector("a")。:hover の条件は失われ、常に当たる', '@media (max-width: 600px) { … } → consume_list_of_rules の AtKeyword の腕で捨てる', '　ブロックの入れ子は数えないので、中に規則があると残りの } が Unknown として消費される', '仕様: 擬似クラスは単純セレクタの 1 種、@ 規則は at-rule として別に解釈する'],
+        ['"p a { … }": set_selector(Type("p")) → set_selector(Type("a")) → a に当たる', '".a.b { … }": Class("a") → Class("b") → class="b" の要素に当たる（と読める）', '"h1, p { … }": Type("h1") → Delim(\',\') → \'.\' でないので panic!（と読める）', 'Selectors 4: 複合 .a.b（全部満たす）、複雑 p a（子孫）、リスト h1, p（どれか）'],
+        ['e.kind().to_string(): ElementKind::P → "p"（Display。第33章）', 'e.attributes() は Vec<Attribute> の複製。name() と value() は String', 'class="first" の要素と ClassSelector("first") → "first" == "first" → true', 'id="title" の h1 と ClassSelector("first") → class 属性が無い → for を抜けて false'],
+        ['LayoutView::new は body を探し、その下だけ create_layout_object を呼ぶ（第35章）', 'html・head・style・script とその Text は照合されない', '要素 8 × 規則 4 ＝ 32 回。Text 5 個は NodeKind::Text なので _ => false', 'Selectors 4 の .first は [class~="first"] と同じ（空白区切りの 1 語に一致）。saba は値全体']
+      ];
+      st.notes.forEach((t, k) => { t.textContent = N[i][k]; });
+      // 注目する変換の行
+      const focus = [[], [0, 1, 2], [3, 4], [], [], []][i];
+      st.conv.forEach((c, k) => c.rc.r.setAttribute('class', focus.indexOf(k) >= 0 ? 'f-x-soft s-x w2' : (k === 4 ? 'f-in s-rule w1' : 'f-x-soft s-x w1')));
+      op(st.g, '');
+      st.tableOn = i >= 4;
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      // 段階5 から表を 1 行ずつ埋める（0.35 秒に 1 行、9 行で 3.2 秒、2.8 秒止まる）。前の段階と止めている人には全部埋まった姿
+      const tt = playing() && st.tableOn ? U.mod(ctx.ts, 6) : 5.5;
+      const n = Math.min(9, Math.floor(tt / 0.35) + 1);
+      let hits = 0;
+      st.rows.forEach((r, k) => {
+        const on = k < n;
+        op(r.t, on ? '' : 0.25);
+        r.cells.forEach((c) => op(c, on ? '' : 0));
+        op(r.bg, on && k === n - 1 && n < 9 ? 1 : 0);
+        if (on) hits += r.hits.reduce((a, b) => a + b, 0);
+      });
+      st.hitLbl.textContent = 'true ' + hits + ' 回 ／ ' + (Math.min(n, 8) * 4) + ' 回';
+      if (i === 4) st.rows.forEach((r, k) => r.t.setAttribute('class', 't-xs t-mono pre' + (k === 2 ? ' t-b t-x' : '')));
+      else st.rows.forEach((r) => r.t.setAttribute('class', 't-xs t-mono pre'));
+    }
+  };
+
+  /* ================================================================
+     場面4 当てはめる（上書きのカスケード）
+     p.first（規則 2）、h1（規則 1）、p.hidden（規則 3）に規則を順に当てる。色の値は実際の色で塗る
+     ================================================================ */
+  const S4_FIELDS = ['background_color', 'color', 'display', 'font_size', 'text_decoration', 'height', 'width'];
+  /* ComputedStyle の 7 欄の箱。set(欄, 値の文字, 状態 'none'|'set'|'inherit'|'default', 見本の色) */
+  function styleBox(parent, x, y, w, title) {
+    const g = S.g({}, parent);
+    S.rect(x, y, w, 22 + S4_FIELDS.length * 20 + 6, { rx: 5, cls: 'f-sf s-rule w1' }, g);
+    const tt = S.text(x + 8, y + 15, title, { cls: 't-xs t-b t-mono pre' }, g);
+    S.line(x, y + 22, x + w, y + 22, { cls: 's-rule w1' }, g);
+    const rows = {};
+    S4_FIELDS.forEach((f, k) => {
+      const yy = y + 22 + 15 + k * 20;
+      S.text(x + 8, yy, f, { cls: 't-xs t-mono t-dim' }, g);
+      const sw = S.rect(x + 112, yy - 10, 12, 12, { rx: 2, cls: 's-rule w1', style: { display: 'none' } }, g);
+      const v = S.text(x + 112, yy, 'None', { cls: 't-xs t-mono t-dim pre' }, g);
+      rows[f] = { sw, v };
+    });
+    const api = {
+      g, title: tt,
+      set(f, text, state, color) {
+        const r = rows[f];
+        r.v.textContent = text;
+        r.v.setAttribute('class', 't-xs t-mono pre' + (state === 'none' ? ' t-dim' : state === 'set' ? ' t-b t-x' : state === 'inherit' ? ' t-b t-d' : ''));
+        if (color) { r.sw.style.display = ''; r.sw.style.fill = color; r.v.setAttribute('x', x + 128); }
+        else { r.sw.style.display = 'none'; r.v.setAttribute('x', x + 112); }
+        return api;
+      },
+      reset() { S4_FIELDS.forEach((f) => api.set(f, 'None', 'none')); return api; }
+    };
+    return api;
+  }
+  const S4_COLORS = [['black', '#000000'], ['silver', '#c0c0c0'], ['gray', '#808080'], ['white', '#ffffff'], ['maroon', '#800000'], ['red', '#ff0000'], ['purple', '#800080'], ['fuchsia', '#ff00ff'], ['green', '#008000'], ['lime', '#00ff00'], ['olive', '#808000'], ['yellow', '#ffff00'], ['navy', '#000080'], ['blue', '#0000ff'], ['teal', '#008080'], ['aqua', '#00ffff'], ['orange', '#ffa500'], ['lightgray', '#d3d3d3']];
+  // 段階ごとの筋書き: どのノードに、どの規則が当たり、値がどう読まれ、どの欄に入るか
+  const S4_SCRIPT = [
+    { node: 'p.first（class="first"）', hits: [0, 1, 0, 0], flow: ['LayoutObject::new(n.clone(), parent_obj) → style ＝ ComputedStyle::new()', 'is_node_selected: rules[0] false、rules[1] true、rules[2]・rules[3] false', '→ cascading_style(rules[1].declarations.clone())：宣言は 1 個', '    Declaration { property: "color", value: HashToken("#0000ff") }', '→ color の欄に Some(blue)（読み方は段階2〜4）。他の 6 欄は None のまま'], field: 'color', value: 'Some(blue)', color: REAL.blue, end: '→ defaulting_style へ（場面5）' },
+    { node: 'p.first（class="first"）', hits: [0, 1, 0, 0], flow: ['declaration.property.as_str() ＝ "color" → "color" の腕（361〜375）', 'value は HashToken → from_code の側（Ident なら from_name の側）', '"font-size" "width" "margin" なら _ => {} → 何もしない（宣言は捨てられる）', '同じ欄に 2 回書けば set_color が 2 回 → 後の値で上書き', '→ self.style.set_color(color)'], field: 'color', value: 'Some(blue)', color: REAL.blue, end: '→ defaulting_style へ（場面5）' },
+    { node: 'h1（id="title"）', hits: [1, 0, 0, 0], flow: ['value ＝ Ident("red") → Color::from_name("red")', '→ 表の "red" => "#ff0000".to_string()', '→ Ok(Color { name: Some("red"), code: "#ff0000" })', 'Err なら Color::black()（background-color なら Color::white()）', 'set_color → color ＝ Some(red)'], field: 'color', value: 'Some(red)', color: REAL.red, end: '→ defaulting_style へ（場面5）' },
+    { node: 'p.first（class="first"）', hits: [0, 1, 0, 0], flow: ['value ＝ HashToken("#0000ff") → Color::from_code("#0000ff")', "nth(0) ＝ '#' かつ len ＝ 7 → 通る（\"#fff\" は Err）", '→ "#0000ff" => "blue" → Ok(Color { name: Some("blue"), code: "#0000ff" })', '"#336699" は 7 文字でも表に無い → Err → black', 'code_u32() ＝ from_str_radix("0000ff", 16) ＝ 0x0000ff ＝ 255（第35章で使う）'], field: 'color', value: 'Some(blue)', color: REAL.blue, end: '→ defaulting_style へ（場面5）' },
+    { node: 'p.hidden（class="hidden"）', hits: [0, 0, 1, 0], flow: ['value ＝ Ident("none") → DisplayType::from_str("none") → Ok(DisplayNone)', 'set_display(DisplayNone)', 'defaulting_style（場面5）の後、display() == DisplayType::DisplayNone', '→ create_layout_object は None を返す → レイアウトの木に入らない', '"flex" "grid" → Err → DisplayNone → 同じく消える'], field: 'display', value: 'Some(DisplayNone)', color: null, end: '→ None（レイアウトの木に入らない）' },
+    { node: 'p.first（class="first"）', hits: [0, 1, 0, 0], flow: ['当たった規則の宣言を、書かれた順に当てる。同じ欄は後の値で上書き', '詳細度（ID ＞ クラス ＞ 型）・出所・!important は見ない', '例: p { color: green; } を .first の後に足すと → green で上書き', 'CSS Cascade なら .first（詳細度 0,1,0）が p（0,0,1）に勝って blue', '→ 書く順で結果が変わる。test.html は 1 要素 1 規則なので差は出ない'], field: 'color', value: 'Some(blue)', color: REAL.blue, end: '→ defaulting_style へ（場面5）' }
+  ];
+  const s4 = {
+    steps: [
+      { title: 'create_layout_object：ノードごとに規則を回す', text: 'レイアウトの木を作る側（[[35-saba-layout.html#s1|第35章 場面1]]）が、ノードごとにこの関数を呼ぶ。最初の `style` は `ComputedStyle::new()` で 7 欄とも `None`。`for rule in &cssom.rules` で 4 規則を**書かれた順**に見て、当たった規則の宣言を `cascading_style` に渡す。' },
+      { title: 'cascading_style：3 つのプロパティだけ見る', text: '宣言ごとに `property.as_str()` を `match` し、`"background-color"`・`"color"`・`"display"` の 3 つの腕だけが欄を書く。それ以外は `_ => {}` で捨てるので、`font-size` や `width` を書いても何も起きない。同じ欄に 2 回書けば後の値で上書きされる。' },
+      { title: '色：名前なら from_name、# なら from_code', text: '値が `Ident` なら `Color::from_name`、`HashToken` なら `Color::from_code`。どちらも `Result` を返す**スマートコンストラクタ**（[[29-imi.html#s3|第29章 場面3]]）で、`Color` は確かめ済みの値しか持たない。`Err` なら color は黒、背景は白に落とす。' },
+      { title: 'Color は 18 色の表を両方向に引く', text: '`from_name` は 18 色の名前から `#rrggbb` を引き、`from_code` は `#` で始まる 7 文字を確かめた上で、同じ 18 色の符号から名前を引く。表に無い符号は `Err`。`code_u32` が `from_str_radix(…, 16)` で描画に使う数にする。' },
+      { title: 'display：none なら木に入らない', text: '`DisplayType::from_str` が `block`・`inline`・`none` を写し、知らない値は `Err` → `DisplayNone`。`create_layout_object` は最後に `display()` を見て、`DisplayNone` なら `None` を返す。p.hidden はここで消える。' },
+      { title: 'saba のカスケードは順序だけ', text: '当たった規則を書かれた順に当て、同じ欄は後の値で上書きする。それが全部で、詳細度（ID ＞ クラス ＞ 型）も出所も見ない。`p { color: green; }` を `.first` の後に足すと、CSS では `.first` が勝つが saba では green になる。[[10-browser.html#s3.2|第10章 場面3]]との差はここ。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const panel = panelSet(svg);
+      st.C = panel.list;
+      panel([
+        ['', 'layout/layout_object.rs（create_layout_object の前半。詰めた）'],
+        [50, 'pub fn create_layout_object('],
+        [51, '  node: &Option<Rc<RefCell<Node>>>,'],
+        [52, '  parent_obj: &Option<Rc<RefCell<LayoutObject>>>,'],
+        [53, '  cssom: &StyleSheet,'],
+        [54, ') -> Option<Rc<RefCell<LayoutObject>>> {'],
+        [55, '  if let Some(n) = node {'],
+        [57, '    let layout_object = Rc::new(RefCell::new('],
+        [null, '      LayoutObject::new(n.clone(), parent_obj)));'],
+        [60, '    for rule in &cssom.rules {'],
+        [61, '      if layout_object.borrow()'],
+        [null, '          .is_node_selected(&rule.selector) {'],
+        [62, '        layout_object.borrow_mut()'],
+        [64, '          .cascading_style(rule.declarations.clone()); } }'],
+        [null, '    …  // 継承と初期値は場面5、display: none は段階5'],
+        ['', 'layout/layout_object.rs（LayoutObject::new の抜粋）'],
+        [126, '      style: ComputedStyle::new(),  // 7 欄とも None']
+      ]).hl(9, 13);
+      panel([
+        ['', 'layout/layout_object.rs（cascading_style の骨組み。詰めた）'],
+        [338, 'pub fn cascading_style(&mut self,'],
+        [null, '                       declarations: Vec<Declaration>) {'],
+        [339, '  for declaration in declarations {'],
+        [340, '    match declaration.property.as_str() {'],
+        [341, '      "background-color" => {'],
+        [null, '        …  // 値を from_name / from_code で読む（342〜358）'],
+        [360, '      "color" => {'],
+        [null, '        …  // 同じ形。失敗は black（361〜375）'],
+        [377, '      "display" => {'],
+        [null, '        …  // Ident → DisplayType::from_str（378〜384）'],
+        [386, '      _ => {}'],
+        [387, '    } } }'],
+        ['', 'css/cssom.rs（宣言の型）'],
+        [262, 'pub struct Declaration {'],
+        [263, '  pub property: String,'],
+        [264, '  pub value: ComponentValue,  // = CssToken'],
+        [265, '}']
+      ]).hl(4, 12);
+      panel([
+        ['', 'layout/layout_object.rs（"color" の腕。詰めた）'],
+        [360, '"color" => {'],
+        [361, '  if let ComponentValue::Ident(value)'],
+        [null, '      = &declaration.value {'],
+        [362, '    let color = match Color::from_name(&value) {'],
+        [363, '      Ok(color) => color, Err(_) => Color::black(), };'],
+        [366, '    self.style.set_color(color); }'],
+        [369, '  if let ComponentValue::HashToken(color_code)'],
+        [null, '      = &declaration.value {'],
+        [370, '    let color = match Color::from_code(&color_code) {'],
+        [371, '      Ok(color) => color, Err(_) => Color::black(), };'],
+        [374, '    self.style.set_color(color); } }'],
+        ['', 'layout/computed_style.rs（from_name の頭。詰めた）'],
+        [142, 'pub fn from_name(name: &str) -> Result<Self, Error> {'],
+        [143, '  let code = match name {'],
+        [149, '    "red" => "#ff0000".to_string(),'],
+        [null, '    …  // 18 色。無ければ Err(Error::UnexpectedInput(…))'],
+        [170, '  Ok(Self { name: Some(name.to_string()), code, }) }']
+      ]).hl(1, 11);
+      panel([
+        ['', 'layout/computed_style.rs（from_code と code_u32。詰めた）'],
+        [136, 'pub struct Color { name: Option<String>, code: String, }'],
+        [176, 'pub fn from_code(code: &str) -> Result<Self, Error> {'],
+        [177, "  if code.chars().nth(0) != Some('#') || code.len() != 7 {"],
+        [178, '    return Err(Error::UnexpectedInput(format!('],
+        [179, '      "invalid color code {}", code))); }'],
+        [184, '  let name = match code {'],
+        [185, '    "#000000" => "black".to_string(),'],
+        [198, '    "#0000ff" => "blue".to_string(),'],
+        [200, '    "#00ffff" => "aqua".to_string(),'],
+        [null, '    …  // 18 色'],
+        [203, '    _ => { return Err(Error::UnexpectedInput(format!('],
+        [205, '      "color code {:?} is not supported yet", code))); } };'],
+        [211, '  Ok(Self { name: Some(name), code: code.to_string(), }) }'],
+        [231, 'pub fn code_u32(&self) -> u32 {'],
+        [232, "  u32::from_str_radix(self.code.trim_start_matches('#'),"],
+        [null, '    16).unwrap() }']
+      ]).hl(3, 5);
+      panel([
+        ['', 'layout/layout_object.rs（"display" の腕と、create_layout_object の後半。詰めた）'],
+        [377, '"display" => {'],
+        [378, '  if let ComponentValue::Ident(value) = declaration.value {'],
+        [379, '    let display_type ='],
+        [null, '        match DisplayType::from_str(&value) {'],
+        [380, '      Ok(display_type) => display_type,'],
+        [381, '      Err(_) => DisplayType::DisplayNone, };'],
+        [383, '    self.style.set_display(display_type) } }'],
+        [77, 'if layout_object.borrow().style().display()'],
+        [null, '    == DisplayType::DisplayNone {'],
+        [78, '  return None; }'],
+        ['', 'layout/computed_style.rs（DisplayType::from_str。詰めた）'],
+        [282, 'pub fn from_str(s: &str) -> Result<Self, Error> {'],
+        [283, '  match s {'],
+        [284, '    "block" => Ok(Self::Block), "inline" => Ok(Self::Inline),'],
+        [286, '    "none" => Ok(Self::DisplayNone),'],
+        [287, '    _ => Err(Error::UnexpectedInput(format!('],
+        [288, '      "display {:?} is not supported yet", s))), } }']
+      ]).hl(8, 10);
+      panel([
+        ['', 'layout/layout_object.rs（順序を決める 2 つの for。詰めた）'],
+        [60, 'for rule in &cssom.rules {          // 規則は書かれた順'],
+        [61, '  if layout_object.borrow()'],
+        [null, '      .is_node_selected(&rule.selector) {'],
+        [62, '    layout_object.borrow_mut()'],
+        [64, '      .cascading_style(rule.declarations.clone()); } }'],
+        [339, 'for declaration in declarations {   // 宣言も書かれた順'],
+        [340, '  match declaration.property.as_str() {'],
+        [null, '    …'],
+        [366, '    self.style.set_color(color);    // 前の値は消える'],
+        ['', 'layout/computed_style.rs（set_color）'],
+        [89, 'pub fn set_color(&mut self, color: Color) {'],
+        [90, '  self.color = Some(color);'],
+        [91, '}']
+      ]).hl(1, 1);
+      st.tr = S.g({}, svg);
+      const g = st.g = S.g({}, svg);
+      // 右上: 規則を順に当てる
+      st.nodeLbl = S.text(490, 34, '', { cls: 't-sm t-b t-mono pre' }, g);
+      st.ruleRows = ['rules[0]  #title', 'rules[1]  .first', 'rules[2]  .hidden', 'rules[3]  .links'].map((s, k) => {
+        const y = 48 + k * 24;
+        const r = S.rect(490, y, 150, 20, { rx: 3, cls: 'f-sf s-rule w1' }, g);
+        S.text(498, y + 14, s, { cls: 't-xs t-mono pre' }, g);
+        const res = S.text(648, y + 14, '', { cls: 't-xs t-b pre' }, g);
+        return { r, res };
+      });
+      S.text(490, 160, 'true の規則だけ cascading_style へ', { cls: 't-xs t-dim' }, g);
+      // 右: ComputedStyle の箱
+      st.box = styleBox(g, 720, 48, 224, 'style: ComputedStyle');
+      // 中: 値の読み方（全幅）
+      S.text(490, 240, 'cascading_style の中（値の読み方）', { cls: 't-xs t-dim' }, g);
+      st.flow = [0, 1, 2, 3, 4].map((k) => S.text(490, 258 + k * 18, '', { cls: 't-xs t-mono pre' }, g));
+      st.endLbl = S.text(490, 352, '', { cls: 't-xs t-b t-x pre' }, g);
+      // 下: 段階ごとの補足
+      const B = st.B = [];
+      const bot = () => { const gg = S.g({ cls: 'fade hide' }, svg); B.push(gg); return gg; };
+      let b = bot();
+      S.text(490, 384, 'cascading_style が書く欄と、書かない欄', { cls: 't-sm t-b' }, b);
+      [['プロパティ', '欄', '値の読み方', '失敗のとき'], ['"background-color"', 'background_color', 'from_name / from_code', 'white'], ['"color"', 'color', 'from_name / from_code', 'black'], ['"display"', 'display', 'from_str', 'DisplayNone'], ['それ以外', '_ => {}（捨てる）', '—', '—']].forEach(([a, bb, c, d], k) => {
+        const y = 404 + k * 19, cls = k === 0 ? 't-xs t-dim' : 't-xs t-mono pre';
+        S.text(490, y, a, { cls: cls + (k ? ' t-b' : '') }, b); S.text(630, y, bb, { cls }, b); S.text(738, y, c, { cls }, b); S.text(876, y, d, { cls }, b);
+      });
+      S.text(490, 512, 'font_size・text_decoration・height・width は規則では決まらない（場面5 の継承と初期値）', { cls: 't-xs t-dim' }, b);
+      b = bot();
+      S.text(490, 384, 'from_name / from_code が知っている 18 色（名前 → #rrggbb。実際の色）', { cls: 't-sm t-b' }, b);
+      S4_COLORS.forEach(([n, c], k) => {
+        const x = 490 + (k % 6) * 76, y = 396 + Math.floor(k / 6) * 30;
+        S.rect(x, y, 14, 14, { rx: 2, cls: 's-rule w1', style: { fill: c } }, b);
+        S.text(x + 18, y + 11, n, { cls: 't-xs t-mono' }, b);
+        S.text(x + 18, y + 25, c, { cls: 't-xs t-mono t-dim' }, b);
+      });
+      S.text(490, 502, 'CSS Color 4 の名前付きの色は 148（16 色は VGA のパレット由来、残りの多くは X11 → SVG）', { cls: 't-xs t-dim' }, b);
+      S.text(490, 520, 'from_code はこの 18 個の符号以外（#336699 など）も Err にする。7 文字でも通らない', { cls: 't-xs' }, b);
+      b = bot();
+      S.text(490, 384, 'DisplayType（CSS Display 3 の display の値のうち 3 つ）', { cls: 't-sm t-b' }, b);
+      [['"block"', 'Block', 'body・h1・h2・p の初期値（場面5）'], ['"inline"', 'Inline', 'a など残りの要素と Text の初期値'], ['"none"', 'DisplayNone', 'create_layout_object が None → 木に入らない'], ['"flex" "grid" など', 'Err → DisplayNone', '知らない値は消える側に倒す、と読める']].forEach(([a, bb, c], k) => {
+        const y = 408 + k * 20;
+        S.text(490, y, a, { cls: 't-xs t-mono t-b pre' }, b); S.text(610, y, bb, { cls: 't-xs t-mono pre' }, b); S.text(730, y, c, { cls: 't-xs pre' }, b);
+      });
+      S.text(490, 504, 'CSS Display 3 の display には flex・grid・inline-block・table 系・contents などもある', { cls: 't-xs t-dim' }, b);
+      b = bot();
+      S.text(490, 384, '例（test.html には無い）: 同じ要素の同じ欄を 2 つの規則が決めるとき', { cls: 't-sm t-b' }, b);
+      ['.first { color: #0000ff; }   /* 規則 A: クラス（詳細度 0,1,0） */', 'p      { color: green;   }   /* 規則 B: 型（詳細度 0,0,1）。後に書く */'].forEach((s, k) => S.text(490, 406 + k * 18, s, { cls: 't-xs t-mono pre' }, b));
+      S.rect(490, 436, 220, 56, { rx: 4, cls: 'f-sf s-x w1' }, b);
+      S.text(500, 452, 'saba', { cls: 't-xs t-b' }, b);
+      S.text(500, 468, 'A → blue、B → green で上書き', { cls: 't-xs pre' }, b);
+      S.rect(690, 448, 12, 12, { rx: 2, cls: 's-rule w1', style: { fill: '#008000' } }, b);
+      S.text(500, 484, '→ p.first は green（順序だけ）', { cls: 't-xs t-b t-x' }, b);
+      S.rect(724, 436, 220, 56, { rx: 4, cls: 'f-sf s-rule w1' }, b);
+      S.text(734, 452, 'CSS Cascade（Chromium）', { cls: 't-xs t-b' }, b);
+      S.text(734, 468, 'A の詳細度 0,1,0 ＞ B の 0,0,1', { cls: 't-xs pre' }, b);
+      S.rect(924, 448, 12, 12, { rx: 2, cls: 's-rule w1', style: { fill: REAL.blue } }, b);
+      S.text(734, 484, '→ 書く順に関わらず blue', { cls: 't-xs t-b' }, b);
+      S.text(490, 512, 'B を A の前に書けば saba も blue になる。結果が一致するかは、書いた順に依る', { cls: 't-xs t-dim' }, b);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['create_layout_object(&Some(p.first), &None, cssom)　← h1 の兄弟（場面5）', 'LayoutObject::new → style ＝ ComputedStyle::new()（7 欄とも None）', 'for rule in &cssom.rules: is_node_selected → false, true, false, false', '→ rules[1] の declarations（1 個）だけが cascading_style に渡る'],
+        ['Declaration { property: "color", value: HashToken("#0000ff") }', 'property.as_str() ＝ "color" → "color" の腕', 'もし "font-size" なら _ => {} → 何もしない（捨てる）', '"background-color" "color" "display" の 3 つだけが欄に入る'],
+        ['h1: color: red → value ＝ Ident("red") → Color::from_name("red")', '→ Ok(Color { name: Some("red"), code: "#ff0000" }) → set_color', 'p.first: value ＝ HashToken("#0000ff") → Color::from_code("#0000ff")', '→ Ok(Color { name: Some("blue"), code: "#0000ff" }) → set_color'],
+        ["from_code: nth(0) ＝ '#' かつ len ＝ 7 でなければ Err（\"#fff\" は Err）", '7 文字でも表に無い "#336699" は Err → color は black、背景は white', 'from_name("orange") → Ok。"pink" → Err（表に無い）→ 同じく落ちる', 'blue.code_u32() ＝ from_str_radix("0000ff", 16) ＝ 255 ＝ 0x0000ff'],
+        ['p.hidden: value ＝ Ident("none") → from_str("none") → Ok(DisplayNone)', 'set_display(DisplayNone)。defaulting の後に display() を見る', '→ DisplayNone なら create_layout_object は None → 木に入らない', '"flex" "grid" → Err → DisplayNone。知らない値の要素は消える、と読める'],
+        ['例（test.html には無い）: p { color: green; } を .first の後に足す', 'saba: 両方 true → blue の後に green で上書き → p.first は green', 'CSS: .first（詳細度 0,1,0）が p（0,0,1）より強い → blue のまま', '順を入れ替えると saba は blue、CSS はやはり blue。saba は順序だけ']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 352, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+      const sc = S4_SCRIPT[i];
+      st.nodeLbl.textContent = 'ノード: ' + sc.node + ' に 4 規則を順に';
+      st.box.title.textContent = sc.node.split('（')[0] + ' の style: ComputedStyle';
+      st.B.forEach((g, k) => S.fade(g, k === (i <= 1 ? 0 : i <= 3 ? 1 : i === 4 ? 2 : 3)));
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, sc = S4_SCRIPT[i];
+      // 8 秒で 1 周: 0.6 秒ごとに規則を 1 つ照合、当たった規則で値の読み方を 0.5 秒ずつ 5 行、欄に入れてから残りの規則へ。
+      // 止めている人には終わった姿
+      const tt = playing() ? U.mod(ctx.ts, 8) : 7.5;
+      const h = sc.hits.indexOf(1);
+      const flowStart = 0.6 * (h + 1), setAt = flowStart + 2.5;
+      const rowAt = (k) => k <= h ? 0.6 * k : setAt + 0.6 * (k - h);
+      const endAt = setAt + 0.6 * (3 - h) + 0.6;
+      st.ruleRows.forEach((r, k) => {
+        const t0 = rowAt(k), checking = tt >= t0 && tt < t0 + 0.6, done = tt >= t0 + 0.6 || (k === h && tt >= t0 + 0.3);
+        const hit = sc.hits[k] === 1;
+        r.r.setAttribute('class', checking ? 'f-x-soft s-x w2' : done && hit ? 'f-d-soft s-d w1' : 'f-sf s-rule w1');
+        r.res.textContent = tt < t0 + 0.3 ? '' : hit ? '✓ true' : '– false';
+        r.res.setAttribute('class', 't-xs t-b pre ' + (hit ? 't-d' : 't-dim'));
+      });
+      st.flow.forEach((t, k) => { t.textContent = sc.flow[k]; op(t, tt >= flowStart + 0.5 * k ? 1 : 0.12); });
+      st.box.reset();
+      if (tt >= setAt) st.box.set(sc.field, sc.value, 'set', sc.color);
+      st.endLbl.textContent = tt >= endAt ? sc.end : '';
+    }
+  };
+
+  /* ================================================================
+     場面5 継承と初期値（defaulting）
+     段階1〜4・6 は h1 → その Text、段階5 は p.links → a。値は computed_style.rs の手順を手で追ったもの
+     ================================================================ */
+  const S5_PAIRS = {
+    h1: {
+      parent: { title: 'h1 の style（規則の後）', cascade: { color: ['Some(red)', REAL.red] }, defaults: { background_color: ['Some(white)', REAL.white], display: ['Some(Block)'], font_size: ['Some(XXLarge)'], text_decoration: ['Some(None)'], height: ['Some(0.0)'], width: ['Some(0.0)'] } },
+      child: { title: 'Text "My Browser!" の style', inherit: { color: ['Some(red)', REAL.red], font_size: ['Some(XXLarge)'] }, defaults: { background_color: ['Some(white)', REAL.white], display: ['Some(Inline)'], text_decoration: ['Some(None)'], height: ['Some(0.0)'], width: ['Some(0.0)'] } },
+      checks: [['background_color', 'white', '＝ 初期値 white', false], ['color', 'red', '≠ 初期値 black', true], ['font_size', 'XXLarge', '≠ 初期値 Medium', true], ['text_decoration', 'None', '＝ 初期値 None', false]]
+    },
+    links: {
+      parent: { title: 'p.links の style（規則の後）', cascade: { background_color: ['Some(aqua)', REAL.aqua] }, defaults: { color: ['Some(black)', REAL.black], display: ['Some(Block)'], font_size: ['Some(Medium)'], text_decoration: ['Some(None)'], height: ['Some(0.0)'], width: ['Some(0.0)'] } },
+      child: { title: 'a1（1 つめの a） の style', inherit: { background_color: ['Some(aqua)', REAL.aqua] }, defaults: { color: ['Some(black)', REAL.black], display: ['Some(Inline)'], font_size: ['Some(Medium)'], text_decoration: ['Some(Underline)'], height: ['Some(0.0)'], width: ['Some(0.0)'] } },
+      checks: [['background_color', 'aqua', '≠ 初期値 white', true], ['color', 'black', '＝ 初期値 black', false], ['font_size', 'Medium', '＝ 初期値 Medium', false], ['text_decoration', 'None', '＝ 初期値 None', false]]
+    }
+  };
+  const s5 = {
+    steps: [
+      { title: '7 つの欄は Option：埋めてから読む', text: '`ComputedStyle` の 7 欄はすべて `Option`。`new()` では全部 `None` で、「まだ決めていない」を型で表す。`color()` などの getter は `expect` で中身を取り出すので、埋める前に読めば panic。埋める責任は `defaulting` にある。' },
+      { title: 'defaulting：親の値 → 初期値の順', text: '規則を当てた後、`parent_obj` があればその `style()` の複製を、無ければ `None` を `defaulting_style` に渡す。`build_layout_tree` が親を渡すのは最初の子だけで、兄弟は `&None` で作るので継承しない。`defaulting` は先に親から写し、次に初期値で埋める。' },
+      { title: '継承：親の値が初期値と違うときだけ写す', text: '欄が `None` で、親の値が初期値と違えば写す。見るのは background_color・color・font_size・text_decoration の 4 欄（初期値は white・black・Medium・None）。display・height・width は写さない。' },
+      { title: '初期値：白・黒・要素の種類で決まる値・0.0', text: '残った `None` を埋める。背景は white、文字は black、display・font_size・text_decoration はノードの種類から決める関数、height・width は 0.0。この 2 欄は `cascading_style` では設定されないので常に 0.0（大きさは[[35-saba-layout.html#s3|第35章 場面3]]）。' },
+      { title: '要素の種類で決まる初期値', text: 'display は Document と body・h1・h2・p が Block、他は Inline。font_size は h1 が XXLarge、h2 が XLarge。text_decoration は a が Underline。HTML Standard の描画の既定（h1 2em、リンクに下線）に沿う。' },
+      { title: 'Copy と Clone：小さな enum は Copy', text: '3 つの enum は `#[derive(Copy, Clone)]` で、`self.display.expect(…)` と `&self` から値をそのまま取り出せる。`Color` は `String` を持つので `Clone` だけで、`.clone()` で複製を明示する。Copy にできるのは中身が全部 Copy の型。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const panel = panelSet(svg);
+      st.C = panel.list;
+      panel([
+        ['', 'layout/computed_style.rs（ComputedStyle。詰めた）'],
+        [11, '#[derive(Debug, Clone, PartialEq)]'],
+        [12, 'pub struct ComputedStyle {'],
+        [13, '  background_color: Option<Color>,'],
+        [14, '  color: Option<Color>,'],
+        [15, '  display: Option<DisplayType>,'],
+        [16, '  font_size: Option<FontSize>,'],
+        [17, '  text_decoration: Option<TextDecoration>,'],
+        [18, '  height: Option<f64>,'],
+        [19, '  width: Option<f64>,'],
+        [20, '}'],
+        [23, 'pub fn new() -> Self {'],
+        [24, '  Self { background_color: None, color: None, display: None,'],
+        [null, '         font_size: None, text_decoration: None,'],
+        [null, '         height: None, width: None, } }'],
+        [93, 'pub fn color(&self) -> Color {'],
+        [94, '  self.color.clone()'],
+        [96, '    .expect("failed to access CSS property: color") }']
+      ]).hl(2, 10);
+      panel([
+        ['', 'layout/layout_object.rs（create_layout_object の後半。詰めた）'],
+        [69, 'let parent_style = if let Some(parent) = parent_obj {'],
+        [70, '  Some(parent.borrow().style()) } else { None };'],
+        [74, 'layout_object.borrow_mut()'],
+        [null, '  .defaulting_style(n, parent_style);'],
+        ['', 'layout/layout_view.rs（build_layout_tree。子と兄弟の作り方）'],
+        [41, 'let mut first_child = build_layout_tree('],
+        [null, '  &original_first_child, &layout_object, cssom);'],
+        [42, 'let mut next_sibling = build_layout_tree('],
+        [null, '  &original_next_sibling, &None, cssom);  // 兄弟の親は None'],
+        ['', 'layout/computed_style.rs（defaulting の骨組み。詰めた）'],
+        [35, 'pub fn defaulting(&mut self, node: &Rc<RefCell<Node>>,'],
+        [null, '    parent_style: Option<ComputedStyle>) {'],
+        [37, '  if let Some(parent_style) = parent_style {'],
+        [null, '    …  // 親の値が初期値と違えば写す（38〜52。段階3）'],
+        [53, '  }'],
+        [null, '  …  // 残りの None を初期値で埋める（56〜76。段階4）'],
+        [77, '}']
+      ]).hl(1, 4);
+      panel([
+        ['', 'layout/computed_style.rs（defaulting の前半。コメントは省き、詰めた）'],
+        [37, 'if let Some(parent_style) = parent_style {'],
+        [38, '  if self.background_color.is_none()'],
+        [null, '      && parent_style.background_color() != Color::white() {'],
+        [40, '    self.background_color ='],
+        [null, '      Some(parent_style.background_color()); }'],
+        [42, '  if self.color.is_none()'],
+        [null, '      && parent_style.color() != Color::black() {'],
+        [43, '    self.color = Some(parent_style.color()); }'],
+        [45, '  if self.font_size.is_none()'],
+        [null, '      && parent_style.font_size() != FontSize::Medium {'],
+        [46, '    self.font_size = Some(parent_style.font_size()); }'],
+        [48, '  if self.text_decoration.is_none()'],
+        [49, '      && parent_style.text_decoration()'],
+        [null, '         != TextDecoration::None {'],
+        [51, '    self.text_decoration ='],
+        [null, '      Some(parent_style.text_decoration()); }'],
+        [53, '}']
+      ]).hl(6, 8);
+      panel([
+        ['', 'layout/computed_style.rs（defaulting の後半。コメントは省き、詰めた）'],
+        [56, 'if self.background_color.is_none() {'],
+        [57, '  self.background_color = Some(Color::white()); }'],
+        [59, 'if self.color.is_none() {'],
+        [60, '  self.color = Some(Color::black()); }'],
+        [62, 'if self.display.is_none() {'],
+        [63, '  self.display = Some(DisplayType::default(node)); }'],
+        [65, 'if self.font_size.is_none() {'],
+        [66, '  self.font_size = Some(FontSize::default(node)); }'],
+        [68, 'if self.text_decoration.is_none() {'],
+        [69, '  self.text_decoration ='],
+        [null, '    Some(TextDecoration::default(node)); }'],
+        [71, 'if self.height.is_none() { self.height = Some(0.0); }'],
+        [74, 'if self.width.is_none() { self.width = Some(0.0); }'],
+        ['', 'layout/computed_style.rs（Color::white。black も同じ形。詰めた）'],
+        [217, 'pub fn white() -> Self {'],
+        [218, '  Self { name: Some("white".to_string()),'],
+        [null, '         code: "#ffffff".to_string(), } }']
+      ]).hl(1, 13);
+      panel([
+        ['', 'layout/computed_style.rs（DisplayType::default。詰めた）'],
+        [268, 'fn default(node: &Rc<RefCell<Node>>) -> Self {'],
+        [269, '  match &node.borrow().kind() {'],
+        [270, '    NodeKind::Document => DisplayType::Block,'],
+        [271, '    NodeKind::Element(e) => {'],
+        [272, '      if e.is_block_element() { DisplayType::Block }'],
+        [274, '      else { DisplayType::Inline } }'],
+        [278, '    NodeKind::Text(_) => DisplayType::Inline, } }'],
+        ['', 'dom/node.rs（is_block_element）'],
+        [185, 'pub fn is_block_element(&self) -> bool {'],
+        [186, '  match self.kind {'],
+        [187, '    ElementKind::Body | ElementKind::H1 | ElementKind::H2'],
+        [null, '      | ElementKind::P => true,'],
+        [188, '    _ => false, } }'],
+        ['', 'layout/computed_style.rs（FontSize::default と TextDecoration::default の腕）'],
+        [248, '        ElementKind::H1 => FontSize::XXLarge,'],
+        [249, '        ElementKind::H2 => FontSize::XLarge,'],
+        [306, '        ElementKind::A => TextDecoration::Underline,']
+      ]).hl(1, 7);
+      panel([
+        ['', 'layout/computed_style.rs（derive と getter。詰めた）'],
+        [135, '#[derive(Debug, Clone, PartialEq)]'],
+        [136, 'pub struct Color { name: Option<String>, code: String, }'],
+        [237, '#[derive(Debug, Copy, Clone, PartialEq)]'],
+        [238, 'pub enum FontSize { Medium, XLarge, XXLarge, }'],
+        [257, '#[derive(Debug, Copy, Clone, PartialEq)]'],
+        [258, 'pub enum DisplayType { Block, Inline, DisplayNone, }'],
+        [296, '#[derive(Debug, Copy, Clone, PartialEq)]'],
+        [297, 'pub enum TextDecoration { None, Underline, }'],
+        [93, 'pub fn color(&self) -> Color {'],
+        [94, '  self.color'],
+        [95, '    .clone()    // Option<Color> は Copy でないので複製'],
+        [96, '    .expect("failed to access CSS property: color") }'],
+        [103, 'pub fn display(&self) -> DisplayType {'],
+        [104, '  self.display  // Option<DisplayType> は Copy'],
+        [105, '    .expect("failed to access CSS property: display") }'],
+        ['', 'layout/layout_object.rs 70'],
+        [70, '  Some(parent.borrow().style())  // ComputedStyle ごと複製']
+      ]).hl(9, 15);
+      st.tr = S.g({}, svg);
+      const g = st.g = S.g({}, svg);
+      st.pBox = styleBox(g, 490, 40, 224, '');
+      st.cBox = styleBox(g, 720, 40, 224, '');
+      S.path('M714,124 H720', { cls: 'f-none s-dim w15', 'marker-end': S.markers(svg)('dim') }, g);
+      st.status = S.text(490, 232, '', { cls: 't-xs t-b pre' }, g);
+      S.text(944, 30, '赤: 規則で決まった値　緑: 親から写した値　色なし: 初期値', { cls: 't-end t-xs t-dim' }, g);
+      // 下: 段階ごとの補足
+      const D = st.D = [];
+      const det = () => { const gg = S.g({ cls: 'fade hide' }, svg); D.push(gg); return gg; };
+      let d = det();
+      S.text(490, 262, 'getter（埋まっていなければ expect が panic）', { cls: 't-sm t-b' }, d);
+      [['background_color()', 'Color', '.clone().expect(…)'], ['color()', 'Color', '.clone().expect(…)'], ['display()', 'DisplayType', '.expect(…)　← Copy'], ['font_size()', 'FontSize', '.expect(…)　← Copy'], ['text_decoration()', 'TextDecoration', '.expect(…)　← Copy'], ['height()', 'f64', '.expect(…)'], ['width()', 'f64', '.expect(…)']].forEach(([a, b, c], k) => {
+        const y = 284 + k * 18;
+        S.text(490, y, a, { cls: 't-xs t-mono t-b pre' }, d); S.text(640, y, b, { cls: 't-xs t-mono pre' }, d); S.text(760, y, c, { cls: 't-xs t-mono pre' }, d);
+      });
+      S.text(490, 426, 'メッセージは "failed to access CSS property: color" のように欄の名前入り', { cls: 't-xs t-dim' }, d);
+      S.text(490, 444, 'Option の欄 ＋ expect の getter ＝「埋めてから読む」約束。守るのは defaulting', { cls: 't-xs' }, d);
+      d = det();
+      S.text(490, 262, 'parent_obj はどこから来るか（レイアウトの木を作る順）', { cls: 't-sm t-b' }, d);
+      [['body', 'LayoutView::new が &None で呼ぶ → parent_style ＝ None。初期値だけ'], ['h1', 'body の最初の子 → parent_obj ＝ body → Some(body の style の複製)'], ['Text', 'h1 の最初の子 → parent_obj ＝ h1 → red と XXLarge を持つ'], ['p.first', 'h1 の兄弟 → 42 行の &None → 継承しない（body は初期値だけなので同じ）'], ['a2', '2 つめの a。a1 の兄弟 → &None → p.links の aqua を受け取らない']].forEach(([a, b], k) => {
+        const y = 286 + k * 22;
+        S.text(490, y, a, { cls: 't-xs t-mono t-b pre' }, d); S.text(552, y, b, { cls: 't-xs pre' }, d);
+      });
+      S.text(490, 400, 'build_layout_tree は親 → 最初の子 → 次の兄弟の順に作る（第35章 場面1）', { cls: 't-xs t-dim' }, d);
+      S.text(490, 418, '親は子より先に埋まるので、渡された親の 7 欄は読める（expect で止まらない）', { cls: 't-xs' }, d);
+      d = det();
+      S.text(490, 262, '継承の 4 つの if（h1 → Text）', { cls: 't-sm t-b' }, d);
+      st.chkRows = [0, 1, 2, 3].map((k) => {
+        const y = 286 + k * 20;
+        return { a: S.text(490, y, '', { cls: 't-xs t-mono t-b pre' }, d), b: S.text(620, y, '', { cls: 't-xs t-mono pre' }, d), c: S.text(740, y, '', { cls: 't-xs pre' }, d), r: S.text(880, y, '', { cls: 't-xs t-b pre' }, d) };
+      });
+      S.text(490, 374, 'display・height・width には継承の if が無い。親が Block でも子は自分の種類で決める', { cls: 't-xs' }, d);
+      S.text(490, 392, 'CSS では color・font-size は継承、background-color は継承しない（性質で決まる）', { cls: 't-xs t-dim' }, d);
+      S.text(490, 410, '→ saba では p.links の aqua が最初の子の a とその Text に写る（2 つめの a には写らない）', { cls: 't-xs t-dim' }, d);
+      d = det();
+      S.text(490, 262, '初期値（56〜76 行）', { cls: 't-sm t-b' }, d);
+      ['background_color → Color::white()', 'color → Color::black()', 'display → DisplayType::default(node)（段階5）', 'font_size → FontSize::default(node)（段階5）', 'text_decoration → TextDecoration::default(node)（段階5）', 'height → 0.0（cascading_style では設定されない）', 'width → 0.0（同じ。2 欄ともこの版では読まれない）'].forEach((s, k) => S.text(490, 284 + k * 18, s, { cls: 't-xs t-mono pre' }, d));
+      S.text(490, 426, 'CSS の初期値: background-color は transparent、display は inline、font-size は medium', { cls: 't-xs t-dim' }, d);
+      d = det();
+      S.text(490, 262, 'ノードの種類 → 初期値', { cls: 't-sm t-b' }, d);
+      [['Document', 'Block', 'Medium', 'None'], ['html head style script', 'Inline', 'Medium', 'None'], ['body h1 h2 p', 'Block', 'XXLarge / XLarge / Medium', 'None'], ['a', 'Inline', 'Medium', 'Underline'], ['Text', 'Inline', 'Medium', 'None']].forEach(([a, b, c, dd], k) => {
+        const y = 284 + k * 18;
+        S.text(490, y, a, { cls: 't-xs t-mono t-b pre' }, d); S.text(630, y, b, { cls: 't-xs t-mono pre' }, d); S.text(700, y, c, { cls: 't-xs t-mono pre' }, d); S.text(876, y, dd, { cls: 't-xs t-mono pre' }, d);
+      });
+      S.text(630, 266, 'display', { cls: 't-xs t-dim' }, d); S.text(700, 266, 'font_size（h1 / h2 / 他）', { cls: 't-xs t-dim' }, d); S.text(876, 266, 'decoration', { cls: 't-xs t-dim' }, d);
+      S.text(490, 392, 'CSS Fonts 4 の表: h1 ＝ xx-large（medium の 2/1）、h2 ＝ x-large（3/2）', { cls: 't-xs t-dim' }, d);
+      S.text(490, 410, 'HTML Standard の描画の既定: h1 は 2.00em、h2 は 1.50em、:link は underline', { cls: 't-xs t-dim' }, d);
+      S.text(490, 428, 'saba の倍率（第35章）は Medium 1・XLarge 2・XXLarge 3 で、仕様の 1.5・2 とは違う', { cls: 't-xs' }, d);
+      d = det();
+      S.text(490, 262, 'Copy と Clone', { cls: 't-sm t-b' }, d);
+      ['Copy: 代入や引数渡しでビットごと複製される型。中身が全部 Copy のときだけ derive できる', '  FontSize・DisplayType・TextDecoration は腕に値を持たない小さな enum → Copy', '  self.display は Option<DisplayType>。Option<T> は T が Copy なら Copy → そのまま expect', 'Clone: .clone() と書いたときだけ複製する型。String（ヒープを所有）を持つ Color は Copy 不可', '  self.color.clone().expect(…)。clone を書かないと &self の中から動かせず E0507', 'ComputedStyle も Clone。parent.borrow().style() は Color 2 つを含む 7 欄を複製して渡す'].forEach((s, k) => S.text(490, 284 + k * 18, s, { cls: 't-xs pre' }, d));
+      S.text(490, 410, '値そのものを複製する（Rc の共有ではない。第30章 場面5）', { cls: 't-xs t-dim' }, d);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['ComputedStyle::new() → 7 欄とも None（「無い」ではなく「まだ決めていない」）', 'getter: self.color.clone().expect("failed to access CSS property: color")', 'None のまま color() を呼ぶと expect が panic → 埋めてから読む約束', 'cascading_style の後、defaulting_style で全部の欄を Some にしてから読む'],
+        ['create_layout_object: parent_style ＝ Some(parent.borrow().style())（複製）', 'body と兄弟（p.first など）は parent_obj ＝ None → 継承の段は飛ばす', 'h1 の親は body、Text の親は h1（どちらも最初の子）', 'defaulting(node, parent_style): 先に継承、次に初期値。順は固定'],
+        ['Text の color は None。親 h1 の color() ＝ red ≠ Color::black() → Some(red)', 'Text の font_size は None。親の XXLarge ≠ Medium → Some(XXLarge)', '親の background_color ＝ white ＝ 初期値 → 写さない（後で初期値 white に）', 'display・height・width には継承の if が無い'],
+        ['background_color → Color::white()、color → Color::black()', 'display → DisplayType::default(node)、font_size → FontSize::default(node)', 'text_decoration → TextDecoration::default(node)、height・width → 0.0', 'height・width の欄はこの版では読まれない（大きさは LayoutObject の size）'],
+        ['p.links: background_color ＝ aqua（規則）。最初の子 a1 の親として渡る', 'a1: 親の aqua ≠ white → 写す。color・font_size・text_decoration は初期値と同じ', 'a1: display → is_block_element() ＝ false → Inline。text_decoration → Underline', 'a2 は a1 の兄弟で parent_obj ＝ None → aqua は写らず white（Text も white）'],
+        ['3 つの enum: #[derive(Copy, Clone)] → self.display.expect(…) でそのまま取り出す', 'Color: #[derive(Clone)] だけ（String を持つ）→ self.color.clone().expect(…)', 'Copy は代入で複製される型。Option<T> は T が Copy なら Copy', 'parent.borrow().style() も ComputedStyle ごと clone（Color 2 つを複製）']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 352, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+      st.D.forEach((g, k) => S.fade(g, k === i));
+      const pair = st.pair = i === 4 ? S5_PAIRS.links : S5_PAIRS.h1;
+      st.pBox.title.textContent = pair.parent.title;
+      st.cBox.title.textContent = pair.child.title;
+      pair.checks.forEach(([f, v, why, ok], k) => {
+        const r = st.chkRows[k];
+        r.a.textContent = f; r.b.textContent = '親: ' + v; r.c.textContent = why; r.r.textContent = ok ? '→ 写す' : '→ 写さない';
+        r.r.setAttribute('class', 't-xs t-b pre ' + (ok ? 't-d' : 't-dim'));
+      });
+    },
+    frame(ctx) {
+      const st = ctx.state, pair = st.pair;
+      // 9 秒で 1 周: 1.0 秒から親の初期値を 0.3 秒ずつ、3.2 秒から子の継承の判定を 0.4 秒ずつ、5.0 秒から子の初期値を 0.3 秒ずつ。
+      // 止めている人には終わった姿
+      const tt = playing() ? U.mod(ctx.ts, 9) : 8.5;
+      const P = pair.parent, Cc = pair.child;
+      st.pBox.reset(); st.cBox.reset();
+      for (const f in P.cascade) st.pBox.set(f, P.cascade[f][0], 'set', P.cascade[f][1]);
+      let j = 0, msg = '';
+      const pDef = S4_FIELDS.filter((f) => P.defaults[f]);
+      pDef.forEach((f) => { const t0 = 1.0 + 0.3 * j++; if (tt >= t0) { st.pBox.set(f, P.defaults[f][0], 'default', P.defaults[f][1]); msg = P.title.split('（')[0] + ': ' + f + ' は None → 初期値 ' + P.defaults[f][0]; } });
+      if (tt < 1.0) msg = P.title.split('（')[0] + ': 規則で決まった欄だけ Some。残りは None';
+      pair.checks.forEach(([f, v, why, ok], k) => {
+        const t0 = 3.2 + 0.4 * k;
+        if (tt >= t0) { msg = Cc.title.split(' の')[0] + ': 親の ' + f + ' ＝ ' + v + ' ' + why + (ok ? ' → 写す' : ' → 写さない'); if (ok) st.cBox.set(f, Cc.inherit[f][0], 'inherit', Cc.inherit[f][1]); }
+      });
+      j = 0;
+      const cDef = S4_FIELDS.filter((f) => Cc.defaults[f]);
+      cDef.forEach((f) => { const t0 = 5.0 + 0.3 * j++; if (tt >= t0) { st.cBox.set(f, Cc.defaults[f][0], 'default', Cc.defaults[f][1]); msg = Cc.title.split(' の')[0] + ': ' + f + ' は None → 初期値 ' + Cc.defaults[f][0]; } });
+      if (tt >= 5.0 + 0.3 * cDef.length + 0.3) msg = '7 欄とも Some。getter で読める → update_kind → 第35章のレイアウトへ';
+      st.status.textContent = msg;
+    }
+  };
+
+  /* ================================================================
+     場面6 この版が扱わないもの（第10章との距離）
+     表の値は場面3〜5 の手順を body 以下の全ノードに当てたもの。p.hidden は 7 欄が埋まった後に None が返る。
+     親を受け取るのは最初の子だけ（layout_view.rs 41〜42 行。兄弟は &None）なので、a2 は p.links の aqua を写さない
+     ================================================================ */
+  const S6_ROWS = [
+    ['body', 'white', 'black', 'Block', 'Medium', 'None'],
+    ['h1', 'white', 'red', 'Block', 'XXLarge', 'None'],
+    ['  Text', 'white', 'red', 'Inline', 'XXLarge', 'None'],
+    ['p.first', 'white', 'blue', 'Block', 'Medium', 'None'],
+    ['  Text', 'white', 'blue', 'Inline', 'Medium', 'None'],
+    ['p.links', 'aqua', 'black', 'Block', 'Medium', 'None'],
+    ['  a1', 'aqua', 'black', 'Inline', 'Medium', 'Underline'],
+    ['    Text', 'aqua', 'black', 'Inline', 'Medium', 'Underline'],
+    ['  a2', 'white', 'black', 'Inline', 'Medium', 'Underline'],
+    ['    Text', 'white', 'black', 'Inline', 'Medium', 'Underline'],
+    ['p#target', 'white', 'black', 'Block', 'Medium', 'None'],
+    ['  Text', 'white', 'black', 'Inline', 'Medium', 'None'],
+    ['p.hidden', 'white', 'black', 'DisplayNone', 'Medium', 'None']
+  ];
+  const S6_RH = 16, S6_Y0 = 70;   // 行の間隔と 1 行目の y
+  const S6_RULED = { '1,2': 1, '3,2': 1, '5,1': 1, '12,3': 1 };   // 規則で決まった欄（行, 列）
+  const S6_INH = { '2,2': 1, '2,4': 1, '4,2': 1, '6,1': 1, '7,1': 1, '7,5': 1, '9,5': 1 };   // 親から写した欄
+  const s6 = {
+    steps: [
+      { title: 'body 以下の全ノードの ComputedStyle', text: 'test.html の body 以下に場面3〜5 の手順を当てた結果が表。規則で決まった欄は 4 つだけで、残りは継承と初期値。p.hidden は 7 欄が埋まった後に `None` が返り、レイアウトの木に入らない。値は次の章で、文字の大きさ・色・背景・下線として画面に出る。' },
+      { title: 'この版が扱うもの', text: 'プロパティ 3 つ（background-color・color・display）、色 18、セレクタ 3 種、トークン 12 種、`style` 要素 1 つ。外部の CSS は無く、link は[[33-saba-dom.html#s1|第33章 場面1]]の 9 種の要素にも無い。font-size と text-decoration は初期値だけ。' },
+      { title: '黙って落ちるもの', text: '`@` 規則は読み飛ばし、`a:hover` は `a`、`40px` は `Number(40.0)` だけが値に残り、並べたセレクタは最後の 1 つ、複数のクラスは当たらない。知らないプロパティは `_ => {}`、知らない色は黒か白、知らない display は none。どれも誤りを知らせない。' },
+      { title: '止まるもの（と読める）', text: 'コメント `/* */`、`>`、`*`、`[`、タブ、`!important` の `!` は字句で `unimplemented!`。`h1, p` の `,` は `panic!`。識別子で終わる CSS は配列の外を読む。CSS の原則は「知らないものは捨てて続ける」（CSS 2.1 §4.2）で、この版は止まる側に倒れている。' },
+      { title: '第10章との距離', text: 'Chromium の CSSOM は規則の木、saba は `Vec`。計算済みスタイルは Chromium では DOM の全ノード × 数百のプロパティ（[[10-browser.html#s3.2|第10章 場面3]]）、saba は `LayoutObject` の 7 欄。カスケードは順序だけ、継承は近似。次の章は大きさと位置へ。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const panel = panelSet(svg);
+      st.C = panel.list;
+      panel([
+        ['', 'layout/layout_object.rs（LayoutObject の欄と update_kind。詰めた）'],
+        [96, 'pub struct LayoutObject {'],
+        [97, '  kind: LayoutObjectKind,'],
+        [98, '  node: Rc<RefCell<Node>>,'],
+        [99, '  first_child: Option<Rc<RefCell<LayoutObject>>>,'],
+        [100, '  next_sibling: Option<Rc<RefCell<LayoutObject>>>,'],
+        [101, '  parent: Weak<RefCell<LayoutObject>>,'],
+        [102, '  style: ComputedStyle,'],
+        [103, '  point: LayoutPoint,'],
+        [104, '  size: LayoutSize,'],
+        [105, '}'],
+        [399, 'pub fn update_kind(&mut self) {'],
+        [400, '  match self.node_kind() {'],
+        [402, '    NodeKind::Element(_) => {'],
+        [403, '      let display = self.style.display();'],
+        [null, '      …  // Block → Block、Inline → Inline（404〜410）'],
+        [412, '    NodeKind::Text(_) =>'],
+        [null, '      self.kind = LayoutObjectKind::Text, } }']
+      ]).hl(7, 7);
+      panel([
+        ['', 'renderer/page.rs（create_frame と set_layout_view。詰めた）'],
+        [93, 'fn create_frame(&mut self, html: String) {'],
+        [94, '  let html_tokenizer = HtmlTokenizer::new(html);'],
+        [95, '  let frame = HtmlParser::new(html_tokenizer)'],
+        [null, '    .construct_tree();'],
+        [96, '  let dom = frame.borrow().document();'],
+        [98, '  let style = get_style_content(dom);'],
+        [99, '  let css_tokenizer = CssTokenizer::new(style);'],
+        [100, '  let cssom = CssParser::new(css_tokenizer)'],
+        [null, '    .parse_stylesheet();'],
+        [102, '  self.frame = Some(frame);'],
+        [103, '  self.style = Some(cssom); }'],
+        [106, 'fn set_layout_view(&mut self) {'],
+        [null, '  …  // frame と style を取り出す（None なら return）'],
+        [117, '  let layout_view = LayoutView::new(dom, &style);'],
+        [119, '  self.layout_view = Some(layout_view); }']
+      ]).hl(6, 9);
+      panel([
+        ['', '黙って落ちる所（css/cssom.rs と layout/layout_object.rs。詰めた）'],
+        [84, '  CssToken::Ident(ref _ident) => {'],
+        [85, '    if let Some(declaration) = self.consume_declaration() {'],
+        [86, '      declarations.push(declaration); } }  // None なら無視'],
+        [89, '  _ => { self.t.next(); }       // 知らないトークンを捨てる'],
+        [114, '  if self.t.peek() == Some(&CssToken::Colon) {'],
+        [115, '    while self.t.peek() != Some(&CssToken::OpenCurly) {'],
+        [116, '      self.t.next(); } }          // a:hover → a'],
+        [124, '  while self.t.peek() != Some(&CssToken::OpenCurly) {'],
+        [125, '    self.t.next(); }              // @ 規則の前置き'],
+        [155, '  rule.set_selector(self.consume_selector());  // 上書き'],
+        [175, '  let _rule = self.consume_qualified_rule();  // 捨てる'],
+        [345, '  Err(_) => Color::white(),       // 知らない色'],
+        [381, '  Err(_) => DisplayType::DisplayNone,  // 知らない display'],
+        [386, '  _ => {}                         // 知らないプロパティ']
+      ]).hl(1, 14);
+      panel([
+        ['', '止まる所（css/token.rs と css/cssom.rs。詰めた）'],
+        [190, '  _ => {'],
+        [191, '    unimplemented!("char {} is not supported yet", c); }'],
+        [109, '    let c = self.input[self.pos];  // 配列の外なら panic'],
+        [null, '    // （consume_ident_token の loop の中。終端の検査が無い）'],
+        [104, '  CssToken::Delim(delim) => {'],
+        [105, "    if delim == '.' {"],
+        [106, '      return Selector::ClassSelector(self.consume_ident()); }'],
+        [108, '    panic!("Parse error: {:?} is an unexpected token.",'],
+        [null, '      token); }'],
+        [31, '  match token {'],
+        [32, '    CssToken::Ident(ref ident) => ident.to_string(),'],
+        [33, '    _ => { panic!('],
+        [null, '    "Parse error: {:?} is an unexpected token.", token); } }'],
+        [22, '    .expect('],
+        [null, '      "should have a token in consume_component_value")']
+      ]).hl(1, 2);
+      panel([
+        ['', 'layout/layout_view.rs（LayoutView::new。コメントは省き、詰めた）'],
+        [109, 'pub fn new(root: Rc<RefCell<Node>>,'],
+        [null, '           cssom: &StyleSheet) -> Self {'],
+        [112, '  let body_root ='],
+        [null, '    get_target_element_node(Some(root), ElementKind::Body);'],
+        [114, '  let mut tree = Self {'],
+        [115, '    root: build_layout_tree(&body_root, &None, cssom), };'],
+        [118, '  tree.update_layout();'],
+        [120, '  tree }'],
+        ['', 'layout/layout_view.rs（build_layout_tree の頭。詰めた）'],
+        [23, '  let mut target_node = node.clone();'],
+        [24, '  let mut layout_object ='],
+        [null, '    create_layout_object(node, parent_obj, cssom);'],
+        [27, '  while layout_object.is_none() {   // none なら兄弟へ'],
+        [28, '    if let Some(n) = target_node {'],
+        [29, '      target_node = n.borrow().next_sibling().clone();'],
+        [30, '      layout_object = create_layout_object('],
+        [null, '        &target_node, parent_obj, cssom);']
+      ]).hl(5, 6);
+      st.tr = S.g({}, svg);
+      const g = st.g = S.g({}, svg);
+      // 表
+      S.text(490, 32, 'ComputedStyle（body 以下。height・width は 0.0）', { cls: 't-xs t-dim' }, g);
+      S.text(944, 32, '赤: 規則　緑: 継承　色なし: 初期値', { cls: 't-end t-xs t-dim' }, g);
+      const cols = [490, 596, 660, 724, 806, 864];
+      ['ノード', 'background', 'color', 'display', 'font_size', 'decoration'].forEach((s, k) => S.text(cols[k], 50, s, { cls: 't-xs t-dim' }, g));
+      S.line(490, 56, 944, 56, { cls: 's-rule w1' }, g);
+      st.cells = [];
+      S6_ROWS.forEach((row, r) => {
+        const y = S6_Y0 + r * S6_RH + (r === S6_ROWS.length - 1 ? 4 : 0);   // p.hidden の行は線の下に少し離す
+        const bg = S.rect(490, y - 11, 454, 15, { rx: 2, cls: 'f-x-soft', style: { opacity: 0 } }, g);
+        const texts = row.map((v, c) => {
+          const isColor = c === 1 || c === 2;
+          if (isColor) S.rect(cols[c], y - 10, 11, 11, { rx: 2, cls: 's-rule w1', style: { fill: REAL[v] } }, g);
+          return S.text(cols[c] + (isColor ? 15 : 0), y, v, { cls: 't-xs t-mono pre' + (c === 0 ? ' t-b' : '') }, g);
+        });
+        st.cells.push({ bg, texts });
+      });
+      const yH = S6_Y0 + (S6_ROWS.length - 1) * S6_RH + 4;   // p.hidden の行
+      S.line(490, yH - 14, 944, yH - 14, { cls: 's-x w1' }, g);
+      st.hiddenNote = S.text(490, yH + 20, 'p.hidden は 7 欄が埋まった後に None → 木に入らない', { cls: 't-xs t-b t-x' }, g);
+      // 下: 段階ごとの一覧
+      const D = st.D = [];
+      const det = () => { const gg = S.g({ cls: 'fade hide' }, svg); D.push(gg); return gg; };
+      let d = det();
+      S.text(490, 310, '表の読み方', { cls: 't-sm t-b' }, d);
+      ['規則で決まった欄: h1 の color、p.first の color、p.links の background_color、p.hidden の display', '継承: h1 の Text は red と XXLarge、p.first の Text は blue、a1（1 つめの a）は aqua', '　a1・a2 の Text は親の Underline も写す。a2 は a1 の兄弟なので親が渡らず white（場面5）', '初期値: 残りすべて。Block か Inline は要素の種類、font_size は h1 だけ XXLarge', 'p.hidden: 7 欄が埋まってから display() を見て None → 子の Text("none") は訪ねない', '次の章: 色は code_u32 で描画の数に、font_size は文字の幅と高さの倍率に、Underline は下線に'].forEach((s, k) => S.text(490, 334 + k * 20, s, { cls: 't-xs pre' }, d));
+      d = det();
+      S.text(490, 310, '数で見る（このコミットの saba）', { cls: 't-sm t-b' }, d);
+      [['トークン', '12 種（CSS Syntax 3 は 25 種）'], ['規則', 'StyleSheet { rules: Vec<QualifiedRule> }。test.html で 4 つ'], ['セレクタ', '型・クラス・ID の 3 種（Selectors 4 には属性・擬似クラス・複合なども）'], ['プロパティ', 'background-color・color・display の 3 つ'], ['色', '18（CSS Color 4 の名前は 148、#rrggbb は 1,677 万通り）'], ['読む style', '最初の style 要素の最初の Text だけ。link 要素も @import も無い'], ['コード', '約 920 行（テストを除く。layout_object.rs は CSS の部分だけ）']].forEach(([a, b], k) => {
+        const y = 334 + k * 20;
+        S.text(490, y, a, { cls: 't-xs t-b pre' }, d); S.text(570, y, b, { cls: 't-xs pre' }, d);
+      });
+      d = det();
+      S.text(490, 310, '黙って落ちるもの（誤りを知らせない）', { cls: 't-sm t-b' }, d);
+      [['@media … { … }', '規則ごと捨てる（入れ子の { } は数えない）'], ['a:hover { … }', ': の後を { まで捨て、a と同じ規則になる'], ['font-size: 40px;', '値は Number(40.0)。px は名前と読まれ None で消える'], ['p a { … }　.a.b { … }', '最後の 1 つだけ残る、と読める'], ['class="first big"', '値全体の比較。.first に当たらない、と読める'], ['margin: 0;　width: 100px;', '_ => {} で捨てる（width・height も）'], ['color: pink;　color: #336699;', '表に無い → Err → black（背景は white）'], ['display: flex;', 'from_str が Err → DisplayNone → 消える']].forEach(([a, b], k) => {
+        const y = 334 + k * 19;
+        S.text(490, y, a, { cls: 't-xs t-mono t-b pre' }, d); S.text(676, y, b, { cls: 't-xs pre' }, d);
+      });
+      d = det();
+      S.text(490, 310, '止まるもの（コードから読める範囲。実行はしていない）', { cls: 't-sm t-b' }, d);
+      [['/* コメント */', "'/' が _ の腕 → unimplemented!"], ['div > p　*　[href]　\\t', '同じく unimplemented!'], ['color: red !important;', "'!' で unimplemented!。読めない"], ['h1, p { … }', "Delim(',') で panic!（consume_selector）"], ['… p', '終端で input[pos] が範囲外（panic）'], ['. { }', '次が Ident でないので panic!']].forEach(([a, b], k) => {
+        const y = 334 + k * 19;
+        S.text(490, y, a, { cls: 't-xs t-mono t-b pre' }, d); S.text(660, y, b, { cls: 't-xs pre' }, d);
+      });
+      S.text(490, 456, 'CSS 2.1 §4.2 の原則は「読めない宣言や規則を捨てて続ける」。saba は止まる側', { cls: 't-xs t-dim' }, d);
+      d = det();
+      S.text(490, 310, '第10章との対応', { cls: 't-sm t-b' }, d);
+      [['CSSOM', '規則の木（CSSStyleSheet …）', 'Vec の 1 段'], ['CSS の出所', 'link・style・UA・インライン', '最初の style の Text だけ'], ['取得と待ち', 'CSS が届くまで描画を止める', '取りに行かないので待ちも無い'], ['計算済みスタイル', 'DOM の全ノード × 数百（共有）', 'LayoutObject の 7 欄'], ['カスケード', '出所と !important → 詳細度 → 順', '順だけ'], ['継承', 'プロパティごとの性質', '「初期値と違えば写す」'], ['display: none', 'レイアウトツリーに入れない', '同じ（None を返す）']].forEach(([a, b, c], k) => {
+        const y = 334 + k * 19;
+        S.text(490, y, a, { cls: 't-xs t-b pre' }, d); S.text(600, y, b, { cls: 't-xs pre' }, d); S.text(800, y, c, { cls: 't-xs pre' }, d);
+      });
+      S.text(600, 316, 'Chromium（第10章）', { cls: 't-xs t-dim' }, d); S.text(800, 316, 'saba', { cls: 't-xs t-dim' }, d);
+      xlink(d, 944, 474, '10-browser.html#s3.2', '第10章 場面3「スタイル計算」', true);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.C.forEach((c, k) => S.fade(c.g, k === i));
+      const T = [
+        ['規則で決まる 4 欄: h1 color、p.first color、p.links background、p.hidden display', '継承: Text ← h1（red・XXLarge）、Text ← p.first（blue）、a1 ← p.links（aqua）', '残り: 初期値。display は要素の種類で Block か Inline、Text は Inline', 'p.hidden: display ＝ DisplayNone → None → Text("none") ごと木に入らない'],
+        ['3 プロパティ・18 色・3 セレクタ・12 トークン・style 要素 1 つ', 'ElementKind は 9 種（html head style script body p h1 h2 a）。link は無い', 'font_size: h1 → XXLarge、h2 → XLarge だけ。font-size: の宣言は _ => {}', 'text_decoration: a → Underline だけ。text-decoration: も _ => {}'],
+        ['@media → 捨てる　a:hover → a　40px → Number(40.0)　p a → a', 'class="first big" → .first に当たらない（値全体の一致）', '知らないプロパティ → _ => {}　知らない色 → black/white　知らない display → none', '→ どれも panic せず、知らせずに進む'],
+        ["'/' '>' '*' '[' '!' '\\t' → unimplemented!（token.rs 190）", "',' → consume_selector の Delim の腕で panic!（cssom.rs 108）", '識別子で終わる入力 → input[pos] の範囲外（token.rs 109）', 'CSS 2.1 §4.2: 知らない宣言・規則は無視して続ける。saba は止まる'],
+        ['CSSOM: 木 → Vec。出所: link と style と UA → style 1 つ', '計算済み: 全ノード × 数百（共有）→ LayoutObject × 7 欄', 'カスケード: 出所 → 詳細度 → 順 → 順だけ。継承: 性質 → 近似', '次の章: 7 欄 → 大きさと位置 → DisplayItem → 画面']
+      ];
+      S.clear(st.tr);
+      trace(st.tr, 20, 352, T[i].map((s, k) => [s, k === 0 ? 't-sm t-b' : 't-sm']), 22);
+      st.D.forEach((g, k) => S.fade(g, k === i));
+      st.cells.forEach((row, r) => row.texts.forEach((t, c) => {
+        const base = 't-xs t-mono pre' + (c === 0 ? ' t-b' : '');
+        const ruled = S6_RULED[r + ',' + c], inh = S6_INH[r + ',' + c];
+        t.setAttribute('class', base + (ruled ? ' t-x t-b' : inh ? ' t-d t-b' : ''));
+      }));
+      op(st.g, i === 0 || i === 1 ? '' : 0.55);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      // 段階1 では 0.5 秒ごとに行を順に照らす（木を作る順）。止めている人には照らさない姿
+      const k = playing() && i === 0 ? Math.floor(U.mod(ctx.ts, S6_ROWS.length * 0.5 + 2) / 0.5) : -1;
+      st.cells.forEach((row, r) => op(row.bg, r === k ? 1 : 0));
+    }
+  };
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第IX部 ブラウザを読む ／ 第34章',
+      title: 'CSS とスタイル',
+      home: '../index.html',
+      prev: { href: '33-saba-dom.html', title: 'HTML パーサと DOM' },
+      next: { href: '35-saba-layout.html', title: 'レイアウトと描画', lead: '前の章で、計算済みスタイルを持つ LayoutObject を作る関数を読んだ。' },
+      legend: [{ c: 'd', label: 'データ（文字・トークン・値）' }, { c: 'x', label: '注目・変化' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>

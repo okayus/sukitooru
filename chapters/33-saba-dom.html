@@ -1,0 +1,1698 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>HTML パーサと DOM — YouTubeが見えるまで</title>
+<meta name="description" content="Rust で書かれた小さなブラウザ saba の HTML パーサ（parser.rs）と DOM（node.rs）を読む。前の章でトークンの列になった test.html が、挿入モードと開いている要素のスタックでノード 21 個の木になるまでを、Rc・RefCell・Weak の意味と一緒に、具体的な値を入れて 1 行ずつ追う。">
+<meta property="og:title" content="HTML パーサと DOM — YouTubeが見えるまで">
+<meta property="og:description" content="Rust で書かれた小さなブラウザ saba の HTML パーサと DOM を読む。トークンの列が挿入モードとスタックでノード 21 個の木になるまで。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+  svg a { cursor: pointer; }
+  svg a:hover text, svg a:focus-visible text { text-decoration: underline; text-underline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第IX部 ブラウザを読む ／ 第33章 ／ 全36章</p>
+    <h1 id="h-s0">HTML パーサと DOM</h1>
+    <p class="standfirst">前の章でトークンの列になった test.html を、saba のパーサが読み、ノード 21 個の木（DOM）に組み立てる。ノードどうしは Rust の Rc・RefCell・Weak でつながれ、親子は挿入モードと開いている要素のスタックが決める。できた木は第34章の CSS、第35章のレイアウト、第36章の JavaScript が読む。コードは具体的な値を入れて 1 行ずつ追う。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>ノードと木の形</a><p>struct Node の 7 つの欄、NodeKind 3 種と ElementKind 9 種、Window。first_child と next_sibling でできる 21 個の木。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>Rc・RefCell・Weak</a><p>共有して、書き換えて、輪を断つ。p.links を持つ Rc の数の推移と、upgrade() が None を返すとき。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>挿入モード</a><p>enum の 9 つのモード（仕様は 21）。トークンを消費せずに読み直し、省略された html・head・body を補う。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>要素と文字を入れる</a><p>insert_element と insert_char。current はスタックの末尾。空白だけの Text は作らない。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>スタックで閉じる</a><p>pop_until が種類に当たるまで降ろす。p.links の 2 つの a の推移。saba が持たない修復。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>できた木と、使う人</a><p>create_frame、api.rs の深さ優先、get_style_content の 171 字、JavaScript は木が全部できてから。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次は第34章 CSS とスタイル。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードは <a href="https://github.com/d0iasm/sababook">d0iasm/sababook</a>（Asami Doi、MIT ライセンス）の ch7/saba から引用した（2025 年 1 月 6 日のコミット c87dc64。行番号は元のファイルのもので、長い行は折り返し、省いた行は … か見出しの「抜粋」で示した。「詰めた」と書いた板は空行や閉じ括弧を落とし、複数の行を 1 行に並べている。板の中で // に続く日本語は教材の注記で、元のコメントではない）。このリポジトリは書籍『［作って学ぶ］ブラウザのしくみ』のサンプルコードだが、この章の説明はコードと、Web で公開されている仕様（HTML Standard・DOM Standard・Rust の std の文書。2026 年 11 月に閲覧）だけから書き、書籍の文章は使っていない。この章の担当は saba をビルドも実行もしておらず、木やスタックの推移はコードを読んで追ったもの。図は模式図で、木の中の長い文字列は途中を … で省いた。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 ノードと木の形 ================= -->
+<section class="scene sc-anim" id="s1" data-tab="ノード" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>ノードと木の形 — struct Node と 21 個の木</h2>
+    <p class="sh-meta"><span class="chip">node.rs</span><span class="chip">249 行</span><span class="chip">Rc&lt;RefCell&lt;Node&gt;&gt;</span><span class="chip">enum</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">前の章でトークナイザは test.html を StartTag・Char・EndTag の列にした。パーサはその列から木を作る。まず、木の節（Node）が Rust でどう書かれ、どんな木ができるかを見る。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">DOM Standard の Node も同じ 5 つの関係（parentNode・firstChild など）を持つ。ただし仕様には Comment・DocumentType などの種類もあり、saba の 3 種はその一部。木の並びは場面6 のデバッグ出力と同じ。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="node.rs のコードと、test.html から saba が作る 21 個のノードの木を字下げで並べた図"></svg></div>
+    <figcaption>図1　左は段階ごとのコード（node.rs）と具体的な値。右は test.html から saba が作る木（ノード 21 個）を、親の下に子を字下げして並べたもの。矢印は Rc（親から先頭の子へ first_child、兄弟へ next_sibling）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 Rc・RefCell・Weak ================= -->
+<section class="scene sc-anim" id="s2" data-tab="Rc と Weak" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>Rc・RefCell・Weak — なぜこの形か</h2>
+    <p class="sh-meta"><span class="chip">Rc</span><span class="chip">RefCell</span><span class="chip">Weak</span><span class="chip">参照カウント</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">ノードは親の first_child、兄の next_sibling、JavaScript から指される。持ち主が 1 つの Rust で共有して書き換える形が Rc&lt;RefCell&lt;Node&gt;&gt; と Weak である。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Rc は単一スレッド用で、数の増減を原子操作にしない。saba は 1 スレッドなのでこれで足りる。複数スレッドで共有するなら Arc と Mutex／RwLock になる。参照カウントは輪を自分では見つけられないので、輪になる向き（上向きと後ろ向き）を Weak にして断つ。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="body とその子のノードを箱で描き、Rc を実線、Weak を破線の矢印でつないだ図"></svg></div>
+    <figcaption>図2　body と子 h1・p.first・p.links、h1 の Text、p.links の 1 つめの a とその Text（実線は Rc ＝ 数える、破線は Weak ＝ 数えない）。箱の上辺の点が parent、下辺の左が first_child・右が last_child、左辺が previous_sibling、右辺が next_sibling で、白い点は None、矢印の無い黒い点は図に無いノード（p#target、2 つめの a など）を指す。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 挿入モード ================= -->
+<section class="scene sc-anim" id="s3" data-tab="モード" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>挿入モード — いまどこにいるか</h2>
+    <p class="sh-meta"><span class="chip">InsertionMode</span><span class="chip">9 モード</span><span class="chip">match</span><span class="chip">continue</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">パーサはトークンを 1 つずつ読むが、同じ <code>&lt;p&gt;</code> でも head の中と body の中では扱いが違う。その「いまどこにいるか」が挿入モードで、saba は enum の 9 つで持ち、match で腕を選ぶ。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">HTML Standard の挿入モードは 2026 年 11 月時点で 21。saba に無い 12 は、表（in table など 7 つ）、template、frameset（3 つ）、noscript の分。text モードと戻り先の役割は仕様も同じ。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="parser.rs のコードと、9 つの挿入モードの列、いまのトークン、戻り先のモード、開いている要素のスタックの図"></svg></div>
+    <figcaption>図3　左は段階ごとのコード（parser.rs）と具体的な値。右は 9 つの挿入モード（流れの順。Text は InHead の横）と、いまのトークン・戻り先・スタック。矢印はトークンを読んだときのモードの移り先。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 要素と文字を入れる ================= -->
+<section class="scene sc-anim" id="s4" data-tab="入れる" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>要素と文字を入れる — insert_element と insert_char</h2>
+    <p class="sh-meta"><span class="chip">insert_element</span><span class="chip">insert_char</span><span class="chip">first_child</span><span class="chip">next_sibling</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">InBody に入ると、開始タグは要素のノードに、文字は Text ノードになって木に付く。付ける先はスタックの末尾で、付け方は first_child か兄弟の next_sibling のどちらかである。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">insert_char は 2 つめ以降の子を first_child の next_sibling に置くので、<code>&lt;p&gt;&lt;a&gt;1&lt;/a&gt;&lt;a&gt;2&lt;/a&gt;3&lt;/p&gt;</code> では 2 つめの a が外れて解放される、と読める。文字の直後の開始タグは末尾の Text の子になる。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="insert_element と insert_char のコード、開いている要素のスタック、できていく木の図"></svg></div>
+    <figcaption>図4　左は段階ごとのコード（parser.rs）と、開いている要素のスタック（Vec。右端が末尾 ＝ current）。右は木で、まだ無いノードは薄く描く。赤い枠がいま付けたノード。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 スタックで閉じる ================= -->
+<section class="scene sc-anim" id="s5" data-tab="閉じる" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>スタックで閉じる — pop_until</h2>
+    <p class="sh-meta"><span class="chip">pop_until</span><span class="chip">assert!</span><span class="chip">Vec::pop</span><span class="chip">修復なし</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">終了タグが来たら、開いている要素のスタックを、その種類の要素が出てくるまで pop する。それだけで親子は閉じる。saba が持つ修復はこれと省略タグの補いだけで、仕様の閉じ忘れの補いや入れ違いの直しは無い。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">HTML Standard は <code>&lt;/body&gt;</code> で body を降ろさず（モードを変えるだけ）、後ろの空白も body に入れ、スタックはパースの終わりにまとめて空にする。saba は <code>&lt;/body&gt;</code> で body を降ろし、後ろの文字を捨て、html を積んだまま返す。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="pop_until のコード、開いている要素のスタックの推移、木の図"></svg></div>
+    <figcaption>図5　左は段階ごとのコード（parser.rs）とスタック（右端が末尾。段階4 はその代わりに、閉じ忘れの p から saba と仕様が作る木の比較）。右は木。段階3 は <code>&lt;p class="links"&gt;</code> から <code>&lt;/p&gt;</code> までの推移を繰り返す。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 できた木と、使う人 ================= -->
+<section class="scene sc-anim" id="s6" data-tab="使う" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>できた木と、使う人 — dom/api.rs と create_frame</h2>
+    <p class="sh-meta"><span class="chip">page.rs</span><span class="chip">api.rs</span><span class="chip">深さ優先</span><span class="chip">get_element_by_id</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">construct_tree が返した Window から document() で根を取れば木全体をたどれる。CSS・JS・レイアウトは、木を深さ優先で歩く api.rs の関数を通して読む。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Chromium は <code>&lt;script&gt;</code> ごとにパーサを止めて実行し、その間もプリロードスキャナが先の CSS や画像を取りに行く。saba が動かすのは、get_js_content が最初に見つけた script の中身 1 つだけで、src 属性で外の JS を取る所も無い。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="page.rs と api.rs のコード、完成した木と再帰が訪れる順の番号の図"></svg></div>
+    <figcaption>図6　左は段階ごとのコード（page.rs・api.rs・utils.rs）と具体的な値。右は完成した木と、api.rs の再帰が訪れる順の番号（first_child を先、next_sibling を後）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — HTML パーサと DOM</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>saba の DOM は struct Node の木。中身 kind（Document・Element・Text）と、Rc の first_child・next_sibling、Weak の parent・last_child・previous_sibling。test.html からは 21 個（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>Rc は持ち主を数え、RefCell は借用の規則を実行時に確かめ、Weak は数えずに指して輪を断つ。upgrade() が None なら相手は解放済み（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>挿入モードは enum の 9 つ（仕様は 21）。トークンを消費せずに読み直す continue で、省略された html・head・body を補う（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>insert_element は current（スタックの末尾）の first_child か、末尾の兄弟の next_sibling に付けて push する。insert_char は空白だけの Text を作らない（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>終了タグは pop_until で、その種類に当たるまで降ろす。Text も一緒に降りる。閉じ忘れの補いや adoption agency の修復は無い（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>create_frame が木を作り、api.rs が深さ優先で style・script・id を探す。JavaScript は木が全部できてから動く（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th><i class="sw d"></i>DOM（saba の Node）</th><td>文書の木。saba では struct Node を Rc&lt;RefCell&lt;Node&gt;&gt; で包んだもの。test.html から 21 個（Document 1・Element 12・Text 8）。</td></tr>
+        <tr><th>NodeKind と ElementKind</th><td>ノードの種類 3 つ（Document・Element(Element)・Text(String)）と、要素の種類 9 つ（html head style script body p h1 h2 a）。</td></tr>
+        <tr><th>Rc（参照カウント）</th><td>持ち主を数える単一スレッド用のポインタ。clone で数が 1 増え、最後の 1 つが消えると値を解放する。Rc::strong_count で読める。</td></tr>
+        <tr><th>RefCell（実行時の借用検査）</th><td>borrow()（読む）と borrow_mut()（書く）で中身を貸し、「書く借用は 1 つ、読むと同時は不可」を実行時に確かめる。破れば panic、try_borrow なら Err。</td></tr>
+        <tr><th>Weak（弱い参照）</th><td>数えない参照。Rc::downgrade で作り、upgrade() が Option&lt;Rc&gt; を返す。parent・previous_sibling・last_child に使い、参照の輪を断つ。</td></tr>
+        <tr><th>挿入モード</th><td>パーサの状態。saba は enum の 9 つ、HTML Standard は 21（2026 年 11 月時点）。original_insertion_mode は Text モードからの戻り先。</td></tr>
+        <tr><th>開いている要素のスタック</th><td>Vec&lt;Rc&lt;RefCell&lt;Node&gt;&gt;&gt;。末尾が current。saba は Text ノードも積む。</td></tr>
+        <tr><th>insert_element と insert_char</th><td>要素・文字を current の子として木に付け、スタックに push する関数。文字は、Text が無いときの '\n' と ' ' を捨てる。</td></tr>
+        <tr><th>pop_until</th><td>その種類に当たるまで pop する。無ければ assert! で panic。InBody で pop_until する終了タグは p・h1・h2・a と body。</td></tr>
+        <tr><th>Window と document</th><td>木の根 Document を持つ構造体。construct_tree が Rc&lt;RefCell&lt;Window&gt;&gt; を返し、Page が frame として持つ。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <p class="note">次の第34章では、get_style_content が返した 171 字の文字列を CSS のトークナイザと CSSOM に変え、この木の要素に当てはめる。</p>
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg, A = YT.anim;
+
+  /* ---------- この章で使う部品（第30章の codePanel・box・trace・xlink を写した） ---------- */
+
+  const op = (el, v) => { el.style.opacity = v; };
+  const playing = () => YT.motion.playing;
+  const KW = /\b(fn|let|mut|pub|struct|impl|use|mod|const|match|if|else|for|in|loop|while|break|return|move|self|Self|crate|as|dyn|ref|where|enum|type|continue)\b/g;
+
+  /* 等幅のコードの 1 行。予約語は太字、// から後ろは薄い色。空白は詰めない（pre） */
+  function codeLine(parent, x, y, s, cls) {
+    const t = S.text(x, y, '', { cls: 't-mono pre ' + (cls || 't-sm') }, parent);
+    const ci = s.indexOf('//');
+    const code = ci >= 0 ? s.slice(0, ci) : s, cm = ci >= 0 ? s.slice(ci) : '';
+    let last = 0, m;
+    KW.lastIndex = 0;
+    while ((m = KW.exec(code))) {
+      if (m.index > last) S.el('tspan', { text: code.slice(last, m.index) }, t);
+      S.el('tspan', { text: m[0], cls: 't-b' }, t);
+      last = m.index + m[0].length;
+    }
+    if (last < code.length) S.el('tspan', { text: code.slice(last) }, t);
+    if (cm) S.el('tspan', { text: cm, cls: 't-dim' }, t);
+    return t;
+  }
+  /* コードの板。lines は [行番号, 文字列]（行番号 null は折り返しの続き、'' は見出しの行）。
+     hl(a, b) で a〜b 行め（0 始まり）を照らす。hl() で消す */
+  function codePanel(parent, x, y, w, lines, opts) {
+    opts = opts || {};
+    const lh = opts.lh || 16, pad = 10;
+    const g = S.g({}, parent);
+    const h = pad * 2 + lines.length * lh + 2;
+    S.rect(x, y, w, h, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+    const band = S.rect(x + 3, y, w - 6, lh, { rx: 3, cls: 'f-x-soft', style: { display: 'none' } }, g);
+    const y0 = y + pad + 11;
+    lines.forEach(([ln, s], k) => {
+      const yy = y0 + k * lh;
+      if (ln === '') { S.text(x + pad, yy, s, { cls: 't-xs t-dim' }, g); return; }
+      if (ln != null) S.text(x + pad + 26, yy, String(ln), { cls: 't-xs t-dim t-mono t-end' }, g);
+      codeLine(g, x + pad + 34, yy, s, opts.cls);
+    });
+    const api = {
+      g, h,
+      hl(a, b) {
+        if (a == null) { band.style.display = 'none'; return api; }
+        if (b == null) b = a;
+        S.attrs(band, { y: y0 + a * lh - 12, height: (b - a + 1) * lh });
+        band.style.display = '';
+        return api;
+      }
+    };
+    return api;
+  }
+  /* 枠と題（と小さな説明）の箱 */
+  function box(parent, x, y, w, h, title, sub, cls, tcls) {
+    const g = S.g({}, parent);
+    const r = S.rect(x, y, w, h, { rx: 5, cls: cls || 'f-sf s-rule w1' }, g);
+    const t = S.text(x + w / 2, y + (sub ? h / 2 - 2 : h / 2 + 4), title, { cls: 't-c ' + (tcls || 't-sm t-b') }, g);
+    const s = sub ? S.text(x + w / 2, y + h / 2 + 12, sub, { cls: 't-c t-xs t-dim' }, g) : null;
+    return { g, r, t, s, x, y, w, h };
+  }
+  /* 他の章の場面へのリンク（SVG の a） */
+  function xlink(parent, x, y, href, label, end) {
+    const a = S.el('a', { href, 'aria-label': label }, parent);
+    S.text(x, y, label + ' ↗', { cls: 't-xs t-mid' + (end ? ' t-end' : '') }, a);
+    return a;
+  }
+  /* 文の列（段階ごとの具体的な値の追跡）。s が配列なら [文字列, クラス] */
+  function trace(parent, x, y, lines, lh) {
+    return lines.map((s, k) => {
+      const cls = typeof s === 'string' ? 't-sm' : s[1];
+      return S.text(x, y + k * (lh || 22), typeof s === 'string' ? s : s[0], { cls: cls + ' pre' }, parent);
+    });
+  }
+  /* 段階ごとの追跡を書き直す（1 行めは太字） */
+  function retrace(g, lines, y, lh) {
+    S.clear(g);
+    trace(g, 20, y || 398, lines.map((s, k) => typeof s === 'string' ? [s, k === 0 ? 't-sm t-b' : 't-sm'] : s), lh || 22);
+  }
+  /* 段階ごとに出すコードの板の置き場。show(k) で k 番めだけを出す */
+  function panels(svg) {
+    const C = [];
+    return {
+      add(lines, opts) { const g = S.g({ cls: 'fade hide' }, svg); const p = codePanel(g, 16, 16, 452, lines, opts); C.push({ g, p }); return p; },
+      show(k) { C.forEach((c, j) => S.fade(c.g, j === k)); },
+      get(k) { return C[k].p; }
+    };
+  }
+
+  /* ================================================================
+     test.html から saba が作る木（ノード 21 個）。並びは convert_dom_to_string と同じ深さ優先の順。
+     [番号, 深さ, 種類, 名前（要素名か Text の中身の見出し）, 属性の見出し, 親の番号]
+     長い文字列は図のために途中を … で省いた（本文の値は parser.rs を手で追い、確認用の模擬でも照合した）
+     ================================================================ */
+  const TREE = [
+    [1, 0, 'doc', 'Document', '', 0],
+    [2, 1, 'el', 'html', '', 1],
+    [3, 2, 'el', 'head', '', 2],
+    [4, 3, 'el', 'style', '', 3],
+    [5, 4, 'text', 'Text("#title {\\n      color: red;\\n …")', '', 4],
+    [6, 3, 'el', 'script', 'type="text/javascript"', 3],
+    [7, 4, 'text', 'Text("function add(a, b) {\\n …")', '', 6],
+    [8, 2, 'el', 'body', '', 2],
+    [9, 3, 'el', 'h1', 'id="title"', 8],
+    [10, 4, 'text', 'Text("My Browser!")', '', 9],
+    [11, 3, 'el', 'p', 'class="first"', 8],
+    [12, 4, 'text', 'Text("HTML, CSS and JavaScript are …")', '', 11],
+    [13, 3, 'el', 'p', 'class="links"', 8],
+    [14, 4, 'el', 'a', 'href="…/test1.html"', 13],
+    [15, 5, 'text', 'Text("Test page1 ")', '', 14],
+    [16, 4, 'el', 'a', 'href="…/test2.html"', 13],
+    [17, 5, 'text', 'Text("Test page2")', '', 16],
+    [18, 3, 'el', 'p', 'class="hidden"', 8],
+    [19, 4, 'text', 'Text("none")', '', 18],
+    [20, 3, 'el', 'p', 'id="target"', 8],
+    [21, 4, 'text', 'Text("original text")', '', 20]
+  ];
+  const TX0 = 496, ROW_Y0 = 42, ROW_H = 24, IND = 20;
+  const CH = 6.6;   // 11px の等幅 1 文字の幅（概算）
+  /* 木の図。各ノードは 1 行。入ってくる矢印は 1 本だけ（親の first_child か、前の兄弟の next_sibling）
+     setState(id, 'on' | 'ghost' | 'cur' | 'lit' | 'dim') で行の見た目を変える。badge(id, text) で右に番号を出す */
+  function domTree(parent) {
+    const g = S.g({}, parent);
+    const rows = {};
+    const firstChildOf = {};
+    TREE.forEach(([id, d, kind, name, attr, pid]) => { if (pid && firstChildOf[pid] == null) firstChildOf[pid] = id; });
+    // 矢印（先に描いて、箱を上に乗せる）
+    const mk = S.markers(parent.ownerSVGElement || parent);
+    TREE.forEach(([id, d, kind, name, attr, pid]) => {
+      const x = TX0 + d * IND, y = ROW_Y0 + (id - 1) * ROW_H;
+      rows[id] = { id, d, kind, name, attr, pid, x, y, w: 14 + CH * (name.length + (attr ? attr.length + 1 : 0)) };
+    });
+    TREE.forEach(([id, d, kind, name, attr, pid]) => {
+      if (!pid) return;
+      const r = rows[id];
+      let path;
+      if (firstChildOf[pid] === id) {
+        const p = rows[pid];
+        path = S.path(`M${p.x + 12},${p.y + 10} V${r.y} H${r.x - 1}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g);
+      } else {
+        // 前の兄弟（同じ親で、自分より前の番号で最大のもの）
+        let sid = 0;
+        TREE.forEach(([j, , , , , pj]) => { if (pj === pid && j < id && j > sid) sid = j; });
+        const s = rows[sid];
+        path = S.path(`M${s.x + 5},${s.y + 10} V${r.y - 11}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g);
+      }
+      r.arrow = path;
+    });
+    TREE.forEach(([id]) => {
+      const r = rows[id];
+      const rg = S.g({}, g);
+      r.g = rg;
+      r.box = S.rect(r.x, r.y - 10, r.w, 20, { rx: 4, cls: 'f-sf s-rule w1' }, rg);
+      r.txt = S.text(r.x + 7, r.y + 4, '', { cls: 't-mono t-sm pre' }, rg);
+      r.t1 = S.el('tspan', { text: r.name, cls: r.kind === 'text' ? '' : 't-b' }, r.txt);
+      r.t2 = r.attr ? S.el('tspan', { text: ' ' + r.attr, cls: 't-dim' }, r.txt) : null;
+      r.badge = S.g({ transform: `translate(${r.x + r.w + 14},${r.y})`, style: { display: 'none' } }, rg);
+      S.circle(0, 0, 8, { cls: 'f-in s-rule w1' }, r.badge);
+      r.badgeT = S.text(0, 3.5, '', { cls: 't-c t-xs t-mono t-b' }, r.badge);
+      r.note = S.text(r.x + r.w + 10, r.y + 4, '', { cls: 't-xs t-dim pre' }, rg);
+    });
+    const BOX = { doc: 'f-in s-fg w1', el: 'f-d-soft s-d w1', text: 'f-sf s-d w1' };
+    const api = {
+      g, rows,
+      setState(id, st) {
+        const r = rows[id];
+        const ghost = st === 'ghost', dim = st === 'dim';
+        op(r.g, ghost ? 0.14 : dim ? 0.3 : '');
+        if (r.arrow) op(r.arrow, ghost ? 0.14 : dim ? 0.3 : '');
+        r.box.setAttribute('class', st === 'cur' ? 'f-x-soft s-x w2' : st === 'lit' ? 'f-d-soft s-d w2' : BOX[r.kind]);
+        r.t1.setAttribute('class', (r.kind === 'text' ? '' : 't-b ') + (st === 'cur' ? 't-x' : ''));
+        return api;
+      },
+      /* 一括: visible は見せる番号の集合（無ければ全部）、cur はいまのノード、lit は照らすノードの集合 */
+      apply(o) {
+        o = o || {};
+        TREE.forEach(([id]) => {
+          const st = o.visible && !o.visible.has(id) ? 'ghost' : id === o.cur ? 'cur' : o.lit && o.lit.has(id) ? 'lit' : o.dimAll && !(o.lit && o.lit.has(id)) ? 'dim' : 'on';
+          api.setState(id, st);
+        });
+        return api;
+      },
+      badge(id, text) { const r = rows[id]; r.badge.style.display = text == null ? 'none' : ''; r.badgeT.textContent = text == null ? '' : String(text); return api; },
+      note(id, text) { rows[id].note.textContent = text || ''; return api; },
+      clearBadges() { TREE.forEach(([id]) => { api.badge(id, null); api.note(id, ''); }); return api; }
+    };
+    return api;
+  }
+  const setOf = (arr) => new Set(arr);
+  const range = (a, b) => { const r = []; for (let k = a; k <= b; k++) r.push(k); return r; };
+  /* 段階ごとに右上に出す小さな注記の箱（木の 1〜4 行めは短いので、その右が空いている） */
+  function infoBox(parent, x, y, w, h) {
+    const g = S.g({ cls: 'fade hide' }, parent);
+    S.rect(x, y, w, h, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+    const title = S.text(x + 10, y + 17, '', { cls: 't-xs t-b' }, g);
+    const lines = [0, 1, 2, 3].map((k) => S.text(x + 10, y + 34 + k * 15, '', { cls: 't-xs t-mono pre' }, g));
+    return {
+      g,
+      set(t, ls) { title.textContent = t || ''; lines.forEach((e, k) => { e.textContent = ls && ls[k] ? ls[k] : ''; }); S.fade(g, !!t); return this; }
+    };
+  }
+
+  /* ================================================================
+     場面1 ノードと木の形
+     ================================================================ */
+  const s1 = {
+    steps: [
+      { title: 'ノードは 7 つの欄を持つ struct', text: 'Node は中身 kind と、つながりの欄 6 つを持つ。親が Rc で持つ子は**先頭の子**（first_child）だけで、2 つめ以降は子どうしの next_sibling でたどる。子の並びは[[27-algorithm.html#s1|第27章 場面1]]の連結リストで、全体が[[27-algorithm.html#s4|第27章 場面4]]の木になる。' },
+      { title: 'kind：Document・Element・Text の 3 種', text: 'kind は値を持つ enum で、Document・Element(Element)・Text(String) の 3 つ。Element は種類 ElementKind と属性の Vec を、Text は文字列を持ち、Document は値を持たない。test.html の木はこの 3 種の {d|21 個}。' },
+      { title: 'ElementKind は 9 種：文字列と行き来する', text: '要素の種類は enum ElementKind の 9 つだけで、title・meta・div などは無い。文字列から種類へは `FromStr`、種類から文字列へは `Display` で行き来する。トレイトは「この型はこの操作を持つ」という約束で、`parse()` も `FromStr` を呼ぶ。' },
+      { title: 'Element の中：属性の Vec と get_attribute', text: '属性は Attribute { name, value } の Vec で、書かれた順に持つ。`get_attribute` は最初に名前が合った値を `Some` で返し、無ければ `None`。呼ぶのは第35章のクリック（href）だけで、第36章の getElementById は attributes を自分で回す。' },
+      { title: 'Window と document：木の根の持ち主', text: '木の根は Document のノードで、それを持つのが Window。`document()` は根の Rc を複製して返す。`Window::new` は文の終わりで消える一時の Rc から Weak を作るので、Document の window 欄の `upgrade()` は常に None。この欄を読む所はこの版に無い。' },
+      { title: '等しさを自分で決める：PartialEq と derive', text: '`#[derive(…)]` はトレイトの実装をコンパイラに書かせる属性（HTML の属性とは別）。Node と NodeKind の PartialEq は手書きで、要素は種類だけ、Text は中身を見ずに比べる。Node は Weak の欄が == を持たないので derive できない。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'node.rs'],
+        [36, '#[derive(Debug, Clone)]'],
+        [37, 'pub struct Node {'],
+        [38, '    pub kind: NodeKind,'],
+        [39, '    window: Weak<RefCell<Window>>,'],
+        [40, '    parent: Weak<RefCell<Node>>,'],
+        [41, '    first_child: Option<Rc<RefCell<Node>>>,'],
+        [42, '    last_child: Weak<RefCell<Node>>,'],
+        [43, '    previous_sibling: Weak<RefCell<Node>>,'],
+        [44, '    next_sibling: Option<Rc<RefCell<Node>>>,'],
+        [45, '}'],
+        ['', 'node.rs（Node::new。詰めた）'],
+        [54, 'pub fn new(kind: NodeKind) -> Self {'],
+        [55, '    Self { kind, window: Weak::new(), parent: Weak::new(),'],
+        [null, '      first_child: None, last_child: Weak::new(),'],
+        [null, '      previous_sibling: Weak::new(), next_sibling: None }'],
+        [64, '}']
+      ]).hl(5, 9);
+      P.add([
+        ['', 'node.rs（抜粋）'],
+        [129, '#[derive(Debug, Clone)]'],
+        [130, 'pub enum NodeKind {'],
+        [132, '    Document,'],
+        [134, '    Element(Element),'],
+        [136, '    Text(String),'],
+        [137, '}'],
+        [153, '#[derive(Debug, Clone, PartialEq, Eq)]'],
+        [154, 'pub struct Element {'],
+        [155, '    kind: ElementKind,'],
+        [156, '    attributes: Vec<Attribute>,'],
+        [157, '}'],
+        ['', 'html/attribute.rs'],
+        [3, '#[derive(Debug, Clone, PartialEq, Eq)]'],
+        [4, 'pub struct Attribute {'],
+        [5, '    name: String,'],
+        [6, '    value: String,'],
+        [7, '}']
+      ]).hl(2, 5);
+      P.add([
+        ['', 'node.rs（ElementKind。9 つの値を 1 行に詰めた）'],
+        [193, '#[derive(Debug, Copy, Clone, PartialEq, Eq)]'],
+        [195, 'pub enum ElementKind {'],
+        [197, '    Html, Head, Style, Script, Body, P, H1, H2, A,'],
+        [213, '}'],
+        ['', 'node.rs（FromStr。詰めた）'],
+        [232, 'impl FromStr for ElementKind {'],
+        [233, '    type Err = String;'],
+        [235, '    fn from_str(s: &str) -> Result<Self, Self::Err> {'],
+        [236, '        match s {'],
+        [237, '            "html" => Ok(ElementKind::Html),'],
+        [238, '            "head" => Ok(ElementKind::Head),'],
+        [null, '            …'],
+        [245, '            "a" => Ok(ElementKind::A),'],
+        [246, '            _ => Err(format!('],
+        [null, '                "unimplemented element name {:?}", s)),'],
+        [247, '        }'],
+        ['', 'node.rs 215〜230: impl Display for ElementKind（逆向き。"html" … "a"）']
+      ]).hl(8, 15);
+      P.add([
+        ['', 'node.rs（impl Element。詰めた）'],
+        [160, 'pub fn new(element_name: &str,'],
+        [null, '           attributes: Vec<Attribute>) -> Self {'],
+        [161, '    Self { kind: ElementKind::from_str(element_name)'],
+        [163, '      .expect("failed to convert string to ElementKind"),'],
+        [164, '      attributes }'],
+        [176, 'pub fn get_attribute(&self, name: &str)'],
+        [null, '    -> Option<String> {'],
+        [177, '    for attr in &self.attributes {'],
+        [178, '    if attr.name() == name { return Some(attr.value()); }'],
+        [181, '    }'],
+        [182, '    None'],
+        [183, '}'],
+        [185, 'pub fn is_block_element(&self) -> bool {'],
+        [186, '    match self.kind {'],
+        [187, '        ElementKind::Body | ElementKind::H1'],
+        [null, '        | ElementKind::H2 | ElementKind::P => true,'],
+        [188, '        _ => false,']
+      ]).hl(6, 12);
+      P.add([
+        ['', 'node.rs（Window。23〜26 行を詰めた）'],
+        [12, '#[derive(Debug, Clone)]'],
+        [13, 'pub struct Window {'],
+        [14, '    document: Rc<RefCell<Node>>,'],
+        [15, '}'],
+        [17, 'impl Window {'],
+        [18, '    pub fn new() -> Self {'],
+        [19, '        let window = Self {'],
+        [20, '            document: Rc::new(RefCell::new('],
+        [null, '                Node::new(NodeKind::Document))),'],
+        [21, '        };'],
+        [23, '        window.document.borrow_mut()'],
+        [26, '            .set_window(Rc::downgrade('],
+        [null, '                &Rc::new(RefCell::new(window.clone()))));'],
+        [28, '        window'],
+        [31, '    pub fn document(&self) -> Rc<RefCell<Node>> {'],
+        [32, '        self.document.clone()'],
+        ['', 'parser.rs 43: window: Rc::new(RefCell::new(Window::new())),']
+      ]).hl(11, 13);
+      P.add([
+        ['', 'node.rs（抜粋）'],
+        [47, 'impl PartialEq for Node {'],
+        [48, '    fn eq(&self, other: &Self) -> bool {'],
+        [49, '        self.kind == other.kind'],
+        [50, '    }'],
+        [139, 'impl PartialEq for NodeKind {'],
+        [140, '    fn eq(&self, other: &Self) -> bool {'],
+        [141, '        match &self {'],
+        [142, '            NodeKind::Document =>'],
+        [null, '                matches!(other, NodeKind::Document),'],
+        [143, '            NodeKind::Element(e1) => match &other {'],
+        [144, '                NodeKind::Element(e2) =>'],
+        [null, '                    e1.kind == e2.kind,'],
+        [145, '                _ => false,'],
+        [146, '            },'],
+        [147, '            NodeKind::Text(_) =>'],
+        [null, '                matches!(other, NodeKind::Text(_)),'],
+        [148, '        }']
+      ]).hl(10, 16);
+      st.tr = S.g({}, svg);
+      // 右: 木
+      st.tree = domTree(svg);
+      st.info = infoBox(svg, 712, 24, 230, 96);
+      // 段階1: body の子の列を先頭からたどる粒（first_child → next_sibling → …）
+      st.chain = S.path('M548,220 V498', { cls: 'f-none s-none' }, svg);
+      st.F = A.flow(st.chain, { count: 3, speed: 80, r: 3.5, cls: 'f-d', parent: svg, fade: true });
+      // 段階5: Window の箱と、根への Rc
+      st.win = S.g({ cls: 'fade hide' }, svg);
+      box(st.win, 712, 30, 180, 40, 'Window', 'document: Rc<RefCell<Node>>');
+      S.arrow(st.win, 712, 50, 568, 44, 'mid', { cls: 's-mid w15' });
+      S.text(640, 36, 'document()', { cls: 't-c t-xs t-mono t-dim' }, st.win);
+      xlink(svg, 944, 554, '27-algorithm.html#s4', '第27章 場面4「木構造」', true);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.show(i);
+      const T = [
+        ['body.first_child ＝ h1、body.last_child ＝ p#target（Weak）', 'h1.next_sibling ＝ p.first、p.first.previous_sibling ＝ h1（Weak）', 'p#target.next_sibling ＝ None（子の列の終わり）', 'Document から数えて 21 個。深さは最大 5（Text("Test page1 ")）'],
+        ['p.first.kind ＝ Element(Element { kind: P, attributes: [class="first"] })', 'Text("My Browser!") ＝ String 11 バイト（UTF-8）', 'script の type="text/javascript" も attributes に残る（使われない）', 'Document は値を持たず、木の根に 1 つだけ'],
+        ['from_str("h1") → Ok(H1)、ElementKind::H1.to_string() → "h1"', 'from_str("div") → Err("unimplemented element name \\"div\\"")', 'test.html に出る種類は 8（9 種のうち h2 だけ出ない）', 'Element::new は Err を expect で panic にする（node.rs 162〜163 行）'],
+        ['p.links.attributes ＝ [Attribute { name: "class", value: "links" }]', 'a.get_attribute("href") → Some("http://host.test:8000/test1.html")', 'h1.get_attribute("class") → None（id="title" しか無い）', 'is_block_element(): body・h1・h2・p → true、a・html・head・style・script → false'],
+        ['HtmlParser::new: window ＝ Rc::new(RefCell::new(Window::new()))', 'window.borrow().document() → Document の Rc（strong が 1 増える）', 'Document.parent ＝ Weak::new()（upgrade() は常に None）', 'Document.window ＝ 一時の Rc から作った Weak → upgrade() は None'],
+        ['Node == Node → self.kind == other.kind（つながりの欄は見ない）', 'NodeKind: Element(P, [class="first"]) == Element(P, [])  → true（種類だけ）', 'NodeKind: Text("My Browser!") == Text("") → true、Document == Element(…) → false', 'struct Element どうしの == は derive で属性も比べ、P [class="first"] と P [] は false']
+      ];
+      retrace(st.tr, T[i]);
+      const tree = st.tree;
+      const ELS = [2, 3, 4, 6, 8, 9, 11, 13, 14, 16, 18, 20];
+      const lit = [setOf([8, 9, 11, 13, 18, 20]), null, setOf(ELS), setOf([13, 14, 16]), setOf([1]), setOf([4])][i];
+      tree.apply({ lit });
+      tree.clearBadges();
+      if (i === 0) { tree.note(9, '← first_child'); tree.note(11, '← h1.next_sibling'); tree.note(20, '← next_sibling ＝ None'); }
+      if (i === 3) { tree.note(14, '← get_attribute("href")'); }
+      if (i === 5) { tree.note(4, '← 一致'); }
+      const INFO = [
+        null,
+        ['NodeKind の内訳（test.html）', ['Document   1', 'Element   12', 'Text       8', '合計      21']],
+        ['ElementKind（9 種）', ['html head style script body', 'p h1 h2 a', 'test.html に出ないのは h2 だけ', 'from_str("div") → Err']],
+        ['get_attribute を呼ぶ所', ['page.rs 54（クリックの href）だけ', 'get_element_by_id（api.rs 18〜19）', ' は attributes() を回して', ' name == "id" を自分で比べる']],
+        null,
+        ['style を探すときの比較（場面6）', ['n.borrow().kind() ==', ' NodeKind::Element(', '  Element::new("style", Vec::new()))', '→ 種類だけ比べて true']]
+      ];
+      st.info.set(INFO[i] ? INFO[i][0] : null, INFO[i] ? INFO[i][1] : null);
+      S.fade(st.win, i === 4);
+      st.F.show(i === 0);
+      if (i === 0) { st.F.reset(); st.F.update(0); }
+    },
+    frame(ctx, t, dt) {
+      const st = ctx.state;
+      if (ctx.step === 0) st.F.update(dt);
+    }
+  };
+
+  /* ================================================================
+     場面2 Rc・RefCell・Weak — なぜこの形か
+     カード: body と子 3 つ、h1 の Text、p.links の a とその Text。実線 ＝ Rc、破線 ＝ Weak
+     ================================================================ */
+  const s2 = {
+    steps: [
+      { title: '共有する：Rc は持ち主を数える', text: '`Rc<T>` は参照カウント付きのポインタで、`clone()` でポインタが 1 つ増え、数も 1 増える。最後の 1 つが消えると値が解放される。p.links は兄 p.first の next_sibling とスタックが持つので数は 2、`</p>` で降りると 1。[[30-gbemu-desktop.html#s5|第30章 場面5]]では「共有の Rc」とだけ書いた。' },
+      { title: '書き換える：RefCell は借用を実行時に確かめる', text: 'Rc の中身は共有されているので、そのままでは書き換えられない。`RefCell` は `borrow()`（読む）と `borrow_mut()`（書く）で中身を貸し、「書く借用は 1 つだけで、読む借用とも同時に取れない」を実行時に確かめ、破れば panic。107 行は借りた kind の String に 1 文字足す。' },
+      { title: '輪を断つ：親と前の兄弟は Weak', text: '親子が互いを Rc で持つと、数が 0 にならず解放されない（参照の輪）。上向きの parent と後ろ向きの previous_sibling は `Rc::downgrade` で作る数えない `Weak` にする。Rc は first_child と next_sibling だけで、last_child も Weak。' },
+      { title: '解放後の使用を型で防ぐ', text: 'C のポインタなら、親を消した後も子の parent に古い番地が残り、読めば[[26-kata.html#s6|第26章 場面6]]の解放後の使用になる。Weak は `upgrade()` のたびに値がまだあるかを確かめ、無ければ `None` を返す。page.rs 51 行は、クリックされた箱（第35章のレイアウトの木。同じ形）の親をこれで取る。' },
+      { title: '型を読む：Rc<RefCell<Node>> の呼び出しの鎖', text: '164〜168 行の 1 文は、呼び出しごとに型が変わる。`.as_ref()` で Option の中を動かさずに参照にするので、続く `.unwrap()` も `.borrow_mut()` も借りるだけで済む。だから 170 行で同じ last_sibling をもう 1 度使え、そこで初めて動かす（move）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'parser.rs（Rc が増える・移る所の抜粋。詰めた）'],
+        [143, '        Some(n) => n.clone(),  // strong が 1 増える'],
+        [147, '    let node = Rc::new(RefCell::new('],
+        [null, '      self.create_element(tag, attributes)));  // strong 1'],
+        [164, '        last_sibling.as_ref().unwrap().borrow_mut()'],
+        [168, '        .set_next_sibling(Some(node.clone())); // strong 2'],
+        [173, '        current.borrow_mut()'],
+        [null, '        .set_first_child(Some(node.clone())); // 最初の子'],
+        [179, '    self.stack_of_open_elements.push(node); // Vec へ移る'],
+        ['', 'parser.rs（pop_until。pop した Rc は変数 current が消えるときに消える）'],
+        [69, '            let current ='],
+        [null, '                match self.stack_of_open_elements.pop() {'],
+        [70, '                Some(n) => n,'],
+        [71, '                None => return,'],
+        [72, '            };'],
+        [74, '            if current.borrow().element_kind()'],
+        [null, '                == Some(element_kind) {'],
+        [75, '                return;  // strong が 1 減る']
+      ]).hl(1, 8);
+      P.add([
+        ['', 'parser.rs（insert_char の前半。詰めた）'],
+        [100, 'fn insert_char(&mut self, c: char) {'],
+        [101, '    let current ='],
+        [null, '        match self.stack_of_open_elements.last() {'],
+        [102, '        Some(n) => n.clone(),'],
+        [103, '        None => return,'],
+        [104, '    };'],
+        [107, '    if let NodeKind::Text(ref mut s) ='],
+        [null, '        current.borrow_mut().kind {'],
+        [108, '        s.push(c);'],
+        [109, '        return;'],
+        [110, '    }'],
+        [null, '    …  // 113〜115 行は空白を捨てる（場面4）'],
+        [117, '    let node = Rc::new(RefCell::new(self.create_char(c)));'],
+        ['', '119〜127 行（木につなぐ）は場面4 で読む']
+      ]).hl(7, 11);
+      P.add([
+        ['', 'node.rs（Node の欄。Weak は parent・last_child・previous_sibling）'],
+        [40, '    parent: Weak<RefCell<Node>>,'],
+        [41, '    first_child: Option<Rc<RefCell<Node>>>,'],
+        [42, '    last_child: Weak<RefCell<Node>>,'],
+        [43, '    previous_sibling: Weak<RefCell<Node>>,'],
+        [44, '    next_sibling: Option<Rc<RefCell<Node>>>,'],
+        ['', 'parser.rs（insert_element。Weak を作る所の抜粋）'],
+        [169, '        node.borrow_mut()'],
+        [null, '            .set_previous_sibling(Rc::downgrade('],
+        [170, '                &last_sibling'],
+        [null, '                  .expect("last_sibling should be Some"),'],
+        [171, '        ))'],
+        [176, '    current.borrow_mut()'],
+        [null, '        .set_last_child(Rc::downgrade(&node));'],
+        [177, '    node.borrow_mut().set_parent(Rc::downgrade(&current));'],
+        ['', 'node.rs（Weak は clone して渡す。読むには upgrade() が要る）'],
+        [74, '    pub fn parent(&self) -> Weak<RefCell<Node>> {'],
+        [75, '        self.parent.clone()']
+      ]).hl(7, 14);
+      P.add([
+        ['', 'page.rs（clicked。詰めた）'],
+        [44, 'pub fn clicked(&self, position: (i64, i64))'],
+        [null, '    -> Option<String> {'],
+        [45, '    let view = match &self.layout_view { … };'],
+        [50, '    if let Some(n) ='],
+        [null, '        view.find_node_by_position(position) {'],
+        [51, '        if let Some(parent) ='],
+        [null, '            n.borrow().parent().upgrade() {'],
+        [52, '            if let NodeKind::Element(e) ='],
+        [null, '                parent.borrow().node_kind() {'],
+        [53, '                if e.kind() == ElementKind::A {'],
+        [54, '                    return e.get_attribute("href");'],
+        [60, '    None'],
+        ['', 'layout/layout_object.rs（レイアウトの木も同じ形。第35章）'],
+        [99, '    first_child: Option<Rc<RefCell<LayoutObject>>>,'],
+        [100, '    next_sibling: Option<Rc<RefCell<LayoutObject>>>,'],
+        [101, '    parent: Weak<RefCell<LayoutObject>>,']
+      ]).hl(6, 7);
+      P.add([
+        ['', 'parser.rs（insert_element の中ほど。詰めた）'],
+        [150, '        let mut last_sibling ='],
+        [null, '            current.borrow().first_child();'],
+        [151, '        loop {'],
+        [152, '            last_sibling = match last_sibling {'],
+        [153, '                Some(ref node) => {'],
+        [154, '                    if node.borrow().next_sibling()'],
+        [null, '                        .is_some() {'],
+        [155, '                        node.borrow().next_sibling()'],
+        [156, '                    } else { break; }'],
+        [159, '                }'],
+        [160, '                None => unimplemented!('],
+        [null, '                    "last_sibling should be Some"),'],
+        [161, '            };'],
+        [162, '        }'],
+        [164, '        last_sibling.as_ref().unwrap().borrow_mut()'],
+        [168, '            .set_next_sibling(Some(node.clone()));'],
+        [170, '    … last_sibling.expect("last_sibling should be Some")']
+      ]).hl(15, 16);
+      st.tr = S.g({}, svg);
+      // ---- カード
+      const CW = 136, CHh = 40;
+      st.gWk = S.g({}, svg); st.gRc = S.g({}, svg);   // 矢印は箱の下に
+      const gc = S.g({}, svg);
+      function card(cx, top, title, small) {
+        const g = S.g({}, gc);
+        const r = S.rect(cx - CW / 2, top, CW, CHh, { rx: 5, cls: 'f-d-soft s-d w1' }, g);
+        const t = S.text(cx, top + 16, title, { cls: 't-c t-mono t-b ' + (small ? 't-xs' : 't-sm') }, g);
+        const t2 = S.text(cx, top + 31, '', { cls: 't-c t-xs t-mono t-dim' }, g);
+        return { g, r, t, t2, cx, top, l: cx - CW / 2, rt: cx + CW / 2, bot: top + CHh };
+      }
+      const C = st.C = {
+        body: card(716, 54, 'body'),
+        h1: card(556, 194, 'h1 id="title"'), pf: card(716, 194, 'p class="first"'), pl: card(876, 194, 'p class="links"'),
+        t1: card(556, 334, 'Text("My Browser!")', true), a: card(876, 334, 'a href="…/test1.html"', true), t2: card(876, 474, 'Text("Test page1 ")', true)
+      };
+      C.pf.t2.textContent = '子 Text は省略';
+      // 欄の点: [カード, 位置, 値あり?]。位置: p 上辺、f 下辺左、l 下辺右、v 左辺、n 右辺
+      const DOT = { p: (c) => [c.cx + 14, c.top], f: (c) => [c.cx - 40, c.bot], l: (c) => [c.cx + 40, c.bot], v: (c) => [c.l, c.top + 20], n: (c) => [c.rt, c.top + 20] };
+      const dots = [
+        ['body', 'p', 1], ['body', 'f', 1], ['body', 'l', 1], ['body', 'v', 1], ['body', 'n', 0],
+        ['h1', 'p', 1], ['h1', 'f', 1], ['h1', 'l', 1], ['h1', 'v', 0], ['h1', 'n', 1],
+        ['pf', 'p', 1], ['pf', 'f', 1], ['pf', 'l', 1], ['pf', 'v', 1], ['pf', 'n', 1],
+        ['pl', 'p', 1], ['pl', 'f', 1], ['pl', 'l', 1], ['pl', 'v', 1], ['pl', 'n', 1],
+        ['t1', 'p', 1], ['t1', 'f', 0], ['t1', 'l', 0], ['t1', 'v', 0], ['t1', 'n', 0],
+        ['a', 'p', 1], ['a', 'f', 1], ['a', 'l', 1], ['a', 'v', 0], ['a', 'n', 1],
+        ['t2', 'p', 1], ['t2', 'f', 0], ['t2', 'l', 0], ['t2', 'v', 0], ['t2', 'n', 0]
+      ];
+      dots.forEach(([k, pos, has]) => { const [x, y] = DOT[pos](C[k]); S.circle(x, y, 3, { cls: has ? 'f-fg' : 'f-sf s-dim w1' }, gc); });
+      // p.links の上辺は、Rc の着地が右（外側）、parent の出発が左（内側）
+      const rc = (x1, y1, x2, y2, g) => S.line(x1, y1, x2, y2, { cls: 's-fg w15', 'marker-end': mk('fg') }, g || st.gRc);
+      const wk = (x1, y1, x2, y2, g) => S.line(x1, y1, x2, y2, { cls: 's-dim w15 dash', 'marker-end': mk('dim') }, g || st.gWk);
+      st.arFirst = rc(676, 94, 542, 192);                 // body.first_child → h1
+      wk(570, 194, 706, 96); wk(730, 194, 716, 96); wk(890, 194, 726, 96);   // parent ⇢ body
+      st.arNext1 = rc(624, 206, 646, 206); wk(648, 222, 626, 222);             // h1 ⇄ p.first
+      st.arNext2 = rc(784, 206, 806, 206); wk(808, 222, 786, 222);             // p.first ⇄ p.links
+      rc(516, 234, 542, 332); wk(570, 334, 556, 236); wk(596, 234, 584, 332);  // h1 と Text
+      rc(836, 234, 862, 332); st.arParA = wk(890, 334, 876, 236);   // p.links と a（p.links.last_child は図に無い 2 つめの a）
+      rc(836, 374, 862, 472); st.arParT2 = wk(890, 474, 876, 376); wk(916, 374, 904, 472);  // a と Text
+      // 段階1: 変数 node とスタックの箱
+      st.varNode = S.g({ cls: 'fade hide' }, svg);
+      S.label(st.varNode, 716, 292, '変数 node（147 行）', { cls: 't-xs t-b', box: 'f-sf s-fg w1' });
+      S.line(770, 284, 806, 236, { cls: 's-fg w15', 'marker-end': mk('fg') }, st.varNode);
+      st.stackG = S.g({ cls: 'fade hide' }, svg);
+      S.rect(496, 426, 150, 104, { rx: 6, cls: 'f-sf s-rule w1' }, st.stackG);
+      S.text(506, 444, 'stack_of_open_elements', { cls: 't-xs t-mono t-b' }, st.stackG);
+      st.stackBoxes = ['html', 'body', 'p'].map((n, k) => box(st.stackG, 506 + k * 44, 456, 40, 24, n, null, 'f-in s-rule w1', 't-xs t-mono t-b'));
+      S.text(506, 512, '右端が末尾 ＝ current', { cls: 't-xs t-dim' }, st.stackG);
+      st.stackArrow = S.line(634, 468, 816, 238, { cls: 's-fg w15', 'marker-end': mk('fg') }, st.stackG);   // p の箱の右から（題の文字を横切らない）
+      st.phaseLbl = S.text(716, 34, '', { cls: 't-c t-sm t-b t-x' }, svg);   // body の箱の上（矢印に重ねない）
+      // 段階2: borrow_mut の札
+      st.bm = S.text(632, 358, '', { cls: 't-xs t-mono' }, svg);   // Text の箱の右
+      // 段階3: 参照の輪
+      st.ring = S.g({ cls: 'fade hide' }, svg);
+      S.rect(496, 426, 192, 104, { rx: 6, cls: 'f-sf s-rule w1' }, st.ring);
+      S.text(506, 444, 'もし parent も Rc なら', { cls: 't-xs t-b' }, st.ring);
+      const rb = box(st.ring, 506, 456, 52, 24, 'body', null, 'f-d-soft s-d w1', 't-xs t-mono t-b');
+      const rh = box(st.ring, 584, 456, 52, 24, 'h1', null, 'f-d-soft s-d w1', 't-xs t-mono t-b');
+      rc(558, 462, 582, 462, st.ring); rc(584, 474, 560, 474, st.ring);
+      S.text(506, 500, '互いに strong 1 を支え合い', { cls: 't-xs' }, st.ring);
+      S.text(506, 516, 'どちらも 0 にならない → 解放されない', { cls: 't-xs t-x' }, st.ring);
+      // 段階4: upgrade の札
+      st.up = S.g({ cls: 'fade hide' }, svg);
+      st.upL = [0, 1, 2].map((k) => S.text(800, 410 + k * 18, '', { cls: 't-xs t-mono t-end' }, st.up));
+      xlink(svg, 944, 554, '26-kata.html#s6', '第26章 場面6「メモリ安全」', true);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state, C = st.C;
+      st.P.show(i);
+      const T = [
+        ['147 行: let node = Rc::new(RefCell::new(…)) → strong 1（持ち主は変数 node）', '168 行: p.first.set_next_sibling(Some(node.clone())) → strong 2', '179 行: stack_of_open_elements.push(node) → 変数から Vec へ移り、strong 2 のまま', '</p> の pop_until で Vec から消える → strong 1（兄の next_sibling だけ）'],
+        ['current.borrow_mut() → RefMut<Node>（書く借用。文の終わりまで生きる）', 'NodeKind::Text(ref mut s) → s: &mut String、s.push(\'y\') → "My"', 'return で RefMut が消え、借用が解ける', '借りている間にもう 1 度 borrow() すると panic（try_borrow なら Err）'],
+        ['p.links.parent ＝ Weak → body。upgrade() → Some(body の Rc)', 'body.last_child ＝ Weak → p#target（最後に入れた子に置き換わる）', 'p.hidden.previous_sibling ＝ Weak → p.links', 'Rc::weak_count(&p.links) ＝ 3（a・a の parent と p.hidden の previous_sibling）'],
+        ['クリック → 第35章の find_node_by_position → n（レイアウトの木の箱）', 'n.borrow().parent().upgrade() → Some(parent)（Weak から Rc へ。消えていれば None）', 'parent の node_kind() が Element で kind() == A → get_attribute("href")', 'DOM の Node の parent・last_child・previous_sibling を読む所はこの版に無い'],
+        ['last_sibling: Option<Rc<RefCell<Node>>>  → .as_ref(): Option<&Rc<RefCell<Node>>>', '→ .unwrap(): &Rc<RefCell<Node>>  → .borrow_mut(): RefMut<Node>', '→ .set_next_sibling(Some(node.clone()))（h1.next_sibling ＝ p.first）', '170 行: last_sibling.expect(…) → ここで初めて動かす（move）']
+      ];
+      retrace(st.tr, T[i]);
+      st.trLines = Array.from(st.tr.childNodes);
+      // 矢印の濃さ
+      op(st.gRc, i === 2 ? 0.25 : ''); op(st.gWk, i === 0 || i === 1 ? 0.35 : '');
+      // カードの強調
+      const hi = (c, on, cls) => { c.r.setAttribute('class', on ? (cls || 'f-x-soft s-x w2') : 'f-d-soft s-d w1'); };
+      Object.values(C).forEach((c) => hi(c, false));
+      hi(C.pl, i === 0); hi(C.t1, false); hi(C.h1, i === 4, 'f-d-soft s-d w2'); hi(C.pf, i === 4);
+      C.pl.t2.textContent = i === 0 ? 'strong 1' : '';
+      C.t1.t.textContent = 'Text("My Browser!")';
+      st.bm.textContent = '';
+      S.fade(st.varNode, i === 0); S.fade(st.stackG, false); S.fade(st.ring, i === 2); S.fade(st.up, i === 3);
+      st.phaseLbl.textContent = '';
+      st.arParT2.setAttribute('class', 's-dim w15 dash');
+      st.upL.forEach((e) => { e.textContent = ''; });
+      st.stackArrow.style.display = '';
+      st.stackBoxes[2].g.style.display = '';
+      op(st.arNext2, '');
+      if (i === 4) { C.h1.t2.textContent = 'last_sibling'; C.pf.t2.textContent = 'node（新しい p）'; } else { C.h1.t2.textContent = ''; C.pf.t2.textContent = '子 Text は省略'; }
+    },
+    frame(ctx, t, dt) {
+      const st = ctx.state, C = st.C, i = ctx.step;
+      if (i === 0) {
+        // 8 秒で 1 周: 作る → 兄につなぐ → スタックへ → </p> で降りる。止めている人には降りた後の姿
+        const ph = playing() ? Math.floor(U.mod(ctx.ts, 8) / 2) : 3;
+        S.fade(st.varNode, ph <= 1); S.fade(st.stackG, ph >= 2);
+        op(st.arNext2, ph >= 1 ? '' : 0.12);
+        st.stackArrow.style.display = ph === 2 ? '' : 'none';
+        st.stackBoxes[2].g.style.display = ph === 2 ? '' : 'none';
+        C.pl.t2.textContent = 'strong ' + (ph === 0 || ph === 3 ? 1 : 2);
+        st.phaseLbl.textContent = ['147 行: Rc::new → strong 1', '168 行: 兄の next_sibling に clone → strong 2', '179 行: push で変数から Vec へ移る（2 のまま）', '</p>: pop_until で Vec から消える → strong 1'][ph];
+      } else if (i === 1) {
+        // 5 秒で 1 周: 0.3 秒に 1 文字ずつ s.push(c)。止めている人には書き終えた姿
+        const tt = playing() ? U.mod(ctx.ts, 5) : 4;
+        const n = Math.max(1, Math.min(11, Math.floor(tt / 0.3) + 1));
+        C.t1.t.textContent = 'Text("' + 'My Browser!'.slice(0, n) + '")';
+        const writing = playing() && tt < 3.3;
+        C.t1.r.setAttribute('class', writing ? 'f-x-soft s-x w2' : 'f-d-soft s-d w1');
+        st.bm.textContent = writing ? 'borrow_mut() 中: s.push(\'' + 'My Browser!'[n - 1] + '\')' : 'return で借用が解ける';
+      } else if (i === 3) {
+        // 5 秒で 1 周: 箱をクリック → parent の Weak を upgrade → a なら href。止めている人には最後の姿
+        const tt = playing() ? U.mod(ctx.ts, 5) : 4.5;
+        const ph = tt < 1.2 ? 0 : tt < 2.4 ? 1 : 2;
+        C.t2.r.setAttribute('class', ph >= 0 ? 'f-x-soft s-x w2' : 'f-d-soft s-d w1');
+        st.arParT2.setAttribute('class', ph >= 1 ? 's-x w2 dash' : 's-dim w15 dash');
+        C.a.r.setAttribute('class', ph >= 2 ? 'f-x-soft s-x w2' : 'f-d-soft s-d w1');
+        const L = [['クリック → find_node_by_position', 'Text("Test page1 ") の箱'], ['parent().upgrade()', '→ Some(a の箱)'], ['node_kind() == Element、kind() == A', '→ get_attribute("href")', '→ Some("http://host.test:8000/…")']][ph];
+        st.upL.forEach((e, k) => { e.textContent = L[k] || ''; });
+      } else if (i === 4) {
+        // 鎖の 4 行を 1.1 秒ずつ照らす。止めている人には照らさない
+        const k = playing() ? Math.floor(U.mod(ctx.ts, 4.4) / 1.1) : -1;
+        st.trLines.forEach((e, j) => e.setAttribute('class', (j === 0 ? 't-sm t-b' : 't-sm') + ' pre' + (j === k ? ' t-x' : '')));
+      }
+    }
+  };
+
+  /* ================================================================
+     場面3 挿入モード
+     モードの列は流れの順（Text は InHead の横）。推移は確認用の模擬と parser.rs を手で追った結果で一致
+     ================================================================ */
+  const MODES = ['Initial', 'BeforeHtml', 'BeforeHead', 'InHead', 'AfterHead', 'InBody', 'AfterBody', 'AfterAfterBody'];
+  const MODE_Y = (k) => 36 + k * 54;
+  /* 段階4 の推移。[トークン, 移った先のモード, スタック, original_insertion_mode, 処理] */
+  const S3_EVENTS = [
+    ['<html>', 'BeforeHead', ['html'], 'Initial', 'Initial で読み直し → BeforeHtml で insert_element'],
+    ['<head>', 'InHead', ['html', 'head'], 'Initial', 'insert_element → push'],
+    ['<style>', 'Text', ['html', 'head', 'style'], 'InHead', 'insert_element、戻り先を InHead に控える'],
+    ["Char('#') … Char(' ')", 'Text', ['html', 'head', 'style', 'Text'], 'InHead', 'insert_char: 最初の \'#\' で Text を作って push（171 字）'],
+    ['</style>', 'InHead', ['html', 'head'], 'InHead', 'pop_until(Style) → Text と style が降りる'],
+    ['<script type="text/javascript">', 'Text', ['html', 'head', 'script'], 'InHead', 'insert_element、戻り先を InHead に控える'],
+    ["Char('f') … Char(' ')", 'Text', ['html', 'head', 'script', 'Text'], 'InHead', 'insert_char: 最初の \'f\' で Text を作って push（166 字）'],
+    ['<\/script>', 'InHead', ['html', 'head'], 'InHead', 'pop_until(Script) → Text と script が降りる'],
+    ['</head>', 'AfterHead', ['html'], 'InHead', 'pop_until(Head)'],
+    ['<body>', 'InBody', ['html', 'body'], 'InHead', 'insert_element → push'],
+    ['（body の中身は場面4・5）', 'InBody', ['html', 'body'], 'InHead', 'h1・p・a と文字を入れ、終了タグで降ろす'],
+    ['</body>', 'AfterBody', ['html'], 'InHead', 'pop_until(Body)'],
+    ['</html>', 'AfterAfterBody', ['html'], 'InHead', 'モードだけ変える（続く末尾の Char(\'\\n\') も捨てる）'],
+    ['None（トークンが尽きた）', 'AfterAfterBody', ['html'], 'InHead', 'while を抜けて self.window.clone() を返す（494 行）']
+  ];
+  const s3 = {
+    steps: [
+      { title: '9 つのモードと、パーサが持つ状態', text: 'HtmlParser は、いまのモード、戻り先のモード（original_insertion_mode）、開いている要素のスタック、トークナイザ t、木の根を持つ window を持つ。モードは enum の 9 つで、match の腕の漏れはコンパイラが見つける（[[29-imi.html#s4|第29章 場面4]]の網羅性の検査）。' },
+      { title: 'ループの形：読み直す continue', text: 'construct_tree は `while token.is_some()` で回り、`match self.mode` で腕を選ぶ。腕の多くは、扱わないトークンが来ると `next()` を呼ばずにモードだけ変えて `continue` し、同じトークンを次のモードで読み直す。Initial の腕がこの形。' },
+      { title: '省略された html・head・body を補う', text: 'BeforeHtml に空白でない文字か html 以外の開始タグが来ると、229 行で html を補って BeforeHead に移り、同じトークンを読み直す。BeforeHead は head を、AfterHead は body を同じ形で補う。仕様もこの 3 つの開始タグは条件付きで省略できる。' },
+      { title: 'test.html でモードを追う', text: 'test.html では、モードは図3 の列を上から順に進み、InHead と Text の間を style と script で 2 回往復する。InHead にほかの知っている要素の開始タグが来ると head を閉じて AfterHead へ移り、知らないタグ（meta・title）は捨てる。' },
+      { title: 'Text モードと original_insertion_mode', text: 'InHead で `<style>` か `<script>` が来ると、要素を入れ、いまのモードを original_insertion_mode に控えて Text に移る。Text は文字をすべて insert_char に回し、同じ名前の終了タグで要素と Text を降ろして戻る。ほかのタグは消費せずに戻り先へ移る。' },
+      { title: '終わり方：AfterBody・AfterAfterBody・None', text: 'AfterBody と AfterAfterBody は文字をすべて捨て（仕様は body に入れる）、ほかのタグが来れば「パースの失敗」として InBody に戻して読み直す（仕様と同じ）。トークナイザが None を返すと `while` を抜け、494 行で window を返す。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'parser.rs（InsertionMode は 9 つの値を 2 行に詰めた）'],
+        [16, '#[derive(Debug, Copy, Clone, PartialEq, Eq)]'],
+        [17, 'pub enum InsertionMode {'],
+        [18, '    Initial, BeforeHtml, BeforeHead, InHead, AfterHead,'],
+        [null, '    InBody, Text, AfterBody, AfterAfterBody,'],
+        [27, '}'],
+        [29, '#[derive(Debug, Clone)]'],
+        [30, 'pub struct HtmlParser {'],
+        [31, '    window: Rc<RefCell<Window>>,'],
+        [32, '    mode: InsertionMode,'],
+        [34, '    original_insertion_mode: InsertionMode,'],
+        [36, '    stack_of_open_elements: Vec<Rc<RefCell<Node>>>,'],
+        [37, '    t: HtmlTokenizer,'],
+        [38, '}'],
+        ['', 'parser.rs（HtmlParser::new。詰めた）'],
+        [42, '    Self { window: Rc::new(RefCell::new(Window::new())),'],
+        [null, '         mode: InsertionMode::Initial,'],
+        [null, '         original_insertion_mode: InsertionMode::Initial,'],
+        [null, '         stack_of_open_elements: Vec::new(), t }']
+      ]).hl(1, 5);
+      P.add([
+        ['', 'parser.rs（construct_tree の入口と Initial）'],
+        [182, 'pub fn construct_tree(&mut self)'],
+        [null, '    -> Rc<RefCell<Window>> {'],
+        [183, '    let mut token = self.t.next();'],
+        [185, '    while token.is_some() {'],
+        [186, '        match self.mode {'],
+        [187, '            InsertionMode::Initial => {'],
+        [191, '                if let Some(HtmlToken::Char(_)) = token {'],
+        [192, '                    token = self.t.next();'],
+        [193, '                    continue;'],
+        [194, '                }'],
+        [196, '                self.mode = InsertionMode::BeforeHtml;'],
+        [197, '                continue;  // token はそのまま → 読み直す'],
+        [198, '            }'],
+        ['', '…（モードごとの腕。199〜490 行）'],
+        [491, '        }'],
+        [492, '    }'],
+        [494, '    self.window.clone()  // トークンが尽きた（None）']
+      ]).hl(11, 12);
+      P.add([
+        ['', 'parser.rs（BeforeHtml。詰めた。Char の空白を捨てる 201〜205 行は略）'],
+        [199, 'InsertionMode::BeforeHtml => {'],
+        [200, '    match token {'],
+        [207, '        Some(HtmlToken::StartTag {'],
+        [null, '          ref tag, self_closing: _, ref attributes }) => {'],
+        [212, '            if tag == "html" {'],
+        [213, '                self.insert_element('],
+        [null, '                    tag, attributes.to_vec());'],
+        [214, '                self.mode = InsertionMode::BeforeHead;'],
+        [215, '                token = self.t.next(); continue;'],
+        [217, '            }'],
+        [219, '        Some(HtmlToken::EndTag { ref tag }) => { … }'],
+        [225, '        Some(HtmlToken::Eof) | None => {'],
+        [226, '            return self.window.clone();'],
+        [228, '    }'],
+        [229, '    self.insert_element("html", Vec::new()); // 補う'],
+        [230, '    self.mode = InsertionMode::BeforeHead;'],
+        [231, '    continue;  // 同じトークンを BeforeHead で読み直す']
+      ]).hl(15, 17);
+      P.add([
+        ['', 'parser.rs（mode を書き換える行の抜粋。字下げを落とした）'],
+        [196, 'self.mode = InsertionMode::BeforeHtml;      // Char 以外'],
+        [214, 'self.mode = InsertionMode::BeforeHead;      // <html>'],
+        [248, 'self.mode = InsertionMode::InHead;          // <head>'],
+        [278, 'self.original_insertion_mode = self.mode;   // <style> 等'],
+        [279, 'self.mode = InsertionMode::Text;'],
+        [288, 'self.mode = InsertionMode::AfterHead;       // InHead:body'],
+        [293, 'self.mode = InsertionMode::AfterHead;       // InHead:p 等'],
+        [299, 'self.mode = InsertionMode::AfterHead;       // </head>'],
+        [330, 'self.mode = InsertionMode::InBody;          // <body>'],
+        [372, 'self.mode = InsertionMode::AfterBody;       // </body>'],
+        [434, 'self.mode = self.original_insertion_mode;   // </style>'],
+        [440, 'self.mode = self.original_insertion_mode;   // <\/script>'],
+        [453, 'self.mode = self.original_insertion_mode;   // Text:他'],
+        [463, 'self.mode = InsertionMode::AfterAfterBody;  // </html>'],
+        [474, 'self.mode = InsertionMode::InBody;          // 失敗'],
+        [489, 'self.mode = InsertionMode::InBody;          // 失敗']
+      ]);
+      P.add([
+        ['', 'parser.rs（Text モードの抜粋。453 行はトークンを消費せずに戻る）'],
+        [426, 'InsertionMode::Text => {'],
+        [427, '    match token {'],
+        [431, '        Some(HtmlToken::EndTag { ref tag }) => {'],
+        [432, '            if tag == "style" {'],
+        [433, '                self.pop_until(ElementKind::Style);'],
+        [434, '                self.mode = self.original_insertion_mode;'],
+        [435, '                token = self.t.next(); continue;'],
+        [437, '            }'],
+        [438, '            if tag == "script" { … }  // Script で同じ'],
+        [444, '        }'],
+        [445, '        Some(HtmlToken::Char(c)) => {'],
+        [446, '            self.insert_char(c); token = self.t.next();'],
+        [448, '            continue;'],
+        [449, '        }'],
+        [450, '        _ => {}'],
+        [451, '    }'],
+        [453, '    self.mode = self.original_insertion_mode; // 戻る']
+      ]).hl(5, 7);
+      P.add([
+        ['', 'parser.rs（AfterBody・AfterAfterBody・ループの終わりの抜粋）'],
+        [455, 'InsertionMode::AfterBody => {'],
+        [456, '    match token {'],
+        [457, '        Some(HtmlToken::Char(_c)) => {'],
+        [458, '            token = self.t.next(); continue;'],
+        [461, '        Some(HtmlToken::EndTag { ref tag }) => {'],
+        [462, '            if tag == "html" {'],
+        [463, '                self.mode = InsertionMode::AfterAfterBody;'],
+        [464, '                token = self.t.next(); continue;'],
+        [468, '        Some(HtmlToken::Eof) | None => {'],
+        [469, '            return self.window.clone();'],
+        [471, '        _ => {}'],
+        [474, '    self.mode = InsertionMode::InBody; // 失敗 → 読み直す'],
+        [476, 'InsertionMode::AfterAfterBody => {'],
+        [478, '    Some(HtmlToken::Char(_c)) => { … }  // 捨てる'],
+        [489, '    self.mode = InsertionMode::InBody;  // パースの失敗'],
+        [492, '}   // while の終わり'],
+        [494, 'self.window.clone()']
+      ]).hl(16, 17);
+      st.tr = S.g({}, svg);
+      // ---- 右: モードの列
+      const g = S.g({}, svg);
+      st.mode = {};
+      MODES.forEach((m, k) => {
+        st.mode[m] = box(g, 500, MODE_Y(k), 150, 30, m, null, 'f-sf s-rule w1', 't-sm t-mono t-b');
+        if (k < MODES.length - 1) S.line(575, MODE_Y(k) + 30, 575, MODE_Y(k + 1) - 2, { cls: 's-dim w15', 'marker-end': mk('dim') }, g);
+      });
+      st.mode.Text = box(g, 690, MODE_Y(3), 90, 30, 'Text', null, 'f-sf s-rule w1', 't-sm t-mono t-b');
+      S.line(650, MODE_Y(3) + 9, 688, MODE_Y(3) + 9, { cls: 's-dim w15', 'marker-end': mk('dim') }, g);
+      S.line(690, MODE_Y(3) + 21, 652, MODE_Y(3) + 21, { cls: 's-dim w15', 'marker-end': mk('dim') }, g);
+      S.text(669, MODE_Y(3) - 6, '<style> <script>', { cls: 't-c t-xs t-dim t-mono' }, g);
+      S.text(669, MODE_Y(3) + 44, '</style> <\/script>', { cls: 't-c t-xs t-dim t-mono' }, g);
+      // パースの失敗で InBody に戻る矢印（左側）
+      S.path(`M500,${MODE_Y(6) + 15} H484 V${MODE_Y(5) + 15} H498`, { cls: 'f-none s-dim w1 dash', 'marker-end': mk('dim') }, g);
+      S.path(`M500,${MODE_Y(7) + 15} H478 V${MODE_Y(5) + 22} H498`, { cls: 'f-none s-dim w1 dash', 'marker-end': mk('dim') }, g);
+      S.text(500, MODE_Y(7) + 52, '破線: ほかのタグが来たときの「パースの失敗」で InBody へ', { cls: 't-xs t-dim' }, g);
+      S.text(500, MODE_Y(7) + 68, 'enum の並びは Initial … InBody, Text, AfterBody, AfterAfterBody', { cls: 't-xs t-dim' }, g);
+      // 補うの札（段階3）
+      st.fill = S.g({ cls: 'fade hide' }, svg);
+      [['BeforeHtml', 'html を補う（229 行）'], ['BeforeHead', 'head を補う（258 行）'], ['AfterHead', 'body を補う（339 行）']].forEach(([m, s]) => {
+        S.text(660, MODE_Y(MODES.indexOf(m)) + 19, '← ' + s, { cls: 't-xs t-x' }, st.fill);
+      });
+      // ---- 右上: いまのトークンと戻り先
+      S.rect(690, 36, 254, 56, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      S.text(700, 52, 'いまのトークン（t.next()）', { cls: 't-xs t-dim' }, g);
+      st.tokT = S.text(700, 74, '', { cls: 't-sm t-mono t-b pre' }, g);
+      S.rect(790, 100, 154, 40, { rx: 6, cls: 'f-sf s-rule w1' }, g);   // 左の「補う」の札と重ねない
+      S.text(798, 115, 'original_insertion_mode', { cls: 't-xs t-mono t-dim' }, g);
+      st.origT = S.text(798, 131, '', { cls: 't-xs t-mono pre' }, g);
+      // ---- 右下: スタック（下から積む）
+      S.rect(810, 250, 134, 270, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      S.text(877, 268, 'stack_of_open_elements', { cls: 't-c t-xs t-mono t-b' }, g);
+      S.text(877, 284, '上が末尾 ＝ current', { cls: 't-c t-xs t-dim' }, g);
+      st.stackEls = [0, 1, 2, 3, 4].map((k) => box(g, 822, 484 - k * 30, 110, 26, '', null, 'f-in s-rule w1', 't-xs t-mono t-b'));
+      st.stackEmpty = S.text(877, 500, '[]（空）', { cls: 't-c t-xs t-dim' }, g);
+      st.endLbl = S.text(877, 540, '', { cls: 't-c t-xs t-x t-b' }, g);
+      xlink(svg, 944, 554, '29-imi.html#s4', '第29章 場面4「状態と遷移」', true);
+      st.setStack = (arr) => {
+        st.stackEls.forEach((b, k) => { const s = arr[k]; b.g.style.display = s ? '' : 'none'; b.t.textContent = s || ''; b.r.setAttribute('class', k === arr.length - 1 ? 'f-x-soft s-x w15' : 'f-in s-rule w1'); });
+        st.stackEmpty.style.display = arr.length ? 'none' : '';
+      };
+      st.setModes = (cur, passed) => {
+        Object.keys(st.mode).forEach((m) => {
+          const b = st.mode[m];
+          const on = m === cur, lit = passed && passed.indexOf(m) >= 0;
+          b.r.setAttribute('class', on ? 'f-x-soft s-x w2' : lit ? 'f-d-soft s-d w1' : 'f-sf s-rule w1');
+          b.t.setAttribute('class', 't-c t-sm t-mono t-b' + (on ? ' t-x' : ''));
+        });
+      };
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.show(i);
+      const T = [
+        ['mode ＝ Initial、original_insertion_mode ＝ Initial', 'stack_of_open_elements ＝ []（Vec::new()）', 't ＝ test.html（810 バイト）のトークナイザ。第32章', 'window ＝ Rc<RefCell<Window>>（根 Document だけの木）'],
+        ['token ＝ Some(StartTag { tag: "html", self_closing: false, attributes: [] })', 'Initial: Char でない → mode ＝ BeforeHtml、continue（token はそのまま）', 'BeforeHtml: tag == "html" → insert_element、mode ＝ BeforeHead、token ＝ next()', 'test.html に doctype は無く、Initial で捨てる Char も無い'],
+        ['<p> から始まる HTML: BeforeHtml で html を補う → BeforeHead で head を補う', '→ InHead で <p>（from_str が Ok）→ pop_until(Head) → AfterHead で body を補う', '→ InBody で <p> を入れる。補った 3 つは attributes が空', 'test.html: <html> <head> <body> がそろい、補いは 0 回。220 行の || の条件は常に真'],
+        ['', '', '', ''],
+        ['<style>: insert_element、original_insertion_mode ＝ InHead、mode ＝ Text', 'Char(\'\\n\') Char(\' \')×4: current ＝ style（要素）→ 捨てる。Char(\'#\') で Text を作る', '</style>: pop_until(Style) → stack ＝ [html, head]、mode ＝ InHead', 'style の Text ＝ 171 字（"#title {" から "}\\n    " まで）'],
+        ['</body>: contain_in_stack(Body) → true → pop_until(Body) → stack ＝ [html]', 'Char(\'\\n\'): AfterBody で捨てる', '</html>: mode ＝ AfterAfterBody。末尾の Char(\'\\n\') を捨て、次の next() が None', 'while を抜けて self.window.clone() を返す（494 行）']
+      ];
+      retrace(st.tr, T[i]);
+      st.trLines = Array.from(st.tr.childNodes);
+      S.fade(st.fill, i === 2);
+      st.endLbl.textContent = i === 5 ? 'while を抜けて window を返す' : '';
+      const STATIC = [
+        ['Initial', [], 't ＝ HtmlTokenizer（まだ読んでいない）', 'Initial', []],
+        ['BeforeHead', ['Initial', 'BeforeHtml'], '<html>', 'Initial', ['html']],
+        ['InHead', ['BeforeHtml', 'BeforeHead', 'AfterHead'], '<p>（html・head を補った後）', 'Initial', ['html', 'head']],
+        null,
+        ['Text', ['InHead'], '<style>', 'InHead', ['html', 'head', 'style']],
+        ['AfterAfterBody', ['AfterBody'], 'None（トークンが尽きた）', 'InHead', ['html']]
+      ];
+      if (STATIC[i]) {
+        const [cur, passed, tok, orig, stack] = STATIC[i];
+        st.setModes(cur, passed);
+        st.tokT.textContent = tok;
+        st.origT.textContent = '＝ ' + orig;
+        st.setStack(stack);
+      }
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      if (i !== 3) return;
+      // 1.2 秒ごとに 1 手順進む（14 手順、最後に 1.6 秒止まる）。止めている人には最後の姿
+      const n = S3_EVENTS.length;
+      const k = playing() ? Math.min(n - 1, Math.floor(U.mod(ctx.ts, n * 1.2 + 1.6) / 1.2)) : n - 1;
+      const [tok, mode, stack, orig, act] = S3_EVENTS[k];
+      const prev = k > 0 ? S3_EVENTS[k - 1][1] : 'Initial';
+      st.setModes(mode, [prev]);
+      st.tokT.textContent = tok;
+      st.origT.textContent = '＝ ' + orig;
+      st.setStack(stack);
+      const L = ['手順 ' + (k + 1) + '／' + n + ': ' + tok, 'モード: ' + prev + (prev === mode ? '（そのまま）' : ' → ' + mode), 'stack ＝ [' + stack.join(', ') + ']', '処理: ' + act];
+      st.trLines.forEach((e, j) => { e.textContent = L[j]; });
+    }
+  };
+
+  /* ================================================================
+     場面4 要素と文字を入れる
+     左: コードの板（最大 18 行）→ スタックの帯（y 356）→ 追跡（y 410）。右: 木（できた順に見せる）
+     ================================================================ */
+  function stackBar(parent, x, y) {
+    const g = S.g({}, parent);
+    const title = S.text(x, y, '', { cls: 't-xs t-dim' }, g);
+    const boxes = [0, 1, 2, 3, 4].map((k) => box(g, x + k * 70, y + 8, 64, 24, '', null, 'f-in s-rule w1', 't-xs t-mono t-b'));
+    const empty = S.text(x, y + 25, '', { cls: 't-xs t-dim' }, g);
+    return {
+      g,
+      set(arr, label) {
+        title.textContent = label || 'stack_of_open_elements（Vec。右端が末尾 ＝ current）';
+        boxes.forEach((b, k) => { const s = arr[k]; b.g.style.display = s ? '' : 'none'; b.t.textContent = s || ''; b.r.setAttribute('class', k === arr.length - 1 ? 'f-x-soft s-x w15' : 'f-in s-rule w1'); });
+        empty.textContent = arr.length || label ? '' : '[]';
+      }
+    };
+  }
+  const s4 = {
+    steps: [
+      { title: 'current ＝ スタックの末尾', text: 'insert_element はまず current を決める。スタックの末尾（`last()`）があればそれ、空なら Document。`n.clone()` は Rc の複製で、ノードは複製しない。新しいノードは `Rc::new(RefCell::new(…))` で包む。`<h1>` のときの current は body。' },
+      { title: '最初の子なら first_child、2 つめからは末尾の兄弟の next_sibling', text: 'current に子が無ければ `set_first_child`。あれば `loop` で末尾の兄弟を探し、その next_sibling に新しいノードを、新しいノードの previous_sibling に兄弟への Weak を置く。153 行の `node` はたどっている兄弟で、147 行の新しいノードとは別の変数。' },
+      { title: '仕上げ：last_child・parent・push', text: 'どちらの場合も、current の last_child を新しいノードへの Weak に置き換え、新しいノードの parent を current への Weak にし、最後にスタックへ push する。新しいノードが current になるので、続く文字や要素はその子になる。set_* は欄を置き換えるだけの関数。' },
+      { title: '文字：1 文字で Text を作り、あとは伸ばす', text: 'insert_char は、current が Text ならその String に `s.push(c)` で 1 文字足す。要素なら改行と空白は捨て、ほかの文字は 1 文字の Text にして first_child か first_child の next_sibling に置き、スタックにも積む。' },
+      { title: '空白だけの Text を作らない', text: 'タグの間の改行と字下げは current が要素のうちは捨てられ、空白だけの Text はできない。Text ができた後の空白は入るので、"Test page1 " の末尾の空白は残り、style の中身は改行と空白 4 つで終わる。仕様は空白も Text にし、body の子は 11 個になる計算。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'parser.rs（insert_element の前半）'],
+        [140, 'fn insert_element(&mut self, tag: &str,'],
+        [null, '                  attributes: Vec<Attribute>) {'],
+        [141, '    let window = self.window.borrow();'],
+        [142, '    let current ='],
+        [null, '        match self.stack_of_open_elements.last() {'],
+        [143, '        Some(n) => n.clone(),'],
+        [144, '        None => window.document(),'],
+        [145, '    };'],
+        [147, '    let node = Rc::new(RefCell::new('],
+        [null, '        self.create_element(tag, attributes)));'],
+        ['', 'parser.rs（create_element）'],
+        [136, 'fn create_element(&self, tag: &str,'],
+        [null, '                  attributes: Vec<Attribute>) -> Node {'],
+        [137, '    Node::new(NodeKind::Element('],
+        [null, '        Element::new(tag, attributes)))']
+      ]).hl(4, 8);
+      P.add([
+        ['', 'parser.rs（insert_element。木につなぐ所。詰めた）'],
+        [149, '    if current.borrow().first_child().is_some() {'],
+        [150, '        let mut last_sibling ='],
+        [null, '            current.borrow().first_child();'],
+        [151, '        loop {  // 末尾の兄弟まで next_sibling をたどる'],
+        [152, '          last_sibling = match last_sibling {'],
+        [153, '            Some(ref node) => {  // node は兄弟'],
+        [154, '              if node.borrow().next_sibling().is_some() {'],
+        [155, '                node.borrow().next_sibling()'],
+        [156, '              } else { break; }  }'],
+        [160, '            None => unimplemented!(…),'],
+        [161, '          };  }'],
+        [164, '        last_sibling.as_ref().unwrap().borrow_mut()'],
+        [168, '            .set_next_sibling(Some(node.clone()));'],
+        [169, '        node.borrow_mut().set_previous_sibling('],
+        [null, '            Rc::downgrade(&last_sibling.expect( … )))'],
+        [172, '    } else {'],
+        [173, '        current.borrow_mut()'],
+        [null, '            .set_first_child(Some(node.clone()));']
+      ]).hl(1, 18);
+      P.add([
+        ['', 'parser.rs（insert_element の終わり）'],
+        [176, '    current.borrow_mut()'],
+        [null, '        .set_last_child(Rc::downgrade(&node));'],
+        [177, '    node.borrow_mut().set_parent(Rc::downgrade(&current));'],
+        [179, '    self.stack_of_open_elements.push(node);'],
+        [180, '}'],
+        ['', 'node.rs（set_* は欄を置き換えるだけ。抜粋）'],
+        [70, 'pub fn set_parent(&mut self,'],
+        [null, '                  parent: Weak<RefCell<Node>>) {'],
+        [71, '    self.parent = parent;'],
+        [86, 'pub fn set_last_child(&mut self,'],
+        [null, '                      last_child: Weak<RefCell<Node>>) {'],
+        [87, '    self.last_child = last_child;'],
+        [102, 'pub fn set_next_sibling(&mut self,'],
+        [null, '    next_sibling: Option<Rc<RefCell<Node>>>) {'],
+        [103, '    self.next_sibling = next_sibling;']
+      ]).hl(1, 4);
+      P.add([
+        ['', 'parser.rs（insert_char。詰めた。130〜131 行の last_child・parent は略）'],
+        [100, 'fn insert_char(&mut self, c: char) {'],
+        [101, '    let current ='],
+        [null, '        match self.stack_of_open_elements.last() {'],
+        [102, '        Some(n) => n.clone(),'],
+        [103, '        None => return,'],
+        [107, '    if let NodeKind::Text(ref mut s) ='],
+        [null, '        current.borrow_mut().kind { s.push(c); return; }'],
+        [113, '    if c == \'\\n\' || c == \' \' { return; }'],
+        [117, '    let node = Rc::new(RefCell::new(self.create_char(c)));'],
+        [119, '    if current.borrow().first_child().is_some() {'],
+        [120, '        current.borrow().first_child().unwrap()'],
+        [null, '            .borrow_mut()'],
+        [null, '            .set_next_sibling(Some(node.clone()));'],
+        [126, '    } else {'],
+        [127, '        current.borrow_mut()'],
+        [null, '            .set_first_child(Some(node.clone()));'],
+        [133, '    self.stack_of_open_elements.push(node); // Text も積む']
+      ]).hl(6, 7);
+      P.add([
+        ['', 'parser.rs（空白の扱い。詰めた）'],
+        [107, '    if let NodeKind::Text(ref mut s) ='],
+        [null, '        current.borrow_mut().kind { s.push(c); return; }'],
+        [113, '    if c == \'\\n\' || c == \' \' {'],
+        [114, '        return;  // 空白だけの Text を作らない'],
+        [115, '    }'],
+        ['', 'parser.rs（Char の腕。InBody は全部、InHead は空白だけ渡す）'],
+        [419, 'Some(HtmlToken::Char(c)) => {'],
+        [420, '    self.insert_char(c);'],
+        [421, '    token = self.t.next(); continue;'],
+        [264, 'Some(HtmlToken::Char(c)) => {'],
+        [265, '    if c == \' \' || c == \'\\n\' {'],
+        [266, '        self.insert_char(c);'],
+        [267, '        token = self.t.next(); continue;']
+      ]).hl(3, 5);
+      st.tr = S.g({}, svg);
+      st.bar = stackBar(svg, 20, 356);
+      st.tree = domTree(svg);
+      xlink(svg, 944, 554, '27-algorithm.html#s1', '第27章 場面1「配列とリスト」', true);
+      // 段階2: body → h1 をたどる粒
+      st.walk = S.path('M548,220 V234 H554', { cls: 'f-none s-none' }, svg);
+      st.F = A.flow(st.walk, { count: 1, speed: 24, r: 3.5, cls: 'f-d', parent: svg });
+    },
+    onStep(ctx, i) {
+      const st = ctx.state, tree = st.tree;
+      st.P.show(i);
+      const T = [
+        ['token ＝ StartTag { tag: "h1", attributes: [id="title"] }', 'stack ＝ [html, body] → last() ＝ body → current ＝ body の Rc（clone）', 'node ＝ Rc::new(RefCell::new(Element(H1, [id="title"])))　strong 1', 'current.borrow().first_child() ＝ None → 段階2 の else へ'],
+        ['h1: body.first_child ＝ None → body.set_first_child(Some(h1))', 'p.first: body.first_child ＝ h1、h1.next_sibling ＝ None → 末尾は h1', 'h1.set_next_sibling(Some(p.first))、p.first.set_previous_sibling(Weak → h1)', 'p#target: h1 → p.first → p.links → p.hidden とたどって末尾に付く'],
+        ['body.last_child ＝ Weak → p.first（h1 から置き換わった）', 'p.first.parent ＝ Weak → body、p.first.previous_sibling ＝ Weak → h1', 'stack ＝ [html, body, p]　p.first の strong 2（h1.next_sibling と stack）', '次のトークン Char(\'H\') の current は p.first'],
+        ['Char(\'M\'): current ＝ h1（要素）→ Text("M") を h1.first_child に。stack に push', 'Char(\'y\') … Char(\'!\'): current ＝ Text → s.push(c) → Text("My Browser!")', '</h1>: pop_until(H1) → Text と h1 が降りる（場面5）', 'test.html では Text が 2 つめ以降の子になる所は無い'],
+        ['Char(\'\\n\') Char(\' \')×4 の後の Char(\'#\'): style の Text は "#" から', 'Char(\'T\') … Char(\'1\') Char(\' \'): "Test page1 " は空白で終わる', '</a> の後の Char(\'\\n\') Char(\' \')×6: current ＝ p.links（要素）→ 捨てる', '仕様どおりなら body の子は 11 個（空白の Text 6 個 ＋ 要素 5 個）']
+      ];
+      retrace(st.tr, T[i], 410);
+      tree.clearBadges();
+      const V = [range(1, 9), range(1, 11), range(1, 11), range(1, 10), range(1, 21)][i];
+      const CUR = [9, 11, 11, 10, null][i];
+      const LIT = [null, null, null, [9], [5, 15]][i];
+      tree.apply({ visible: setOf(V), cur: CUR, lit: LIT ? setOf(LIT) : null });
+      if (i === 0) op(tree.rows[9].arrow, 0.14);   // h1 はまだ body につないでいない
+      const STACK = [['html', 'body'], ['html', 'body', 'p'], ['html', 'body', 'p'], ['html', 'body', 'h1', 'Text'], []][i];
+      st.bar.set(STACK, i === 4 ? '捨てられた Char（current が要素のとき）: \'\\n\' \' \' \' \' \' \' \' \'　→ Text は作らない' : null);
+      if (i === 0) { tree.note(8, '← current（stack の末尾）'); tree.note(9, '← node（まだつないでいない）'); }
+      if (i === 1) { tree.note(9, '← first_child'); tree.note(11, '← h1.next_sibling'); }
+      if (i === 2) { tree.note(8, 'last_child ⇢ p.first'); tree.note(11, 'parent ⇢ body、previous_sibling ⇢ h1'); }
+      if (i === 3) { tree.note(10, '← s.push(c)'); }
+      if (i === 4) { tree.note(4, '← Text の先頭の改行と空白は入らない'); tree.note(15, '← 末尾の空白は残る'); }
+      tree.rows[10].t1.textContent = 'Text("My Browser!")';
+      st.F.show(i === 1);
+      if (i === 1) { st.F.reset(); st.F.update(0); }
+    },
+    frame(ctx, t, dt) {
+      const st = ctx.state, tree = st.tree, i = ctx.step;
+      if (i === 1) {
+        // 4.5 秒で 1 周: body → h1 をたどり、末尾と分かってから p.first を付ける。止めている人には付け終えた姿
+        const tt = playing() ? U.mod(ctx.ts, 4.5) : 4;
+        st.F.update(dt);
+        const ph = tt < 1.5 ? 0 : tt < 3 ? 1 : 2;
+        tree.setState(11, ph === 2 ? 'cur' : 'ghost');
+        tree.note(9, ph === 0 ? '← first_child をたどる' : '← next_sibling ＝ None → 末尾');
+        tree.note(11, ph === 2 ? '← h1.next_sibling に付ける' : '');
+      } else if (i === 3) {
+        // 5 秒で 1 周: 0.3 秒に 1 文字。止めている人には書き終えた姿
+        const tt = playing() ? U.mod(ctx.ts, 5) : 4;
+        const n = Math.max(1, Math.min(11, Math.floor(tt / 0.3) + 1));
+        tree.rows[10].t1.textContent = 'Text("' + 'My Browser!'.slice(0, n) + '")';
+        tree.note(10, n < 11 ? '← s.push(\'' + 'My Browser!'[n - 1] + '\')' : '← 11 文字');
+      }
+    }
+  };
+
+  /* ================================================================
+     場面5 スタックで閉じる
+     段階3 の推移は確認用の模擬と parser.rs を手で追った結果で一致
+     [トークン, 処理, スタック, current の番号, 見せる行]
+     ================================================================ */
+  const S5_EVENTS = [
+    ['<p class="links">', 'insert_element → push', ['html', 'body', 'p'], 13, [13]],
+    ["Char('\\n') Char(' ')×6", 'current ＝ p（要素）なので捨てる', ['html', 'body', 'p'], 13, [13]],
+    ['<a href="…/test1.html">', 'insert_element → push（p の first_child）', ['html', 'body', 'p', 'a'], 14, [13, 14]],
+    ["Char('T')", 'Text("T") を作って push', ['html', 'body', 'p', 'a', 'Text'], 15, [13, 14, 15]],
+    ["Char('e') … Char(' ')", 's.push(c) → Text("Test page1 ")', ['html', 'body', 'p', 'a', 'Text'], 15, [13, 14, 15]],
+    ['</a>', 'pop_until(A): Text、a の順に pop', ['html', 'body', 'p'], 13, [13, 14, 15]],
+    ["Char('\\n') Char(' ')×6", 'current ＝ p（要素）なので捨てる', ['html', 'body', 'p'], 13, [13, 14, 15]],
+    ['<a href="…/test2.html">', 'insert_element → push（a の next_sibling）', ['html', 'body', 'p', 'a'], 16, [13, 14, 15, 16]],
+    ["Char('T') … Char('2')", 'Text("Test page2")', ['html', 'body', 'p', 'a', 'Text'], 17, [13, 14, 15, 16, 17]],
+    ['</a>', 'pop_until(A): Text、a の順に pop', ['html', 'body', 'p'], 13, [13, 14, 15, 16, 17]],
+    ["Char('\\n') Char(' ')×4", 'current ＝ p（要素）なので捨てる', ['html', 'body', 'p'], 13, [13, 14, 15, 16, 17]],
+    ['</p>', 'pop_until(P): p を pop → current は body', ['html', 'body'], 8, [13, 14, 15, 16, 17]]
+  ];
+  const s5 = {
+    steps: [
+      { title: 'pop_until：種類に当たるまで降ろす', text: 'pop_until(kind) は、その種類がスタックに在ることを `assert!` で確かめ、無ければ panic で止まる。在れば末尾から pop し、element_kind が kind のノードで戻る。Text は element_kind が None なので一緒に降りる。[[27-algorithm.html#s5|第27章 場面5]]のスタック。' },
+      { title: 'InBody の終了タグ：p・h1・h2・a と body・html', text: 'InBody の終了タグは、p・h1・h2・a なら種類に直して pop_until し、body と html は別に扱い、ほか（`</div>` など）は捨てる。開始タグも p・h1・h2・a 以外は捨てるので、`<div>` の中の文字はそのときの current に入る。' },
+      { title: 'p.links の 2 つの a を追う', text: '`<p class="links">` から `</p>` までの 12 手順で、スタックは a と Text のぶん伸び、`</a>` のたびに [html, body, p] に戻る。a の間の空白は current が p（要素）なので捨てられ、2 つめの a は 1 つめの a の next_sibling に付く。' },
+      { title: '閉じ忘れと入れ違い：saba は直さない', text: '仕様は p の中に次の `<p>` が来れば前の p を閉じ、`<b><i></b></i>` の入れ違いは adoption agency algorithm で直す。saba にはどちらも無い。[[10-browser.html#s2.3|第10章 場面2 段階3]]の「壊れた HTML からも木を作る」とも違い、a の外の `</a>` は assert! で止まる。' },
+      { title: 'pop_current_node と contain_in_stack', text: 'contain_in_stack はスタックを前から見て、その種類が在るかを返す（[[27-algorithm.html#s2|第27章 場面2]]の線形探索）。pop_current_node は末尾がその種類のときだけ pop して true。`</body>` と `</html>` は、これが false ならトークンを無視する。仕様の「パースエラー、無視」に当たる。' },
+      { title: 'できた木と、残ったスタック', text: 'トークンが尽きると construct_tree は window を返し、スタックには html が 1 つ残る。HtmlParser は create_frame の 95 行の一時値なので文の終わりで消え、スタックが持っていた html の Rc も消える。木は 21 個のノードで、次の場面でこれを使う側を読む。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'parser.rs（contain_in_stack と pop_until の抜粋。詰めた）'],
+        [51, 'fn contain_in_stack(&mut self,'],
+        [null, '                    element_kind: ElementKind) -> bool {'],
+        [52, '    for i in 0..self.stack_of_open_elements.len() {'],
+        [53, '        if self.stack_of_open_elements[i].borrow()'],
+        [null, '            .element_kind() == Some(element_kind) {'],
+        [54, '            return true;'],
+        [61, 'fn pop_until(&mut self, element_kind: ElementKind) {'],
+        [62, '    assert!('],
+        [63, '        self.contain_in_stack(element_kind),'],
+        [64, '        "stack doesn\'t have an element {:?}",'],
+        [65, '        element_kind,'],
+        [66, '    );'],
+        [68, '    loop {'],
+        [69, '        let current ='],
+        [null, '            match self.stack_of_open_elements.pop() {'],
+        [70, '            Some(n) => n,  None => return, };'],
+        [74, '        if current.borrow().element_kind()'],
+        [null, '            == Some(element_kind) { return; }']
+      ]).hl(13, 18);
+      P.add([
+        ['', 'parser.rs（InBody の終了タグの抜粋。詰めた）'],
+        [369, 'Some(HtmlToken::EndTag { ref tag }) => {'],
+        [371, '    "body" => {'],
+        [372, '        self.mode = InsertionMode::AfterBody;'],
+        [374, '        if !self.contain_in_stack(ElementKind::Body) {'],
+        [376, '            continue;  // パースの失敗。無視する'],
+        [378, '        self.pop_until(ElementKind::Body);'],
+        [381, '    "html" => {'],
+        [382, '        if self.pop_current_node(ElementKind::Body) {'],
+        [384, '            assert!(self.pop_current_node('],
+        [null, '                ElementKind::Html));'],
+        [390, '    "p" => {'],
+        [391, '        let element_kind = ElementKind::from_str(tag)'],
+        [392, '            .expect('],
+        [null, '              "failed to convert string to ElementKind");'],
+        [394, '        self.pop_until(element_kind);'],
+        [397, '    "h1" | "h2" => { … }   "a" => { … }   // p と同じ形'],
+        [411, '    _ => { token = self.t.next(); }  // 捨てる']
+      ]).hl(11, 15);
+      P.add([
+        ['', 'parser.rs（InBody の開始タグと文字。詰めた）'],
+        [343, 'InsertionMode::InBody => {'],
+        [344, '    match token {'],
+        [345, '        Some(HtmlToken::StartTag {'],
+        [null, '          ref tag, self_closing: _, ref attributes'],
+        [349, '        }) => match tag.as_str() {'],
+        [350, '            "p" => {'],
+        [351, '                self.insert_element('],
+        [null, '                    tag, attributes.to_vec());'],
+        [352, '                token = self.t.next(); continue;'],
+        [355, '            "h1" | "h2" => { … }  "a" => { … }'],
+        [365, '            _ => { token = self.t.next(); }   // 捨てる'],
+        [369, '        Some(HtmlToken::EndTag { ref tag }) => { … }'],
+        [419, '        Some(HtmlToken::Char(c)) => {'],
+        [420, '            self.insert_char(c);'],
+        [421, '            token = self.t.next(); continue;']
+      ]).hl(6, 9);
+      P.add([
+        ['', 'parser.rs（修復の無い所の抜粋）'],
+        [350, '"p" => {   // 開いている p を閉じずに入れる'],
+        [351, '    self.insert_element(tag, attributes.to_vec());'],
+        [352, '    token = self.t.next(); continue;'],
+        [360, '"a" => {   // adoption agency は無い'],
+        [361, '    self.insert_element(tag, attributes.to_vec());'],
+        [365, '_ => { token = self.t.next(); }  // b・i・div は捨てる'],
+        [62, 'assert!(   // 無い種類を閉じようとすると止まる'],
+        [63, '    self.contain_in_stack(element_kind),'],
+        [64, '    "stack doesn\'t have an element {:?}",'],
+        [65, '    element_kind,'],
+        [66, ');']
+      ]).hl(1, 3);
+      P.add([
+        ['', 'parser.rs（線形探索と、末尾だけの pop。抜粋）'],
+        [51, 'fn contain_in_stack(&mut self,'],
+        [null, '                    element_kind: ElementKind) -> bool {'],
+        [52, '    for i in 0..self.stack_of_open_elements.len() {'],
+        [53, '        if self.stack_of_open_elements[i].borrow()'],
+        [null, '            .element_kind() == Some(element_kind) {'],
+        [54, '            return true;'],
+        [58, '    false'],
+        [80, 'fn pop_current_node(&mut self,'],
+        [null, '                    element_kind: ElementKind) -> bool {'],
+        [81, '    let current ='],
+        [null, '        match self.stack_of_open_elements.last() {'],
+        [82, '        Some(n) => n,'],
+        [83, '        None => return false,'],
+        [86, '    if current.borrow().element_kind()'],
+        [null, '        == Some(element_kind) {'],
+        [87, '        self.stack_of_open_elements.pop();'],
+        [88, '        return true;']
+      ]).hl(3, 6);
+      P.add([
+        ['', 'parser.rs（construct_tree の終わり）'],
+        [492, '    }   // while の終わり'],
+        [494, '    self.window.clone()'],
+        [495, '}'],
+        ['', 'page.rs（create_frame。HtmlParser は 95 行の一時値）'],
+        [93, 'fn create_frame(&mut self, html: String) {'],
+        [94, '    let html_tokenizer = HtmlTokenizer::new(html);'],
+        [95, '    let frame ='],
+        [null, '        HtmlParser::new(html_tokenizer).construct_tree();'],
+        [96, '    let dom = frame.borrow().document();'],
+        [null, '    …  // 98〜100 行は CSS（場面6）'],
+        [102, '    self.frame = Some(frame);']
+      ]).hl(7, 8);
+      st.tr = S.g({}, svg);
+      st.bar = stackBar(svg, 20, 356);
+      st.tree = domTree(svg);
+      xlink(svg, 944, 554, '27-algorithm.html#s5', '第27章 場面5「キューとスタック」', true);
+      // 段階4: 閉じ忘れの <p> の例（saba と仕様）
+      st.cmp = S.g({ cls: 'fade hide' }, svg);
+      // saba では "one" の Text がスタックの末尾に残るので、2 つめの p はその Text の子になる（insert_element の current ＝ last()）
+      S.rect(16, 240, 452, 160, { rx: 6, cls: 'f-sf s-rule w1' }, st.cmp);
+      S.text(26, 258, '<p>one<p>two</p></body> から作る木（Text は中身だけ書いた）', { cls: 't-xs t-dim' }, st.cmp);
+      const mini = (x, y, s, el) => { const w = 10 + 6 * s.length; S.rect(x, y - 9, w, 18, { rx: 3, cls: el ? 'f-d-soft s-d w1' : 'f-sf s-d w1' }, st.cmp); S.text(x + 5, y + 4, s, { cls: 't-xs t-mono' + (el ? ' t-b' : '') }, st.cmp); return w; };
+      S.text(26, 280, 'saba：2 つめの p は Text("one") の子', { cls: 't-xs t-b' }, st.cmp);
+      mini(26, 300, 'p', true); mini(46, 322, '"one"'); mini(66, 344, 'p', true); mini(86, 366, '"two"');
+      S.path('M32,309 V322 H44', { cls: 'f-none s-mid w1' }, st.cmp); S.path('M52,331 V344 H64', { cls: 'f-none s-mid w1' }, st.cmp); S.path('M72,353 V366 H84', { cls: 'f-none s-mid w1' }, st.cmp);
+      S.text(250, 280, 'HTML Standard：前の p を閉じて兄弟にする', { cls: 't-xs t-b' }, st.cmp);
+      mini(250, 300, 'p', true); mini(270, 322, '"one"'); mini(250, 344, 'p', true); mini(270, 366, '"two"');
+      S.path('M256,309 V322 H268', { cls: 'f-none s-mid w1' }, st.cmp); S.path('M256,353 V366 H268', { cls: 'f-none s-mid w1' }, st.cmp);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state, tree = st.tree;
+      st.P.show(i);
+      const T = [
+        ['</a>: stack ＝ [html, body, p, a, Text]', 'pop → Text（element_kind ＝ None ≠ Some(A)）→ 続ける', 'pop → a（Some(A)）→ return。stack ＝ [html, body, p]', 'a が無いのに </a> が来たら assert! で panic（仕様は無視して続ける）'],
+        ['</h1>: from_str("h1") → H1 → pop_until(H1)', '<div>: _ => の腕で捨てる。中の文字は body の Text になる', '</body>: mode ＝ AfterBody、pop_until(Body) → stack ＝ [html]', 'InBody で </html>: pop_current_node(Body) → assert!(pop_current_node(Html))'],
+        ['', '', '', ''],
+        ['<p>one: Text("one") を作って push → stack ＝ [html, body, p, Text]', '2 つめの <p>: current ＝ Text("one") → p はその Text の first_child', '</p>: pop_until(P) は内側の p で止まる。Text と外の p は </body> で降りる', '仕様: 2 つめの <p> で「p 要素を閉じる」→ 2 つの p は body の子として並ぶ', '<b><i></b></i>: saba は b・i を知らないので 4 つとも捨てる（文字だけ残る）'],
+        ['contain_in_stack(Body): [html, body, p] を i ＝ 0, 1 と見て true', 'pop_current_node(Html): 末尾が body なら false（pop しない）', '</body> が 2 回来たら、2 回めは Body が無いので無視', 'assert! は「来ないはずの入力」で止める。無視は「来ても続ける」'],
+        ['ノード 21 個（Document 1 ＋ Element 12 ＋ Text 8）', 'stack_of_open_elements ＝ [html] のまま construct_tree が返る', 'create_frame 95 行: 一時値の HtmlParser は文の終わりで drop → スタックも消える', 'html の strong: 2 → 1（Document.first_child だけ）']
+      ];
+      retrace(st.tr, T[i], i === 3 ? 414 : 410);
+      st.trLines = Array.from(st.tr.childNodes);
+      tree.clearBadges();
+      S.fade(st.cmp, i === 3);
+      st.bar.g.style.display = i === 3 ? 'none' : '';
+      const V = [range(1, 15), range(1, 21), range(1, 12), range(1, 21), range(1, 13), range(1, 21)][i];
+      const CUR = [15, null, null, null, 13, null][i];
+      const LIT = [[14, 15], [9, 11, 13, 18, 20], null, null, null, null][i];
+      tree.apply({ visible: setOf(V), cur: CUR, lit: LIT ? setOf(LIT) : null });
+      const STACK = [['html', 'body', 'p', 'a', 'Text'], ['html', 'body'], ['html', 'body'], [], ['html', 'body', 'p'], ['html']][i];
+      st.bar.set(STACK);
+      if (i === 1) { tree.note(9, '← </h1> で pop_until(H1)'); tree.note(20, '← </p> の後 </body> で pop_until(Body)'); }
+      if (i === 5) { tree.note(2, '← stack の Rc は HtmlParser ごと消える（ノードは残る）'); }
+    },
+    frame(ctx) {
+      const st = ctx.state, tree = st.tree, i = ctx.step;
+      if (i === 0) {
+        // 4 秒で 1 周: Text を pop → a を pop。止めている人には pop し終えた姿
+        const tt = playing() ? U.mod(ctx.ts, 4) : 3.5;
+        const ph = tt < 1.3 ? 0 : tt < 2.6 ? 1 : 2;
+        st.bar.set([['html', 'body', 'p', 'a', 'Text'], ['html', 'body', 'p', 'a'], ['html', 'body', 'p']][ph]);
+        tree.setState(15, ph === 0 ? 'cur' : 'dim'); tree.setState(14, ph <= 1 ? (ph === 1 ? 'cur' : 'lit') : 'dim'); tree.setState(13, ph === 2 ? 'cur' : 'on');
+        tree.note(15, ph === 0 ? '← pop（None ≠ A → 続ける）' : ''); tree.note(14, ph === 1 ? '← pop（A → return）' : ''); tree.note(13, ph === 2 ? '← current' : '');
+      } else if (i === 2) {
+        // 1.1 秒ごとに 1 手順進む（12 手順、最後に 1.6 秒止まる）。止めている人には最後の姿
+        const n = S5_EVENTS.length;
+        const k = playing() ? Math.min(n - 1, Math.floor(U.mod(ctx.ts, n * 1.1 + 1.6) / 1.1)) : n - 1;
+        const [tok, act, stack, cur, shown] = S5_EVENTS[k];
+        tree.apply({ visible: setOf(range(1, 12).concat(shown)), cur });
+        st.bar.set(stack);
+        const L = ['手順 ' + (k + 1) + '／' + n + ': ' + tok, '処理: ' + act, 'stack ＝ [' + stack.join(', ') + ']', 'current ＝ ' + (cur === 8 ? 'body' : cur === 13 ? 'p.links' : cur === 14 || cur === 16 ? 'a' : 'Text')];
+        st.trLines.forEach((e, j) => { e.textContent = L[j]; });
+      } else if (i === 4) {
+        // 線形探索: 0.6 秒ずつ前から見る。止めている人には見つけた姿
+        const k = playing() ? Math.min(2, Math.floor(U.mod(ctx.ts, 3) / 0.6)) : 1;
+        tree.apply({ visible: setOf(range(1, 13)), cur: [2, 8, 13][Math.min(k, 1)] });
+        tree.note(2, k === 0 ? '← i ＝ 0: Html ≠ Body' : ''); tree.note(8, k >= 1 ? '← i ＝ 1: Body → true' : '');
+      }
+    }
+  };
+
+  /* ================================================================
+     場面6 できた木と、使う人
+     api.rs の再帰は result1（first_child 側）と result2（next_sibling 側）を両方求めてから返すので、
+     見つかった後も兄弟側を歩く。訪問順は api.rs の筋をそのまま写して求める（確認用の模擬と一致）
+     ================================================================ */
+  function visitOrder(pred) {
+    const first = {}, next = {};
+    TREE.forEach(([id, , , , , pid]) => { if (pid && first[pid] == null) first[pid] = id; });
+    TREE.forEach(([id, , , , , pid]) => { let sid = 0; TREE.forEach(([j, , , , , pj]) => { if (pj === pid && j < id && j > sid) sid = j; }); if (pid && sid) next[sid] = id; });
+    const order = [];
+    const go = (id) => { if (!id) return null; order.push(id); if (pred(id)) return id; const r1 = go(first[id] || 0); const r2 = go(next[id] || 0); return r1 === null ? r2 : r1; };
+    const found = go(1);
+    return { order, found };
+  }
+  const byTag = (tag) => (id) => TREE[id - 1][2] === 'el' && TREE[id - 1][3] === tag;
+  const byId = (v) => (id) => TREE[id - 1][2] === 'el' && TREE[id - 1][4] === 'id="' + v + '"';
+  const V_STYLE = visitOrder(byTag('style')), V_TARGET = visitOrder(byId('target'));
+  const s6 = {
+    steps: [
+      { title: 'create_frame：トークナイザ → パーサ → 木 → CSS', text: 'create_frame は HTML の String からトークナイザとパーサを作り、construct_tree で Window を得る。根から get_style_content で `<style>` の中身を取り出して CSS のトークナイザへ渡す（第34章）。' },
+      { title: '深さ優先で探す：get_target_element_node', text: 'get_target_element_node は、ノードが目当ての種類なら返し、違えば first_child 側（result1）と next_sibling 側（result2）を再帰で探す。深さ優先（[[27-algorithm.html#s4|第27章 場面4]]）で result1 が優先だが、result2 も先に求めるので、見つけた後も兄弟側を歩く。' },
+      { title: 'style の中身：get_style_content', text: 'get_style_content は style 要素を探し、その first_child が Text なら中の String を複製して返し、無ければ空文字列を返す。`<style>` が 2 つあっても最初の 1 つしか見ない。返る 171 字は改行と字下げを含み、第34章の CssTokenizer が読む。' },
+      { title: 'id で探す：get_element_by_id', text: 'get_element_by_id は同じ順で歩き、要素の attributes から name が "id" で value が一致したものを返す。"target" は 20 番めで見つかる。第36章の getElementById はこの関数を呼び、返った Rc がそのまま JS の値になる。' },
+      { title: 'デバッグ出力：convert_dom_to_string', text: 'utils.rs の convert_dom_to_string は同じ順で木を歩き、深さ × 空白 2 つと `{:?}` で kind を 1 行ずつ書く。ch4 の版では receive_response がこの文字列を返し、main が println! で出していた。ch7 では呼ぶ所が無い。図の木もこの並び。' },
+      { title: '順番：木が全部できてから JavaScript', text: 'receive_response は create_frame の後に execute_js を呼ぶので、JS は木が全部できてから 1 回動く。Chromium は `<script>` でパーサを止める（[[10-browser.html#s2.4|第10章 場面2 段階4]]）ので、head の script から p#target はまだ見えず null になる。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      const P = st.P = panels(svg);
+      P.add([
+        ['', 'page.rs（create_frame）'],
+        [93, 'fn create_frame(&mut self, html: String) {'],
+        [94, '    let html_tokenizer = HtmlTokenizer::new(html);'],
+        [95, '    let frame ='],
+        [null, '        HtmlParser::new(html_tokenizer).construct_tree();'],
+        [96, '    let dom = frame.borrow().document();'],
+        [98, '    let style = get_style_content(dom);'],
+        [99, '    let css_tokenizer = CssTokenizer::new(style);'],
+        [100, '    let cssom ='],
+        [null, '        CssParser::new(css_tokenizer).parse_stylesheet();'],
+        [102, '    self.frame = Some(frame);'],
+        [103, '    self.style = Some(cssom);'],
+        [104, '}']
+      ]).hl(2, 5);
+      P.add([
+        ['', 'dom/api.rs（get_target_element_node。詰めた）'],
+        [35, 'pub fn get_target_element_node('],
+        [36, '    node: Option<Rc<RefCell<Node>>>,'],
+        [37, '    element_kind: ElementKind,'],
+        [38, ') -> Option<Rc<RefCell<Node>>> {'],
+        [39, '    match node {'],
+        [40, '        Some(n) => {'],
+        [41, '            if n.borrow().kind()'],
+        [42, '                == NodeKind::Element(Element::new('],
+        [null, '                  &element_kind.to_string(), Vec::new()))'],
+        [44, '                return Some(n.clone());'],
+        [46, '            let result1 = get_target_element_node('],
+        [null, '                n.borrow().first_child(), element_kind);'],
+        [47, '            let result2 = get_target_element_node('],
+        [null, '                n.borrow().next_sibling(), element_kind);'],
+        [48, '            if result1.is_none() { return result2; }'],
+        [51, '            result1']
+      ]).hl(11, 16);
+      P.add([
+        ['', 'dom/api.rs（get_style_content。詰めた）'],
+        [57, 'pub fn get_style_content(root: Rc<RefCell<Node>>)'],
+        [null, '    -> String {'],
+        [58, '    let style_node = match get_target_element_node('],
+        [null, '        Some(root), ElementKind::Style) {'],
+        [59, '        Some(node) => node,'],
+        [60, '        None => return "".to_string(),'],
+        [62, '    let text_node ='],
+        [null, '        match style_node.borrow().first_child() {'],
+        [63, '        Some(node) => node,'],
+        [64, '        None => return "".to_string(),'],
+        [66, '    let content = match &text_node.borrow().kind() {'],
+        [67, '        NodeKind::Text(ref s) => s.clone(),'],
+        [68, '        _ => "".to_string(),'],
+        [69, '    };'],
+        [70, '    content'],
+        [71, '}'],
+        ['', 'api.rs 73〜87: get_js_content は Script で同じ形（第36章）']
+      ]).hl(7, 13);
+      P.add([
+        ['', 'dom/api.rs（get_element_by_id。詰めた）'],
+        [11, 'pub fn get_element_by_id('],
+        [12, '    node: Option<Rc<RefCell<Node>>>,'],
+        [13, '    id_name: &String,'],
+        [14, ') -> Option<Rc<RefCell<Node>>> {'],
+        [16, '        Some(n) => {'],
+        [17, '            if let NodeKind::Element(e) ='],
+        [null, '                n.borrow().kind() {'],
+        [18, '                for attr in &e.attributes() {'],
+        [19, '                    if attr.name() == "id"'],
+        [null, '                        && attr.value() == *id_name {'],
+        [20, '                        return Some(n.clone());'],
+        [24, '            let result1 = get_element_by_id('],
+        [null, '                n.borrow().first_child(), id_name);'],
+        [25, '            let result2 = get_element_by_id('],
+        [null, '                n.borrow().next_sibling(), id_name);'],
+        [26, '            if result1.is_none() { return result2; }'],
+        [29, '            result1']
+      ]).hl(6, 11);
+      P.add([
+        ['', 'utils.rs（convert_dom_to_string。詰めた）'],
+        [7, 'pub fn convert_dom_to_string('],
+        [null, '    root: &Option<Rc<RefCell<Node>>>) -> String {'],
+        [8, '    let mut result = String::from("\\n");'],
+        [9, '    convert_dom_to_string_internal(root, 0, &mut result);'],
+        [13, 'fn convert_dom_to_string_internal('],
+        [14, '    node: &Option<Rc<RefCell<Node>>>, depth: usize,'],
+        [16, '    result: &mut String,'],
+        [18, '    match node {'],
+        [19, '        Some(n) => {'],
+        [20, '            result.push_str(&"  ".repeat(depth));'],
+        [21, '            result.push_str('],
+        [null, '                &format!("{:?}", n.borrow().kind()));'],
+        [22, '            result.push(\'\\n\');'],
+        [23, '            convert_dom_to_string_internal('],
+        [null, '            &n.borrow().first_child(), depth + 1, result);'],
+        [24, '            convert_dom_to_string_internal('],
+        [null, '            &n.borrow().next_sibling(), depth, result);']
+      ]).hl(10, 17);
+      P.add([
+        ['', 'page.rs（receive_response と execute_js。詰めた）'],
+        [67, 'pub fn receive_response(&mut self,'],
+        [null, '                        response: HttpResponse) {'],
+        [68, '    self.create_frame(response.body());  // DOM と CSS'],
+        [70, '    self.execute_js();         // 木ができてから'],
+        [72, '    self.set_layout_view();              // 第35章'],
+        [74, '    self.paint_tree();'],
+        [75, '}'],
+        [77, 'fn execute_js(&mut self) {'],
+        [78, '    let dom = match &self.frame {'],
+        [79, '        Some(frame) => frame.borrow().document(),'],
+        [80, '        None => return,'],
+        [83, '    let js = get_js_content(dom.clone());'],
+        [84, '    let lexer = JsLexer::new(js);'],
+        [86, '    let mut parser = JsParser::new(lexer);'],
+        [87, '    let ast = parser.parse_ast();'],
+        [89, '    let mut runtime = JsRuntime::new(dom);'],
+        [90, '    runtime.execute(&ast);']
+      ]).hl(1, 6);
+      st.tr = S.g({}, svg);
+      st.tree = domTree(svg);
+      xlink(svg, 944, 554, '10-browser.html#s2.4', '第10章 場面2 段階4「<script> で止まる」', true);
+      // 段階1・6: 左の帯（流れ）
+      st.band1 = S.g({ cls: 'fade hide' }, svg);
+      [['String（HTML）', 20], ['HtmlTokenizer', 128], ['HtmlParser', 236], ['Window／document', 344]].forEach(([s, x], k) => {
+        box(st.band1, x, 342, 100, 30, s, null, 'f-sf s-rule w1', 't-xs t-mono t-b');
+        if (k < 3) S.line(x + 100, 357, x + 107, 357, { cls: 's-dim w15', 'marker-end': mk('dim') }, st.band1);
+      });
+      S.text(20, 390, '→ get_style_content → String（171 字）→ CssTokenizer（第34章）', { cls: 't-xs t-dim' }, st.band1);
+      st.band6 = S.g({ cls: 'fade hide' }, svg);
+      [['create_frame', 20], ['execute_js', 128], ['set_layout_view', 236], ['paint_tree', 344]].forEach(([s, x], k) => {
+        box(st.band6, x, 342, 100, 30, s, null, k === 1 ? 'f-x-soft s-x w15' : 'f-sf s-rule w1', 't-xs t-mono t-b');
+        if (k < 3) S.line(x + 100, 357, x + 107, 357, { cls: 's-dim w15', 'marker-end': mk('dim') }, st.band6);
+      });
+      S.text(20, 390, 'Chromium: パース → <script> で停止して実行 → パースの続き', { cls: 't-xs t-dim' }, st.band6);
+      st.cursorLbl = S.text(944, 40, '', { cls: 't-xs t-x t-b t-end' }, svg);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state, tree = st.tree;
+      st.P.show(i);
+      const T = [
+        ['html ＝ 応答の本文（test.html の全文 810 バイト。第31章）', 'HtmlTokenizer::new(html) → HtmlParser::new(t).construct_tree() → frame', 'frame.borrow().document() → Document の Rc', 'get_style_content(dom) → "#title {\\n      color: red;\\n …"（171 字）'],
+        ['Style: Document → html → head → style で一致（4 個め）。その子と script は見ない', 'head の result2 ＝ body 側の 14 個も歩いてから style を返す（計 18 個）', '比べる式: kind() == NodeKind::Element(Element::new("style", Vec::new()))', 'H2 を探すと 21 個すべてを歩いて None'],
+        ['style_node ＝ 4 番。first_child ＝ 5 番の Text', 'content ＝ "#title {\\n      color: red;\\n    }\\n    .first {\\n …"', '171 字。改行と字下げの空白をそのまま含む', 'CssTokenizer::new(style) → 第34章'],
+        ['id_name ＝ "target"', '1〜8: Document・html・head・style・Text・script・Text・body は id を持たない', '9 h1: id="title" ≠ "target" → 10〜19 も違う → 20 p#target で一致', '→ Some(p#target の Rc)。strong が 1 増え、第36章が HtmlElement として持つ'],
+        [['Document', 't-sm t-mono t-b'], ['  Element(Element { kind: Html, attributes: [] })', 't-sm t-mono'], ['    Element(Element { kind: Head, attributes: [] })', 't-sm t-mono'], ['      Element(Element { kind: Style, attributes: [] })', 't-sm t-mono'], ['        Text("#title {\\n      color: red;\\n …")   …（全 21 行）', 't-sm t-mono']],
+        ['create_frame → frame（21 個の木）、style（CSSOM）', 'execute_js: get_js_content(dom) → "function add(a, b) {…"（166 字）', 'getElementById("target") → saba: Some(p#target)／仕様どおりのブラウザ: null', 'set_layout_view → paint_tree（第35章）']
+      ];
+      retrace(st.tr, T[i], i === 4 ? 406 : 410, i === 4 ? 20 : 22);
+      tree.clearBadges();
+      tree.apply({});
+      S.fade(st.band1, i === 0); S.fade(st.band6, i === 5);
+      st.cursorLbl.textContent = '';
+      if (i === 2) { tree.apply({ cur: 4, lit: setOf([5]) }); tree.note(4, '← first_child の Text を複製して返す'); }
+      if (i === 4) { TREE.forEach(([id]) => tree.badge(id, id)); }
+      if (i === 5) { tree.apply({ cur: 20, lit: setOf([6, 7]) }); tree.note(7, '← get_js_content'); tree.note(20, '← saba では見つかる'); }
+    },
+    frame(ctx) {
+      const st = ctx.state, tree = st.tree, i = ctx.step;
+      if (i !== 1 && i !== 3) return;
+      // 0.3 秒に 1 つ訪ねる（Style は 18 個、id="target" は 20 個）。最後に 2 秒止まる。止めている人には歩き終えた姿
+      const V = i === 1 ? V_STYLE : V_TARGET;
+      const n = V.order.length;
+      const k = playing() ? Math.min(n - 1, Math.floor(U.mod(ctx.ts, n * 0.3 + 2) / 0.3)) : n - 1;
+      const seen = V.order.slice(0, k + 1);
+      TREE.forEach(([id]) => { const j = seen.indexOf(id); tree.badge(id, j >= 0 ? j + 1 : null); });
+      tree.apply({ cur: seen[k], lit: setOf([V.found]) });
+      TREE.forEach(([id]) => { if (seen.indexOf(id) < 0) tree.setState(id, 'dim'); });
+      const found = seen.indexOf(V.found) >= 0;
+      st.cursorLbl.textContent = (i === 1 ? 'Style を探す: ' : 'id="target" を探す: ') + (k + 1) + ' 個め' + (found ? (i === 1 ? '（4 で一致。兄弟側を歩き終えてから返す）' : '（20 で一致 → 返す）') : '');
+    }
+  };
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第IX部 ブラウザを読む ／ 第33章',
+      title: 'HTML パーサと DOM',
+      home: '../index.html',
+      prev: { href: '32-saba-tokenizer.html', title: 'HTML トークナイザ' },
+      next: { href: '34-saba-css.html', title: 'CSS とスタイル', lead: '第33章で DOM ができ、style 要素の中の CSS の文字列が取り出せるようになった。' },
+      legend: [{ c: 'd', label: 'データ（トークン・ノード・文字列）' }, { c: 'x', label: '注目・変化・いまのノード' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>
