@@ -216,7 +216,7 @@
   <div class="nw-body a-text" style="--cols: 3fr 2fr">
 <div class="col"><h3>暫定策のルール</h3>
 <p><code>--network none</code> の使い捨てコンテナで次のルールを入れ、loopback の待ち受けへ 1 回ずつつないだ。</p>
-<pre><code>table ip cve_2026_98432 {
+<pre data-scroll-x><code>table ip cve_2026_98432 {
   chain prerouting {
     type filter hook prerouting priority raw
     policy accept

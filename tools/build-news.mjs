@@ -147,7 +147,8 @@ function render(bs, refs) {
       return `<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr>${head}</tr></thead><tbody>\n${rows}\n</tbody></table></div>`;
     }
     if (b.t === 'quote') return `<blockquote>${inline(b.text, refs)}</blockquote>`;
-    if (b.t === 'code') return `<pre><code>${esc(b.text)}</code></pre>`;
+    // 長い行は pre の中で横に送る（.nw-body pre の overflow-x: auto）。data-scroll-x は、verify.mjs がその中身を縦読み版のはみ出しに数えない印
+    if (b.t === 'code') return `<pre data-scroll-x><code>${esc(b.text)}</code></pre>`;
     const lv = Math.min(6, b.level);   // 場面の中の #### 以下
     return `<h${lv}>${inline(b.text, refs)}</h${lv}>`;
   }).join('\n');
@@ -365,7 +366,7 @@ ${ns.map(card).join('\n')}
   <div class="a-main">
     <p class="eyebrow">ニュースから層へ ／ ${notes.length} 件</p>
     <h1 id="h-s0">ニュースから層へ</h1>
-    <p class="standfirst">tech ニュースを 1 件ずつ調べ、この教材のどの層の話かを、章と場面へのリンクで示したノート。各ノートは、確かなことと確かでないことを出どころつきで書き分け、層ごとに何が起きるかを表にする。</p>
+    <p class="standfirst">tech ニュースを 1 件ずつ調べ、この教材のどの層の話かを、章と場面へのリンクで示したノート。各ノートは、層ごとに何が起きるかを表にする。脆弱性と事故のノートは確かなことと確かでないことを、更新のノートは解決することと前提知識を書き分ける。</p>
     <p class="keys fit-only">${KEYS}一覧の帯は全 36 章を部ごとに並べたもので、塗りつぶした番号がそのノートのリンクしている章。</p>
   </div>
   <nav class="toc a-toc" aria-labelledby="h-toc">
