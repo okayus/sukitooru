@@ -67,12 +67,18 @@ function launchChrome() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ytm-chrome-'));
     const ps = spawn(process.env.CHROME || 'google-chrome', ['--headless=new', '--no-sandbox', '--disable-gpu', '--no-first-run', '--disable-extensions', '--mute-audio',
       '--remote-debugging-port=0', '--user-data-dir=' + dir, '--window-size=1920,1080', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+    // プロファイルは Chrome が終わってから消す。kill() の Promise を待たずに process.exit すると /tmp に残る
+    const gone = new Promise((res) => ps.on('exit', () => {
+      try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { console.error('Chrome のプロファイルを消せない: ' + e.message); }
+      res();
+    }));
+    const kill = () => { ps.kill(); setTimeout(() => ps.kill('SIGKILL'), 5000).unref(); return gone; };
     let buf = '', done = false;
-    const timer = setTimeout(() => { if (!done) { done = true; ps.kill(); reject(new Error('Chrome が起動しない: ' + buf.slice(-400))); } }, 15000);
+    const timer = setTimeout(() => { if (!done) { done = true; kill().then(() => reject(new Error('Chrome が起動しない: ' + buf.slice(-400)))); } }, 15000);
     ps.stderr.on('data', (d) => {
       buf += d;
       const m = /DevTools listening on (ws:\/\/\S+)/.exec(buf);
-      if (m && !done) { done = true; clearTimeout(timer); resolve({ ws: m[1], kill: () => { ps.kill(); setTimeout(() => fs.rmSync(dir, { recursive: true, force: true }), 500); } }); }
+      if (m && !done) { done = true; clearTimeout(timer); resolve({ ws: m[1], kill }); }
     });
     ps.on('exit', () => { if (!done) { done = true; clearTimeout(timer); reject(new Error('Chrome が終了した: ' + buf.slice(-400))); } });
   });
@@ -158,7 +164,7 @@ try {
   }
   cdp.close();
 } finally {
-  if (chrome) chrome.kill();
+  if (chrome) await chrome.kill();
   server.close();
 }
 process.exit(code);
