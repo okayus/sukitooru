@@ -12,6 +12,7 @@ tech ニュースを 1 件ずつ調べ、この教材のどの層（章・場面
 | 2026-10-20 | [eMudhra の中間 CA の秘密鍵の危殆化](2026-10-20-emudhra-ca-key-compromise.md) | 20 |
 | 2026-10-15 | [Linux の IPv4 TCP の解放後の使用 CVE-2026-98432](2026-10-15-linux-ipv4-tcp-uaf.md) | 6・9・14・18・19・26・27 |
 | 2026-09-14 | [MoonBit の形式検証をアルゴリズムの実装に使った報告](2026-09-14-moonbit-formal-verification.md) | 4・10・26・27・28・29 |
+| 2026-06-06 | [作って学ぶ、JSX (TSX) ランタイムの基本](2026-06-06-jsx-runtime-basics.md) | 10・22・26・27・28・29・30・33・36 |
 | 2017-04-04 | [関数型プログラマからみた Rust](2017-04-04-rust-from-functional-programmers.md) | 6・10・26・27・28・29・30・31・32・33・34 |
 <!-- news-list:end -->
 

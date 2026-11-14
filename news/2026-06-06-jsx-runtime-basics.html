@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<!-- このページは tools/build-news.mjs が news/ の Markdown から作る（手で直さない） -->
+<title>作って学ぶ、JSX (TSX) ランタイムの基本 — ニュースから層へ</title>
+<meta name="description" content="ブラウザの層ではなく、ブラウザに届く前の変換（作る側、第28章 場面1）と、JavaScript エンジンの上で動くライブラリの話である。">
+<meta property="og:title" content="作って学ぶ、JSX (TSX) ランタイムの基本 — ニュースから層へ">
+<meta property="og:description" content="ブラウザの層ではなく、ブラウザに届く前の変換（作る側、第28章 場面1）と、JavaScript エンジンの上で動くライブラリの話である。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
+  .sc-nw { grid-template-areas: "sh" "text"; }
+  .fit .sc-nw { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh" "text"; }
+  .nw-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.15rem; align-content: start; }
+  .fit .nw-body { grid-template-columns: var(--cols, minmax(0, 1fr)); column-gap: 40px; }
+  .fit .nw-body.nw-narrow { max-width: 60em; }
+  .nw-body h3 { font-family: var(--display); font-weight: 700; font-size: 1.05rem; line-height: 1.5; }
+  .nw-body h4 { font-weight: 600; font-size: 0.95rem; }
+  .nw-body ul, .nw-body ol { padding-left: 1.3em; display: grid; gap: 0.35rem; }
+  .nw-body li > ul, .nw-body li > ol { margin-top: 0.3rem; }
+  .nw-body blockquote { border-left: 3px solid var(--rule); padding-left: 0.9rem; color: var(--fg-mid); }
+  .nw-body pre { background: var(--inset); border-radius: 4px; padding: 0.6rem 0.8rem; overflow-x: auto; font-size: 0.8rem; }
+  .nw-tbl b { font-weight: 600; }
+  table.nw-tbl td[data-label]::before { border-left: 0; padding-left: 0; }   /* 縦読み版の見出しの色見本（章の表で使う）は出さない */
+  a.nw-ch { white-space: nowrap; text-decoration: underline dotted; text-decoration-color: var(--fg-dim); text-underline-offset: 0.22em; }
+  a.nw-ch:hover { text-decoration-style: solid; text-decoration-color: var(--fg); }
+  .nw-meta { list-style: none; padding: 0; margin-top: 1rem; display: grid; gap: 0.2rem; font-size: 0.84rem; line-height: 1.7; color: var(--fg-mid); }
+  .fit .nw-meta { margin-top: 18px; }
+  .nw-meta li { padding-left: 1em; text-indent: -1em; }
+  .nw-meta li::before { content: "・"; }
+
+  /* 全章の帯 */
+  .nw-strip { display: flex; flex-wrap: wrap; gap: 6px 6px; margin-top: 1rem; }
+  .nw-grp { flex: var(--n) 1 calc(var(--n) * 17px); min-width: 0; display: grid; gap: 2px; }
+  .nw-part { font-size: 0.68rem; line-height: 1.5; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 2px solid var(--rule); padding-left: 3px; }
+  .nw-cells { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; }
+  .nw-cell { font-family: var(--mono); font-size: 0.68rem; line-height: 1.75rem; text-align: center; border-radius: 3px; background: var(--inset); color: var(--fg-dim); text-decoration: none; }
+  a.nw-cell.on { background: var(--fg); color: var(--surface); font-weight: 600; }
+  a.nw-cell.on:hover { outline: 2px solid var(--fg-dim); outline-offset: 1px; }
+
+  /* 一覧 */
+  .sc-nwlist { grid-template-areas: "sh" "tbl"; }
+  .fit .sc-nwlist { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh" "tbl"; }
+  .nw-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.9rem; align-content: start; }
+  .fit .nw-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
+  .nw-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.75rem 0.95rem 0.8rem; display: grid; gap: 0.35rem; align-content: start; }
+  .nw-card .nw-date { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; color: var(--fg-dim); }
+  .nw-card h3 { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
+  .nw-card h3 a { text-decoration: none; }
+  .nw-card h3 a:hover { text-decoration: underline; text-underline-offset: 0.2em; }
+  .nw-card .nw-lead { font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-card .nw-strip { margin-top: 0.35rem; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">ニュースから層へ ／ 2026-06-06</p>
+    <h1 id="h-s0">作って学ぶ、JSX (TSX) ランタイムの基本</h1>
+    <p class="standfirst">ブラウザの層ではなく、ブラウザに届く前の変換（作る側、第28章 場面1）と、JavaScript エンジンの上で動くライブラリの話である。JSX は JavaScript の中に XML 風の式を書く記法で、ECMAScript の文法ではないので、ブラウザも Node.js もそのままでは読めない。トランスパイラが関数呼び出しに書き換え、その関数の実装を JSX ランタイムと呼ぶ。関数は何を返してもよく、発表は 7 行の実装から始めて、型、組み込み要素、コンポーネントを足していく。ブラウザの中で関わるのは、変換後の JavaScript を走らせるエンジン（第10章 場面5）だけで、同じ関数はサーバーでも動く。</p>
+    <ul class="nw-meta"><li>出典: <a href="https://speakerdeck.com/syumai/jsx-runtime-basics" target="_blank" rel="noopener">作って学ぶ、JSX (TSX) ランタイムの基本</a>（syumai、フロントエンド・PHPカンファレンス北海道2026、2026-06-06、56 枚）と、サンプル <a href="https://github.com/syumai/minimum-jsx" target="_blank" rel="noopener">syumai/minimum-jsx</a>（コミット 737a3e4、MIT）</li><li>調べた時点: 2026-11-15。変換は Bun 1.3.14、実行は Node.js 24.22.1、型検査は Deno 2.8.0 に同梱の TypeScript 6.0.3 で確かめた。サンプルそのものは走らせていない。</li></ul>
+    <div class="nw-strip" role="group" aria-label="このノートがリンクしている章: 第10章 ブラウザ、第22章 YouTube のサーバー側、第26章 型とメモリ、第27章 データ構造とアルゴリズム、第28章 コンパイラ、第29章 型で意味を表す、第30章 エミュレータの外側、第33章 HTML パーサと DOM、第36章 JavaScript エンジン"><div class="nw-grp" style="--n:3"><span class="nw-part">I 電気</span><div class="nw-cells"><span class="nw-cell" title="第1章 電子と電流">1</span><span class="nw-cell" title="第2章 半導体とダイオード">2</span><span class="nw-cell" title="第3章 トランジスタ">3</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">II 計算機</span><div class="nw-cells"><span class="nw-cell" title="第4章 論理ゲートと2進数">4</span><span class="nw-cell" title="第5章 記憶">5</span><span class="nw-cell" title="第6章 CPU">6</span><span class="nw-cell" title="第7章 入出力と周辺機器">7</span><span class="nw-cell" title="第8章 画面と音">8</span></div></div><div class="nw-grp" style="--n:2"><span class="nw-part">III ソフト</span><div class="nw-cells"><span class="nw-cell" title="第9章 OS">9</span><a class="nw-cell on" href="../chapters/10-browser.html" title="第10章 ブラウザ">10</a></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IV つながる</span><div class="nw-cells"><span class="nw-cell" title="第11章 ネットワークの層">11</span><span class="nw-cell" title="第12章 Wi-Fi">12</span><span class="nw-cell" title="第13章 Ethernet とスイッチ">13</span><span class="nw-cell" title="第14章 ホームルーター">14</span><span class="nw-cell" title="第15章 光回線">15</span><span class="nw-cell" title="第16章 インターネットの骨格">16</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">V 約束ごと</span><div class="nw-cells"><span class="nw-cell" title="第17章 DNS">17</span><span class="nw-cell" title="第18章 IP">18</span><span class="nw-cell" title="第19章 TCP・UDP・QUIC">19</span><span class="nw-cell" title="第20章 TLS">20</span><span class="nw-cell" title="第21章 HTTP">21</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VI YouTube</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/22-server.html" title="第22章 YouTube のサーバー側">22</a><span class="nw-cell" title="第23章 動画の圧縮">23</span><span class="nw-cell" title="第24章 ストリーミングと再生">24</span><span class="nw-cell" title="第25章 通しで見る">25</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VII 横断</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/26-kata.html" title="第26章 型とメモリ">26</a><a class="nw-cell on" href="../chapters/27-algorithm.html" title="第27章 データ構造とアルゴリズム">27</a><a class="nw-cell on" href="../chapters/28-compiler.html" title="第28章 コンパイラ">28</a><a class="nw-cell on" href="../chapters/29-imi.html" title="第29章 型で意味を表す">29</a></div></div><div class="nw-grp" style="--n:1"><span class="nw-part">VIII </span><div class="nw-cells"><a class="nw-cell on" href="../chapters/30-gbemu-desktop.html" title="第30章 エミュレータの外側">30</a></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IX ブラウザ</span><div class="nw-cells"><span class="nw-cell" title="第31章 URL と HTTP">31</span><span class="nw-cell" title="第32章 HTML トークナイザ">32</span><a class="nw-cell on" href="../chapters/33-saba-dom.html" title="第33章 HTML パーサと DOM">33</a><span class="nw-cell" title="第34章 CSS とスタイル">34</span><span class="nw-cell" title="第35章 レイアウトと描画">35</span><a class="nw-cell on" href="../chapters/36-saba-js.html" title="第36章 JavaScript エンジン">36</a></div></div></div>
+    <p class="keys fit-only">上のタブで場面を選ぶ。<kbd>↓</kbd><kbd>↑</kbd>（または右上の <kbd>‹</kbd><kbd>›</kbd>）で場面を移る。帯の塗りつぶした番号は、このノートがリンクしている章。</p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>どの層の話か</a></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>何を解決するか</a></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>変換と、最小のランタイム</a></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>前提知識</a></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>いつ使えるか</a></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>予想との差と出典</a></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">読む ›</a><a href="index.html">ニュースの一覧</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
+    <p>元のノート: <a href="https://github.com/okayus/youtube-ga-mieru-made/blob/main/news/2026-06-06-jsx-runtime-basics.md" target="_blank" rel="noopener">news/2026-06-06-jsx-runtime-basics.md</a>（このページは <code>node tools/build-news.mjs</code> で作る）</p>
+  </footer>
+</section>
+
+<!-- ================= 1 どの層の話か ================= -->
+<section class="scene sc-nw" id="s1" data-tab="層" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>どの層の話か</h2>
+  </header>
+  <div class="nw-body a-text">
+<div class="col"><p>発表は新機能の知らせではなく、仕組みの解説である。JSX を書いてから画面に出るまでを、通る順に並べた。発表が扱うのは太字の 3 段で、どれもブラウザの部品ではない。JSX は HTML に似ているが、ブラウザの HTML パーサ（<a href="../chapters/10-browser.html#s2" class="nw-ch">10章 場面2</a>）は通らない。</p>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>この発表で起きること</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="層">ソース（書く側）</td><td data-label="この発表で起きること"><code>.jsx</code>・<code>.tsx</code> に <code>&lt;a href=&quot;…&quot;&gt;…&lt;/a&gt;</code> と書く。ECMAScript の文法ではないので、そのまま走らせると構文エラーになる。Node.js 24 は <code>Unexpected token '&lt;'</code> で止まった</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s1" class="nw-ch">28章 場面1</a> の段階5、<a href="../chapters/10-browser.html#s5" class="nw-ch">10章 場面5</a> の段階1</td></tr>
+<tr><td data-label="層"><b>トランスパイラ（作る側）</b></td><td data-label="この発表で起きること">Babel・tsc・Oxc などが、JSX の式を関数呼び出し <code>h(&quot;a&quot;, { href: &quot;…&quot; }, &quot;…&quot;)</code> に書き換える。働くのは実行の前で、ふつうはビルド時である。Deno は読み込むときに変換した</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s1" class="nw-ch">28章 場面1</a> の段階2〜4、<a href="../chapters/26-kata.html#s4" class="nw-ch">26章 場面4</a> の段階6。トランスパイラは教材に無い</td></tr>
+<tr><td data-label="層"><b>型検査（作る側）</b></td><td data-label="この発表で起きること">TypeScript は、JSX 名前空間に書いた型で、要素の名前と属性を確かめる。JSX の式の型は <code>JSX.Element</code> の 1 種類になる</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s2" class="nw-ch">28章 場面2</a> の段階2・3、<a href="../chapters/26-kata.html#s4" class="nw-ch">26章 場面4</a> の段階6</td></tr>
+<tr><td data-label="層"><b>JSX ランタイム（動かす側）</b></td><td data-label="この発表で起きること">書き換えた先の関数 <code>h</code> の実装。ふつうの JavaScript の関数で、名前・属性・子を受け取って値を返す。何を返すかは自由である</td><td data-label="章・場面"><a href="../chapters/10-browser.html#s5" class="nw-ch">10章 場面5</a> の段階1、<a href="../chapters/36-saba-js.html#s3" class="nw-ch">36章 場面3</a> の段階3</td></tr>
+<tr><td data-label="層">値の使い道（動かす側）</td><td data-label="この発表で起きること">返した値の使い道はライブラリごとに違う。React は DOM に反映し、hono/jsx はサーバーで HTML を作り、jsx-slack は Slack の JSON を作る</td><td data-label="章・場面"><a href="../chapters/36-saba-js.html#s5" class="nw-ch">36章 場面5</a> の段階5、<a href="../chapters/22-server.html#s5" class="nw-ch">22章 場面5</a> の段階1</td></tr>
+<tr><td data-label="層">ブラウザ（動かす側）</td><td data-label="この発表で起きること">受け取るのは変換後の JavaScript だけで、JSX も <code>h</code> も知らない。DOM が書き換われば、変わった所のレイアウトから先をやり直す</td><td data-label="章・場面"><a href="../chapters/10-browser.html#s3" class="nw-ch">10章 場面3</a> の段階5</td></tr>
+</tbody></table></div></div>
+  </div>
+</section>
+
+<!-- ================= 2 何を解決するか ================= -->
+<section class="scene sc-nw" id="s2" data-tab="解決" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>何を解決するか</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 2fr 3fr">
+<div class="col"><h3>困っていたこと</h3>
+<ul><li>入れ子のデータを JavaScript で組むと、関数呼び出しや JSON の入れ子になり、形が読み取りにくい。発表の例の jsx-slack は、生の JSON で組む Slack のブロックを JSX で書けるようにする。</li><li>JSX は同じ入れ子を、タグの入れ子として書けるようにする。式なので、変数に入れ、引数に渡せる。発表は、ejs などのテンプレートエンジンの代わりに使うだけでも便利だと書く。</li><li>JSX の仕様は、意味を定めない記法で、エンジンやブラウザが実装するものではなく、ECMAScript に入れる提案でもないと書く。意味は、変換と関数の実装が決める。</li></ul></div>
+<div class="col"><h3>記法と意味を分ける</h3>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>分担</th><th>決めること</th><th>決める所</th></tr></thead><tbody>
+<tr><td data-label="分担">記法</td><td data-label="決めること">タグ・属性・子の書き方</td><td data-label="決める所">JSX の仕様</td></tr>
+<tr><td data-label="分担">変換</td><td data-label="決めること">どの関数の呼び出しに書き換えるか</td><td data-label="決める所">トランスパイラの設定</td></tr>
+<tr><td data-label="分担">ランタイム</td><td data-label="決めること">その関数が何を返すか</td><td data-label="決める所">ライブラリ（React、Preact、hono/jsx、自作）</td></tr>
+<tr><td data-label="分担">型</td><td data-label="決めること">どの名前と属性を許すか</td><td data-label="決める所">ライブラリが書く JSX 名前空間</td></tr>
+</tbody></table></div>
+<p>記法と意味が分かれているので、同じ書き方が、DOM にも、HTML の文字列にも、JSON にも使える。発表のまとめは「JSXは、HTMLに囚われない多様なユースケースに使える」である。</p>
+<h4>解決しないこと</h4>
+<ul><li>ビルドが要る。ブラウザは JSX を読めないままである。</li><li>型は粗い。TypeScript の文書は、JSX の式の型から要素・属性・子の情報は取り出せず、black box だと書く。</li><li>関数の約束は標準ではない。classic と automatic の 2 つの方式があり、変換の設定とランタイムが合わないと動かない。</li></ul></div>
+  </div>
+</section>
+
+<!-- ================= 3 変換と、最小のランタイム ================= -->
+<section class="scene sc-nw" id="s3" data-tab="仕組み" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>変換と、最小のランタイム</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 2fr 2fr">
+<div class="col"><h3>変換の前と後</h3>
+<pre data-scroll-x><code>// 前（発表の例）
+&lt;outer attr1=&quot;attribute 1&quot;&gt;
+  &lt;inner attr2=&quot;attribute 2&quot;&gt;&lt;/inner&gt;
+  &lt;inner&gt;&lt;/inner&gt;
+&lt;/outer&gt;
+
+// 後: classic（関数の名前を h と設定）
+h(&quot;outer&quot;, { attr1: &quot;attribute 1&quot; },
+  h(&quot;inner&quot;, { attr2: &quot;attribute 2&quot; }),
+  h(&quot;inner&quot;, null))
+
+// 後: automatic（取り込み元を my-lib と設定）
+import { jsx, jsxs } from &quot;my-lib/jsx-runtime&quot;;
+jsxs(&quot;outer&quot;, { attr1: &quot;attribute 1&quot;, children: [
+  jsx(&quot;inner&quot;, { attr2: &quot;attribute 2&quot; }),
+  jsx(&quot;inner&quot;, {}) ] })</code></pre>
+<ul><li>Bun 1.3.14 で変換した結果である（改行を詰め、Bun が名前に付ける乱数を省いた）。</li><li>classic は子を 3 つめ以降の引数に渡す。automatic は子を属性の <code>children</code> に入れ、import 文も足す。React 17 からの <code>_jsx</code>・<code>_jsxs</code> は automatic、その前の <code>React.createElement</code> は classic である。</li></ul></div>
+<div class="col"><h3>最小のランタイム</h3>
+<pre data-scroll-x><code>export function h(type, props, ...children) {
+  return { type, props, children };
+}</code></pre>
+<ul><li>サンプルの 7 行を 3 行に詰めた。classic の変換結果をこの <code>h</code> と一緒に Node.js で走らせると、<code>{ type: 'outer', props: { attr1: 'attribute 1' }, children: [ … ] }</code> という入れ子の値が出た。</li><li>同じ変換結果に、文字列を組み立てる <code>h</code> を当てると、<code>&lt;outer attr1=&quot;attribute 1&quot;&gt;&lt;inner …&gt;&lt;/inner&gt;&lt;inner&gt;&lt;/inner&gt;&lt;/outer&gt;</code> が出た。返す値はランタイムが決める。</li><li>要素名が大文字で始まると、文字列ではなく、その名前の関数が <code>h</code> に渡る。サンプルは <code>typeof type === &quot;function&quot;</code> なら呼び出す。これがコンポーネントである。</li></ul>
+<h4>型（TypeScript 6.0.3）</h4>
+<ul><li>JSX 名前空間が無いと、TS7026（<code>JSX.IntrinsicElements</code> が無い）で止まる。</li><li><code>JSX.Element</code> を書かなければ、JSX の式は any になる。number を返すコンポーネントの式を、string の変数に入れても通った。</li><li><code>JSX.Element</code> を書くと、式の型はその 1 種類になり、string を返すコンポーネントは TS2786 で拒まれた。</li></ul></div>
+  </div>
+</section>
+
+<!-- ================= 4 前提知識 ================= -->
+<section class="scene sc-nw" id="s4" data-tab="前提" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>前提知識</h2>
+  </header>
+  <div class="nw-body a-text">
+<div class="col"><p>下の層から、依存の順に並べた。React の知識は要らない。中心は、ソースを木にして書き換える段（1 行目）と、作る側で消えるもの（3 行目）である。</p>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>概念</th><th>この発表での役割</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="概念">字句解析・構文解析・構文木</td><td data-label="この発表での役割">「文法として有効ではない」の意味。変換は、構文木の JSX の節を、関数呼び出しの節に置き換える</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s1" class="nw-ch">28章 場面1</a> の段階2〜5</td></tr>
+<tr><td data-label="概念">JavaScript エンジンがソースを読む段</td><td data-label="この発表での役割">ブラウザが JSX を読めない理由。エンジンは ECMAScript の文法で解析する</td><td data-label="章・場面"><a href="../chapters/10-browser.html#s5" class="nw-ch">10章 場面5</a> の段階1、<a href="../chapters/36-saba-js.html#s2" class="nw-ch">36章 場面2</a> の段階1・2</td></tr>
+<tr><td data-label="概念">型は作る側で消える</td><td data-label="この発表での役割">tsc は型を消して JavaScript にする。JSX も同じ段で書き換わり、実行する側には残らない</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s4" class="nw-ch">26章 場面4</a> の段階6、<a href="../chapters/29-imi.html#s5" class="nw-ch">29章 場面5</a> の段階3</td></tr>
+<tr><td data-label="概念">木</td><td data-label="この発表での役割">JSX の入れ子は、関数呼び出しの入れ子になり、値の木になる</td><td data-label="章・場面"><a href="../chapters/27-algorithm.html#s4" class="nw-ch">27章 場面4</a> の段階1・6</td></tr>
+<tr><td data-label="概念">HTML のパースと DOM</td><td data-label="この発表での役割">JSX が通らない道。見た目は似ているが、HTML パーサの仕事ではない</td><td data-label="章・場面"><a href="../chapters/10-browser.html#s2" class="nw-ch">10章 場面2</a> の段階2・3・5、<a href="../chapters/33-saba-dom.html#s6" class="nw-ch">33章 場面6</a> の段階1</td></tr>
+<tr><td data-label="概念">JavaScript から DOM を書き換える</td><td data-label="この発表での役割">React のようなランタイムが、返した値を画面にする道</td><td data-label="章・場面"><a href="../chapters/36-saba-js.html#s5" class="nw-ch">36章 場面5</a> の段階2・5、<a href="../chapters/10-browser.html#s3" class="nw-ch">10章 場面3</a> の段階5</td></tr>
+<tr><td data-label="概念">サーバーが HTML を作る</td><td data-label="この発表での役割">JSX ランタイムがサーバーで動く使い道</td><td data-label="章・場面"><a href="../chapters/22-server.html#s5" class="nw-ch">22章 場面5</a> の段階1</td></tr>
+<tr><td data-label="概念">トランスパイラ</td><td data-label="この発表での役割">発表の中心。ソースを、別の書き方のソースに書き換える道具</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/26-kata.html#s4" class="nw-ch">26章 場面4</a> の段階6</td></tr>
+<tr><td data-label="概念">モジュール（import と export）</td><td data-label="この発表での役割"><code>h</code> の取り込みと、automatic が足す import 文</td><td data-label="章・場面">教材に無い</td></tr>
+<tr><td data-label="概念">関数を値として渡す（JavaScript）</td><td data-label="この発表での役割">コンポーネントは、要素名の位置に渡す関数である</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/30-gbemu-desktop.html#s5" class="nw-ch">30章 場面5</a> の段階2</td></tr>
+<tr><td data-label="概念">TypeScript の名前空間と型の宣言</td><td data-label="この発表での役割">JSX 名前空間の <code>IntrinsicElements</code>・<code>Element</code>・<code>ElementChildrenAttribute</code></td><td data-label="章・場面">教材に無い</td></tr>
+<tr><td data-label="概念">テンプレートエンジン</td><td data-label="この発表での役割">JSX が代わりになる相手</td><td data-label="章・場面">教材に無い</td></tr>
+</tbody></table></div></div>
+  </div>
+</section>
+
+<!-- ================= 5 いつ使えるか ================= -->
+<section class="scene sc-nw" id="s5" data-tab="段階" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>いつ使えるか</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 3fr 2fr">
+<div class="col"><h3>記法・変換・関数の約束の段階</h3>
+<p>JSX は ECMAScript の提案ではないので、TC39 の段階は無い。段階は、トランスパイラとライブラリの版で読む。</p>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>時期</th><th>出来事</th><th>出どころ</th></tr></thead><tbody>
+<tr><td data-label="時期">2012-08</td><td data-label="出来事">hyperscript の最初のコミット。<code>h(名前, 属性, 子)</code> に近い形のライブラリで、<code>h</code> はこの名前の略</td><td data-label="出どころ">GitHub、Vue.js の文書</td></tr>
+<tr><td data-label="時期">2013-06</td><td data-label="出来事">React のブログが JSX を、使わなくてもよい構文の拡張として紹介した</td><td data-label="出どころ">React のブログ</td></tr>
+<tr><td data-label="時期">2020-03</td><td data-label="出来事">Babel 7.9.0 に automatic の変換が入った。7 までの既定は classic</td><td data-label="出どころ">Babel の文書</td></tr>
+<tr><td data-label="時期">2020-09</td><td data-label="出来事">React が新しい変換を発表した。React 17 と、16.14.0・15.7.0・0.14.10 が対応する。TypeScript は 4.1 で <code>react-jsx</code> を足した</td><td data-label="出どころ">React のブログ、TypeScript 4.1 のリリースノート</td></tr>
+<tr><td data-label="時期">2024-04</td><td data-label="出来事">React 19 の移行の手引きが、新しい変換を必須と書いた</td><td data-label="出どころ">React のブログ</td></tr>
+<tr><td data-label="時期">2026-06</td><td data-label="出来事">発表。サンプルは classic（<code>jsx: &quot;react&quot;</code> と <code>jsxFactory: &quot;h&quot;</code>）で、変換は tsc と Oxc</td><td data-label="出どころ">発表、サンプル</td></tr>
+</tbody></table></div></div>
+<div class="col"><h3>誰が何をすれば効くか</h3>
+<ul><li>書く人が、トランスパイラに方式を設定する。classic は関数の名前を、automatic は取り込み元（<code>jsxImportSource</code>）を指定する。</li><li>classic では、JSX を書くファイルごとに <code>h</code> を import する。automatic では、トランスパイラが import 文を足す。</li><li>ランタイムを作る人は、関数と JSX 名前空間の型を用意する。automatic なら <code>jsx</code>・<code>jsxs</code>・<code>Fragment</code> を、決まったパス（<code>…/jsx-runtime</code>）から出す。</li><li>ブラウザは何も変えなくてよい。届くのは JavaScript である。</li></ul></div>
+  </div>
+</section>
+
+<!-- ================= 6 予想との差と出典 ================= -->
+<section class="scene sc-nw" id="s6" data-tab="出典" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>予想との差と出典</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 2fr 2fr 2fr">
+<div class="col"><h3>読む前の予想と差</h3>
+<p>読む前の予想は「ブラウザレイヤーの話。ブラウザレイヤーの中でも、さらに細かくしたどのレイヤーかは分からない」だった。</p>
+<ul><li>層: ブラウザの層ではなかった。半分はブラウザに届く前の変換（作る側）で、半分は JavaScript エンジンの上で動くライブラリである。「ランタイム」という名前でも、ブラウザの部品ではない。</li><li>ブラウザの中の細かい層: 第10章の順に、HTML のパース、スタイル計算、レイアウト、ペイント、合成と、JavaScript エンジンに分かれる。JSX が関わるのは JavaScript エンジンだけで、届く時点で JSX は消えている。</li><li>前提と解決する問題: 予想には無かった。前提は、ソースを木にして書き換える段と、「型は作る側で消える」（<a href="../chapters/26-kata.html#s4" class="nw-ch">26章 場面4</a> の段階6）である。解決するのは、入れ子のデータをタグの入れ子として書くことだった。</li><li>見分け方: 画面に出るものの話でも、ブラウザがそのまま読めない記法なら、まず作る側を疑う。</li></ul></div>
+<div class="col"><h3>追って確かめること</h3>
+<ul><li>サンプルを、発表と同じ tsc と Oxc で走らせる。今回は Bun・Node.js・Deno で同じ形を確かめた。</li><li>トランスパイラとモジュールは「教材に無い」前提の 1 回目。<a href="../chapters/26-kata.html#s4" class="nw-ch">26章 場面4</a> の段階6 に、JSX の変換を例として足すか。</li></ul></div>
+<div class="col"><h3>出典</h3>
+<ul><li>発表: <a href="https://speakerdeck.com/syumai/jsx-runtime-basics" target="_blank" rel="noopener">作って学ぶ、JSX (TSX) ランタイムの基本</a>（syumai、2026-06-06）。サンプル: <a href="https://github.com/syumai/minimum-jsx" target="_blank" rel="noopener">syumai/minimum-jsx</a>（コミット 737a3e4、MIT）</li><li>JSX: <a href="https://github.com/facebook/jsx" target="_blank" rel="noopener">仕様</a>、TypeScript の <a href="https://www.typescriptlang.org/docs/handbook/jsx.html" target="_blank" rel="noopener">JSX の文書</a>と <a href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-1.html" target="_blank" rel="noopener">4.1 のリリースノート</a>、<a href="https://babeljs.io/docs/babel-plugin-transform-react-jsx" target="_blank" rel="noopener">Babel の変換の文書</a>、<a href="https://oxc.rs/docs/guide/usage/transformer/jsx.html" target="_blank" rel="noopener">Oxc の変換の文書</a></li><li>React: <a href="https://legacy.reactjs.org/blog/2013/06/05/why-react.html" target="_blank" rel="noopener">Why did we build React?</a>（2013-06-05）、<a href="https://legacy.reactjs.org/blog/2020/09/22/introducing-the-new-jsx-transform.html" target="_blank" rel="noopener">Introducing the New JSX Transform</a>（2020-09-22）、<a href="https://react.dev/blog/2024/04/25/react-19-upgrade-guide" target="_blank" rel="noopener">React 19 Upgrade Guide</a>（2024-04-25）、<a href="https://react.dev/reference/react-dom/client/createRoot" target="_blank" rel="noopener">createRoot</a></li><li>ほかのランタイム: <a href="https://github.com/hyperhype/hyperscript" target="_blank" rel="noopener">hyperscript</a>、Vue.js の <a href="https://vuejs.org/guide/extras/render-function.html" target="_blank" rel="noopener">Render Functions &amp; JSX</a>、<a href="https://hono.dev/docs/guides/jsx" target="_blank" rel="noopener">hono/jsx</a>、<a href="https://github.com/yhatt/jsx-slack" target="_blank" rel="noopener">jsx-slack</a></li></ul></div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2026-06-06","title":"作って学ぶ、JSX (TSX) ランタイムの基本","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]} });
+</script>
+</body>
+</html>
