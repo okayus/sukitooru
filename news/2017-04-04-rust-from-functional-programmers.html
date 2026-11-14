@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<!-- このページは tools/build-news.mjs が news/ の Markdown から作る（手で直さない） -->
+<title>関数型プログラマからみた Rust — ニュースから層へ</title>
+<meta name="description" content="言語とコンパイラの層（第28・29章）と、メモリの管理（第26章 場面6）の話である。">
+<meta property="og:title" content="関数型プログラマからみた Rust — ニュースから層へ">
+<meta property="og:description" content="言語とコンパイラの層（第28・29章）と、メモリの管理（第26章 場面6）の話である。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
+  .sc-nw { grid-template-areas: "sh" "text"; }
+  .fit .sc-nw { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh" "text"; }
+  .nw-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.15rem; align-content: start; }
+  .fit .nw-body { grid-template-columns: var(--cols, minmax(0, 1fr)); column-gap: 40px; }
+  .fit .nw-body.nw-narrow { max-width: 60em; }
+  .nw-body h3 { font-family: var(--display); font-weight: 700; font-size: 1.05rem; line-height: 1.5; }
+  .nw-body h4 { font-weight: 600; font-size: 0.95rem; }
+  .nw-body ul, .nw-body ol { padding-left: 1.3em; display: grid; gap: 0.35rem; }
+  .nw-body li > ul, .nw-body li > ol { margin-top: 0.3rem; }
+  .nw-body blockquote { border-left: 3px solid var(--rule); padding-left: 0.9rem; color: var(--fg-mid); }
+  .nw-body pre { background: var(--inset); border-radius: 4px; padding: 0.6rem 0.8rem; overflow-x: auto; font-size: 0.8rem; }
+  .nw-tbl b { font-weight: 600; }
+  table.nw-tbl td[data-label]::before { border-left: 0; padding-left: 0; }   /* 縦読み版の見出しの色見本（章の表で使う）は出さない */
+  a.nw-ch { white-space: nowrap; text-decoration: underline dotted; text-decoration-color: var(--fg-dim); text-underline-offset: 0.22em; }
+  a.nw-ch:hover { text-decoration-style: solid; text-decoration-color: var(--fg); }
+  .nw-meta { list-style: none; padding: 0; margin-top: 1rem; display: grid; gap: 0.2rem; font-size: 0.84rem; line-height: 1.7; color: var(--fg-mid); }
+  .fit .nw-meta { margin-top: 18px; }
+  .nw-meta li { padding-left: 1em; text-indent: -1em; }
+  .nw-meta li::before { content: "・"; }
+
+  /* 全章の帯 */
+  .nw-strip { display: flex; flex-wrap: wrap; gap: 6px 6px; margin-top: 1rem; }
+  .nw-grp { flex: var(--n) 1 calc(var(--n) * 17px); min-width: 0; display: grid; gap: 2px; }
+  .nw-part { font-size: 0.68rem; line-height: 1.5; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 2px solid var(--rule); padding-left: 3px; }
+  .nw-cells { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; }
+  .nw-cell { font-family: var(--mono); font-size: 0.68rem; line-height: 1.75rem; text-align: center; border-radius: 3px; background: var(--inset); color: var(--fg-dim); text-decoration: none; }
+  a.nw-cell.on { background: var(--fg); color: var(--surface); font-weight: 600; }
+  a.nw-cell.on:hover { outline: 2px solid var(--fg-dim); outline-offset: 1px; }
+
+  /* 一覧 */
+  .sc-nwlist { grid-template-areas: "sh" "tbl"; }
+  .fit .sc-nwlist { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh" "tbl"; }
+  .nw-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.9rem; align-content: start; }
+  .fit .nw-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
+  .nw-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.75rem 0.95rem 0.8rem; display: grid; gap: 0.35rem; align-content: start; }
+  .nw-card .nw-date { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; color: var(--fg-dim); }
+  .nw-card h3 { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
+  .nw-card h3 a { text-decoration: none; }
+  .nw-card h3 a:hover { text-decoration: underline; text-underline-offset: 0.2em; }
+  .nw-card .nw-lead { font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-card .nw-strip { margin-top: 0.35rem; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">ニュースから層へ ／ 2017-04-04</p>
+    <h1 id="h-s0">関数型プログラマからみた Rust</h1>
+    <p class="standfirst">言語とコンパイラの層（第28・29章）と、メモリの管理（第26章 場面6）の話である。SML や Common Lisp を使ってきた筆者が Rust を使った感想で、型・パターンマッチ・高階関数は関数型言語の道具がそのまま使え、つまずいたのは所有権だったと書く。関数型言語は GC を前提に、値を自由に共有する。Rust は GC を持たず、値を写すのか指すのかをコンパイル時に決めさせる。言語の指向性は機械の層では分かれない。分かれるのは、書き手に何を書かせて確かめるか（作る側）と、実行時に何が要るか（動かす側）で、言語が使える層を決めるのは後者である。</p>
+    <ul class="nw-meta"><li>出典: <a href="https://keens.github.io/blog/2017/04/04/kansuugatapuroguramakaramitarust/" target="_blank" rel="noopener">関数型プログラマからみたRust</a>（κeen、2017-04-04。当時の安定版は Rust 1.16）。記事の外の問いは、論文と各言語の公式の文書に拠った</li><li>調べた時点: 2026-11-14（安定版は Rust 1.100）。エラーの文、型の大きさ、確保の量は rustc 1.95.0 で、GC の回数は GHC 9.6.7 で確かめた。</li></ul>
+    <div class="nw-strip" role="group" aria-label="このノートがリンクしている章: 第6章 CPU、第10章 ブラウザ、第26章 型とメモリ、第27章 データ構造とアルゴリズム、第28章 コンパイラ、第29章 型で意味を表す、第30章 エミュレータの外側、第31章 URL と HTTP、第32章 HTML トークナイザ、第33章 HTML パーサと DOM、第34章 CSS とスタイル"><div class="nw-grp" style="--n:3"><span class="nw-part">I 電気</span><div class="nw-cells"><span class="nw-cell" title="第1章 電子と電流">1</span><span class="nw-cell" title="第2章 半導体とダイオード">2</span><span class="nw-cell" title="第3章 トランジスタ">3</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">II 計算機</span><div class="nw-cells"><span class="nw-cell" title="第4章 論理ゲートと2進数">4</span><span class="nw-cell" title="第5章 記憶">5</span><a class="nw-cell on" href="../chapters/06-cpu.html" title="第6章 CPU">6</a><span class="nw-cell" title="第7章 入出力と周辺機器">7</span><span class="nw-cell" title="第8章 画面と音">8</span></div></div><div class="nw-grp" style="--n:2"><span class="nw-part">III ソフト</span><div class="nw-cells"><span class="nw-cell" title="第9章 OS">9</span><a class="nw-cell on" href="../chapters/10-browser.html" title="第10章 ブラウザ">10</a></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IV つながる</span><div class="nw-cells"><span class="nw-cell" title="第11章 ネットワークの層">11</span><span class="nw-cell" title="第12章 Wi-Fi">12</span><span class="nw-cell" title="第13章 Ethernet とスイッチ">13</span><span class="nw-cell" title="第14章 ホームルーター">14</span><span class="nw-cell" title="第15章 光回線">15</span><span class="nw-cell" title="第16章 インターネットの骨格">16</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">V 約束ごと</span><div class="nw-cells"><span class="nw-cell" title="第17章 DNS">17</span><span class="nw-cell" title="第18章 IP">18</span><span class="nw-cell" title="第19章 TCP・UDP・QUIC">19</span><span class="nw-cell" title="第20章 TLS">20</span><span class="nw-cell" title="第21章 HTTP">21</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VI YouTube</span><div class="nw-cells"><span class="nw-cell" title="第22章 YouTube のサーバー側">22</span><span class="nw-cell" title="第23章 動画の圧縮">23</span><span class="nw-cell" title="第24章 ストリーミングと再生">24</span><span class="nw-cell" title="第25章 通しで見る">25</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VII 横断</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/26-kata.html" title="第26章 型とメモリ">26</a><a class="nw-cell on" href="../chapters/27-algorithm.html" title="第27章 データ構造とアルゴリズム">27</a><a class="nw-cell on" href="../chapters/28-compiler.html" title="第28章 コンパイラ">28</a><a class="nw-cell on" href="../chapters/29-imi.html" title="第29章 型で意味を表す">29</a></div></div><div class="nw-grp" style="--n:1"><span class="nw-part">VIII </span><div class="nw-cells"><a class="nw-cell on" href="../chapters/30-gbemu-desktop.html" title="第30章 エミュレータの外側">30</a></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IX ブラウザ</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/31-saba-http.html" title="第31章 URL と HTTP">31</a><a class="nw-cell on" href="../chapters/32-saba-tokenizer.html" title="第32章 HTML トークナイザ">32</a><a class="nw-cell on" href="../chapters/33-saba-dom.html" title="第33章 HTML パーサと DOM">33</a><a class="nw-cell on" href="../chapters/34-saba-css.html" title="第34章 CSS とスタイル">34</a><span class="nw-cell" title="第35章 レイアウトと描画">35</span><span class="nw-cell" title="第36章 JavaScript エンジン">36</span></div></div></div>
+    <p class="keys fit-only">上のタブで場面を選ぶ。<kbd>↓</kbd><kbd>↑</kbd>（または右上の <kbd>‹</kbd><kbd>›</kbd>）で場面を移る。帯の塗りつぶした番号は、このノートがリンクしている章。</p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>どの層の話か</a></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>何を解決するか</a></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>GC と所有権</a></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>言語の指向性はなぜ分かれるか</a></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>前提知識</a></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>予想との差と出典</a></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">読む ›</a><a href="index.html">ニュースの一覧</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
+    <p>元のノート: <a href="https://github.com/okayus/youtube-ga-mieru-made/blob/main/news/2017-04-04-rust-from-functional-programmers.md" target="_blank" rel="noopener">news/2017-04-04-rust-from-functional-programmers.md</a>（このページは <code>node tools/build-news.mjs</code> で作る）</p>
+  </footer>
+</section>
+
+<!-- ================= 1 どの層の話か ================= -->
+<section class="scene sc-nw" id="s1" data-tab="層" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>どの層の話か</h2>
+  </header>
+  <div class="nw-body a-text">
+<div class="col"><p>記事は機能の追加ではなく、関数型言語の経験者が Rust を使った感想である。挙げている違いを、働くのがビルド時（作る側）か実行時（動かす側）かで分けた。筆者がつまずいた所が太字。記事の末尾に、海外で流行った記事の野良和訳の文体で書いた（原文は無い）とあり、強い言い切りは文体である。</p>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>この記事で起きること</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="層">構文（作る側）</td><td data-label="この記事で起きること"><code>let</code>、既定で不変、シャドーイング、式指向は ML と同じ。関数定義の見た目は手続き型。総称の <code>&lt;&gt;</code> は比較の <code>&lt;</code> と同じ記号で、筆者は紛らわしいと書く</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s1" class="nw-ch">28章 場面1</a> の段階2・3</td></tr>
+<tr><td data-label="層">型（作る側）</td><td data-label="この記事で起きること">トレイト、タプル、代数的データ型と match、高階関数、型推論は関数型言語から来た。関数の引数と戻り値の型は書かせる</td><td data-label="章・場面"><a href="../chapters/29-imi.html#s2" class="nw-ch">29章 場面2</a> の段階1・3、<a href="../chapters/28-compiler.html#s2" class="nw-ch">28章 場面2</a> の段階4・5、<a href="../chapters/33-saba-dom.html#s1" class="nw-ch">33章 場面1</a> の段階3・6</td></tr>
+<tr><td data-label="層"><b>所有と借用（作る側）</b></td><td data-label="この記事で起きること">値の持ち主を 1 つに決め、写すのか指すのかを書かせる。筆者は数日「ボローチェッカとの戦い」を続けた。検査はビルド時に終わり、機械語には残らない</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s2" class="nw-ch">28章 場面2</a> の段階6、<a href="../chapters/30-gbemu-desktop.html#s1" class="nw-ch">30章 場面1</a> の段階4、<a href="../chapters/34-saba-css.html#s5" class="nw-ch">34章 場面5</a> の段階6</td></tr>
+<tr><td data-label="層">マクロ（作る側）</td><td data-label="この記事で起きること"><code>macro_rules!</code> は Scheme の syntax-rules に当たる。筆者は、Common Lisp のような伝統的なマクロは不安定な機能にしか無いと書く</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/28-compiler.html#s1" class="nw-ch">28章 場面1</a> の段階4</td></tr>
+<tr><td data-label="層">コンパイルの単位（作る側）</td><td data-label="この記事で起きること">分けてコンパイルするとインライン展開が届かず、全体をまとめると時間がかかる。Rust はモジュールの上にクレートという単位を置いた</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s6" class="nw-ch">28章 場面6</a> の段階1、<a href="../chapters/28-compiler.html#s4" class="nw-ch">28章 場面4</a> の段階2</td></tr>
+<tr><td data-label="層"><b>メモリの管理（動かす側）</b></td><td data-label="この記事で起きること">関数型言語は GC が前提で、筆者は「メモリは無尽蔵にあると思ってプログラミングする」と書く。Rust は GC を持たず、解放の時点は持ち主で決まる</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s6" class="nw-ch">26章 場面6</a> の段階3・5。GC の仕組みは教材に無い</td></tr>
+<tr><td data-label="層">データ構造（題材）</td><td data-label="この記事で起きること">再帰的なデータ型は <code>Box</code> が要る。ハッシュ表は入れるたびに中身を書き換えるので <code>mut</code> が要る</td><td data-label="章・場面"><a href="../chapters/27-algorithm.html#s1" class="nw-ch">27章 場面1</a> の段階3、<a href="../chapters/27-algorithm.html#s3" class="nw-ch">27章 場面3</a> の段階4、<a href="../chapters/26-kata.html#s2" class="nw-ch">26章 場面2</a> の段階1</td></tr>
+</tbody></table></div></div>
+  </div>
+</section>
+
+<!-- ================= 2 何を解決するか ================= -->
+<section class="scene sc-nw" id="s2" data-tab="解決" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>何を解決するか</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 2fr 3fr">
+<div class="col"><h3>関数型が解決すること</h3>
+<ul><li>困りごとは、共有された値が書き換わることである。離れた所の代入で値が変わるので、式の意味がその場で決まらない。Backus（1978）は、従来の言語は変数が機械の記憶のセルをまねた形で、プログラムについて推論するための数学的な性質を欠くと書いた。</li><li>関数型の答えは、代入と副作用をやめることである。式はいつ評価しても同じ値になり、変数をその値で置き換えて読める（参照透過性）。</li><li>Hughes（1989）は、これは無いものの説明でしかないと書き、利点を部品化に置く。高階関数と遅延評価が、小さな部品をつなぐ糊（glue）になる。</li><li>ML や Haskell には、代数的データ型とパターンマッチ、型推論、型クラスもある。The Rust Reference は、これらを SML・OCaml・Haskell から採ったと書く。</li></ul></div>
+<div class="col"><h3>費用と、Rust の別の答え</h3>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>関数型の道具</th><th>実行時に要るもの</th><th>Rust での形</th></tr></thead><tbody>
+<tr><td data-label="関数型の道具">書き換えない値を自由に共有する</td><td data-label="実行時に要るもの">値の寿命が書いた場所から決まらないので GC</td><td data-label="Rust での形">持ち主は 1 つ。共有は借用（<code>&amp;</code>）か <code>Rc</code> と書く</td></tr>
+<tr><td data-label="関数型の道具">高階関数と閉包</td><td data-label="実行時に要るもの">捕まえた変数をヒープに置く。GC</td><td data-label="Rust での形">閉包は値で、捕まえた分の大きさを持つ。箱に入れるなら <code>Box&lt;dyn Fn&gt;</code> と書く</td></tr>
+<tr><td data-label="関数型の道具">代数的データ型とパターンマッチ</td><td data-label="実行時に要るもの">場合を示すタグ</td><td data-label="Rust での形">enum と match にそのまま採った</td></tr>
+<tr><td data-label="関数型の道具">型推論</td><td data-label="実行時に要るもの">無い（ビルド時だけ）</td><td data-label="Rust での形">関数の中だけ推す</td></tr>
+</tbody></table></div>
+<p>Rust の規則は「ある時点で持てるのは、書き換えられる参照 1 つか、読むだけの参照いくつかの、どちらか一方」である（The Rust Programming Language 4.2）。関数型は書き換えをやめ、Rust は共有と書き換えが重なることをやめる。防ぐ困りごとは同じで、Rust は GC を足さない。この対比は、調べた者の整理である。</p>
+<h4>解決しないこと</h4>
+<ul><li>書く手間。筆者は「プログラム全てで所有権を意識するのが思いの外難しかった」と書く。Go の FAQ は、寿命を管理する仕組みは設計に負担を足すとして GC を選んだ。</li><li>ジェネリクスの <code>&lt;&gt;</code>、REPL が無いこと、関数の型を書くことは、記事の時点のままである。</li></ul></div>
+  </div>
+</section>
+
+<!-- ================= 3 GC と所有権 ================= -->
+<section class="scene sc-nw" id="s3" data-tab="仕組み" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>GC と所有権</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 2fr 2fr">
+<div class="col"><h3>GC のある関数型言語（Haskell）</h3>
+<pre data-scroll-x><code>data List = Nil | Cons Int List
+
+t = Cons 2 Nil
+a = Cons 1 t
+b = Cons 0 t    -- t を a と b が共有する</code></pre>
+<ul><li>定義はそのまま通る。値はヒープの物を指す番地なので、型の大きさを決めなくてよい。</li><li><code>t</code> を 2 か所から指しても、書き換えが無いので、写したのか指したのかを区別しなくてよい。いつ解放するかは、実行中に GC が決める。</li><li>手元の GHC 9.6.7 で 100 万個のリストを作って足すと、ヒープに 40,051,584 バイトを確保し、GC が 10 回走った。要素 1 個が約 40 バイトである。</li></ul></div>
+<div class="col"><h3>GC の無い Rust</h3>
+<pre data-scroll-x><code>enum List { Nil, Cons(i64, List) }
+// error[E0072]: recursive type `List` has infinite size
+
+enum List { Nil, Cons(i64, Box&lt;List&gt;) }
+
+let t = Cons(2, Box::new(Nil));
+let a = Cons(1, Box::new(t));
+let b = Cons(0, Box::new(t));
+// error[E0382]: use of moved value: `t`</code></pre>
+<ul><li>値は中身そのものなので、型の大きさがコンパイル時に要る。<code>Box</code> は 8 バイトの番地で、<code>List</code> は 16 バイトに決まる。記事の「再帰的データ型を定義するとすぐにエラー」はこれである。</li><li>持ち主は 1 つで、<code>t</code> は <code>a</code> に移した後は使えない。写す（<code>clone</code>）、指す（<code>&amp;</code>）、数えて共有する（<code>Rc</code>）のどれかを書く。記事の「コピーしたいのか参照したいのか」の区別である。</li><li>解放は持ち主が消える時点で、GC は無い。100 万個では 16 バイトを 1,000,000 回確保し、リストを手放した時点で全部が解放された。</li></ul></div>
+  </div>
+</section>
+
+<!-- ================= 4 言語の指向性はなぜ分かれるか ================= -->
+<section class="scene sc-nw" id="s4" data-tab="分かれ目" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>言語の指向性はなぜ分かれるか</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 2fr 3fr 2fr">
+<div class="col"><h3>分かれる場所</h3>
+<ul><li>機械は 1 種類で、どの言語のプログラムも、レジスタとメモリを書き換える命令の列になる（<a href="../chapters/06-cpu.html#s2" class="nw-ch">6章 場面2</a>、<a href="../chapters/28-compiler.html#s5" class="nw-ch">28章 場面5</a>）。Backus は、変数が記憶のセルを、代入がその読み書きを、制御文が飛び越しの命令をまねた言語を、フォン・ノイマン型の言語と呼んだ。手続き型は機械の形に近い書き方である。</li><li>分かれるのは機械より上の 2 か所である。1 つは言語とコンパイラ（作る側）で、書き手に何を書かせ、何を確かめるか。関数型の道具の多くはここにあり、直和型は TypeScript にもある（<a href="../chapters/29-imi.html#s2" class="nw-ch">29章 場面2</a> の段階6）。</li><li>もう 1 つはランタイム（動かす側）で、書き手から隠したものを、実行中に誰が面倒を見るか。代表はメモリの解放で、GC、手で解放、所有権の 3 つがある（The Rust Programming Language 4.1）。</li><li>言語が使える層を決めるのは後者である。OS やランタイムそのものは下に GC を置く層が無く、GC の要らない言語で書くのがふつうである。教材の saba は OS 無しの環境向けに作る（<a href="../chapters/31-saba-http.html#s1" class="nw-ch">31章 場面1</a> の段階2）。</li></ul></div>
+<div class="col"><h3>言語は課題から作られた</h3>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>言語</th><th>作られた目的</th><th>選んだもの</th></tr></thead><tbody>
+<tr><td data-label="言語">C（1972 年ごろ）</td><td data-label="作られた目的">Unix を書くためのシステム記述言語</td><td data-label="選んだもの">機械に近い抽象。解放は手で書く</td></tr>
+<tr><td data-label="言語">ML（1970 年代）</td><td data-label="作られた目的">定理証明器 LCF で、証明の手順を書くメタ言語</td><td data-label="選んだもの">厳密な型と、値としての関数。GC</td></tr>
+<tr><td data-label="言語">JavaScript（1995 年）</td><td data-label="作られた目的">ブラウザのページに埋め込む言語。見た目は Java に似せる</td><td data-label="選んだもの">Scheme 風の第一級関数と、Self 風のプロトタイプ。GC</td></tr>
+<tr><td data-label="言語">Go（2009 年公開）</td><td data-label="作られた目的">ネットワークのサーバー。速いコンパイル・速い実行・書きやすさを 1 つの言語で</td><td data-label="選んだもの">GC。寿命の管理を書き手にさせない</td></tr>
+<tr><td data-label="言語">Rust（1.0 は 2015 年）</td><td data-label="作られた目的">信頼できて効率のよいシステムを作りやすくする</td><td data-label="選んだもの">所有権。GC もランタイムも要らない</td></tr>
+</tbody></table></div>
+<p>出どころは順に、Ritchie、Gordon、Eich、Go の FAQ、Rust 1.0 の発表である。</p></div>
+<div class="col"><h3>問いへの答え</h3>
+<ul><li>なぜ分かれるか: 解く課題が違い、同時には取れないものがあるからである。GC は書く手間を減らし、解放の時点を手放す。所有権はその逆を選ぶ。</li><li>どの層から分かれるか: 機械より上の、言語とコンパイラの層からである。指向性は層ではなく、型（<a href="../chapters/26-kata.html#s5" class="nw-ch">26章 場面5</a>）やデータ構造（<a href="../chapters/27-algorithm.html#s6" class="nw-ch">27章 場面6</a>）と同じく、層を横切る道具である。</li><li>言語ごとに得意な層があるか: ある。決め手は指向性より、実行時に要るものと、その層が受け付ける形式である。ブラウザは JavaScript を受け付ける（<a href="../chapters/10-browser.html#s5" class="nw-ch">10章 場面5</a>）。</li><li>課題への取り組み方が設計思想か: 出自についてはそう読める。Van Roy（2009）は、どのパラダイムも、ある種の問題にいちばん向く概念の組を支えると書き、言語は複数のパラダイムを支えるべきだとする。記事が Rust を「むしろ手続き型」と呼びつつ、関数型の道具が使えると書くのは、その例である。</li></ul></div>
+  </div>
+</section>
+
+<!-- ================= 5 前提知識 ================= -->
+<section class="scene sc-nw" id="s5" data-tab="前提" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>前提知識</h2>
+  </header>
+  <div class="nw-body a-text">
+<div class="col"><p>下の層から、依存の順に並べた。関数型言語の文法の知識は要らない。中心は、メモリをいつ誰が解放するか（2・8 行目）と、直和と網羅性の検査（5 行目）である。</p>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>概念</th><th>この記事での役割</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="概念">型の大きさと並び</td><td data-label="この記事での役割">再帰的なデータ型がそのままでは定義できない理由。値を中身で持つ言語は、型の大きさがコンパイル時に要る</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s2" class="nw-ch">26章 場面2</a> の段階1・3</td></tr>
+<tr><td data-label="概念">ポインタと、解放後の使用</td><td data-label="この記事での役割">所有と借用が防ぐ失敗。GC が防ぐ失敗でもある</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s6" class="nw-ch">26章 場面6</a> の段階1・3・5</td></tr>
+<tr><td data-label="概念">スタックとヒープ</td><td data-label="この記事での役割"><code>Box</code> はヒープに置いて番地で持つ。関数型言語の値は、ほとんどがヒープの物である</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/30-gbemu-desktop.html#s5" class="nw-ch">30章 場面5</a> の段階2</td></tr>
+<tr><td data-label="概念">連結リストとハッシュ表</td><td data-label="この記事での役割">筆者がつまずいた題材。リストは番地でつなぎ、ハッシュ表は入れるたびに中身を書き換える</td><td data-label="章・場面"><a href="../chapters/27-algorithm.html#s1" class="nw-ch">27章 場面1</a> の段階3、<a href="../chapters/27-algorithm.html#s3" class="nw-ch">27章 場面3</a> の段階1・4</td></tr>
+<tr><td data-label="概念">直積・直和と、網羅性の検査</td><td data-label="この記事での役割">代数的データ型と match の中身。関数型言語から来た道具の中心</td><td data-label="章・場面"><a href="../chapters/29-imi.html#s2" class="nw-ch">29章 場面2</a> の段階1・3・4、<a href="../chapters/28-compiler.html#s2" class="nw-ch">28章 場面2</a> の段階5、<a href="../chapters/29-imi.html#s4" class="nw-ch">29章 場面4</a> の段階2</td></tr>
+<tr><td data-label="概念">型検査と型推論</td><td data-label="この記事での役割">ML は関数の型まで推す。Rust は関数の中だけ推し、引数と戻り値は書かせる</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s2" class="nw-ch">28章 場面2</a> の段階2・4</td></tr>
+<tr><td data-label="概念">所有と借用</td><td data-label="この記事での役割">記事の中心。動かした後の使用（E0382）、Copy と Clone、参照の規則</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s2" class="nw-ch">28章 場面2</a> の段階6、<a href="../chapters/28-compiler.html#s4" class="nw-ch">28章 場面4</a> の段階4、<a href="../chapters/34-saba-css.html#s5" class="nw-ch">34章 場面5</a> の段階6</td></tr>
+<tr><td data-label="概念">ガベージコレクション</td><td data-label="この記事での役割">関数型言語の前提。届かなくなった物を実行中に探して解放する</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/26-kata.html#s6" class="nw-ch">26章 場面6</a> の段階5</td></tr>
+<tr><td data-label="概念">トレイトと導出、閉包</td><td data-label="この記事での役割">筆者がうらやむ機能と、関数を値として渡す道具。トレイトは Haskell の型クラスに当たる</td><td data-label="章・場面"><a href="../chapters/33-saba-dom.html#s1" class="nw-ch">33章 場面1</a> の段階3・6、<a href="../chapters/32-saba-tokenizer.html#s1" class="nw-ch">32章 場面1</a> の段階4、<a href="../chapters/30-gbemu-desktop.html#s5" class="nw-ch">30章 場面5</a> の段階2</td></tr>
+<tr><td data-label="概念">単相化、インライン展開、コンパイルの単位</td><td data-label="この記事での役割">ツールの節の土台。コンパイルはクレートずつ進む</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s3" class="nw-ch">28章 場面3</a> の段階6、<a href="../chapters/28-compiler.html#s4" class="nw-ch">28章 場面4</a> の段階2、<a href="../chapters/28-compiler.html#s6" class="nw-ch">28章 場面6</a> の段階1</td></tr>
+<tr><td data-label="概念">参照透過性と副作用</td><td data-label="この記事での役割">関数型が解決することの中身</td><td data-label="章・場面">教材に無い</td></tr>
+<tr><td data-label="概念">マクロ</td><td data-label="この記事での役割">構文木を、コンパイルの途中で組み替える仕組み</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/28-compiler.html#s1" class="nw-ch">28章 場面1</a> の段階4</td></tr>
+<tr><td data-label="概念">一意型・線形型・リージョン</td><td data-label="この記事での役割">筆者が手がかりにした型。The Rust Reference が挙げる出どころは、C++ の RAII とムーブ、ML Kit と Cyclone のリージョン</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/29-imi.html#s4" class="nw-ch">29章 場面4</a> の段階4</td></tr>
+</tbody></table></div></div>
+  </div>
+</section>
+
+<!-- ================= 6 予想との差と出典 ================= -->
+<section class="scene sc-nw" id="s6" data-tab="出典" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>予想との差と出典</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 2fr 3fr 2fr">
+<div class="col"><h3>読む前の予想と差</h3>
+<p>読む前の予想は、層が「OS レイヤーからアプリケーションレイヤーまで」で、解決する問題は「関数型は何を解決するのか」という問いだった。もう 1 つ、言語の指向性がなぜ、どの層から分かれるのかという問いがあった。</p>
+<ul><li>層: 記事が話しているのは、言語とコンパイラの層と、メモリの管理だった。「OS からアプリケーションまで」は、Rust が使われる範囲としては合っている。そうなる理由が、記事の中心の「GC が無い」である。使われる層と、話題の層は分けて読む。</li><li>前提: 予想には無かった。要るのは、メモリをいつ誰が解放するか（<a href="../chapters/26-kata.html#s6" class="nw-ch">26章 場面6</a> の段階5）と、直和と網羅性の検査（<a href="../chapters/29-imi.html#s2" class="nw-ch">29章 場面2</a>）である。</li><li>解決する問題: 共有された値の書き換えだった。関数型は書き換えをやめ、Rust は共有と書き換えが重なることをやめる。</li><li>指向性の問い: 「分かれ目」の場面に答えを書いた。</li></ul></div>
+<div class="col"><h3>記事の後に変わったこと</h3>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>記事（2017-04）</th><th>その後</th></tr></thead><tbody>
+<tr><td data-label="記事（2017-04）">借用の検査と数日やり合った</td><td data-label="その後">検査は 2 代目の NLL に替わった。借用の寿命を、字句の範囲ではなく制御の流れで決める。2018 edition（1.31）で入り、1.63（2022-08）で全部のコードに効く</td></tr>
+<tr><td data-label="記事（2017-04）">伝統的なマクロは不安定な機能にしか無い</td><td data-label="その後">手続きマクロは、derive 用が 1.15（2017-02）、属性と関数の形が 1.30（2018-10）で安定した</td></tr>
+<tr><td data-label="記事（2017-04）"><code>&lt;&gt;</code>、REPL が無い、関数の型を書く</td><td data-label="その後">変わっていない。REPL は、手元の toolchain 1.95.0 の構成要素に無い</td></tr>
+</tbody></table></div>
+<h4>追って確かめること</h4>
+<ul><li>ガベージコレクションは「教材に無い」前提の 1 回目。<a href="../chapters/26-kata.html#s6" class="nw-ch">26章 場面6</a> の段階5 に、GC と所有権を並べる図を足すか。</li><li>記事が触れない関数型の書き方（末尾呼び出し、閉包を返す関数、永続データ構造）が Rust でどうなるか。</li></ul></div>
+<div class="col"><h3>出典</h3>
+<ul><li>記事: <a href="https://keens.github.io/blog/2017/04/04/kansuugatapuroguramakaramitarust/" target="_blank" rel="noopener">関数型プログラマからみたRust</a>（κeen、2017-04-04）。記事が挙げる <a href="https://dr-knz.net/rust-for-functional-programmers.html" target="_blank" rel="noopener">Rust for functional programmers</a>（Raphael Poss、2014 年 7 月）</li><li>Rust: The Rust Programming Language の <a href="https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html" target="_blank" rel="noopener">4.1</a>（メモリの管理の 3 つのやり方）、<a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html" target="_blank" rel="noopener">4.2</a>（参照の規則）、<a href="https://doc.rust-lang.org/book/ch15-01-box.html" target="_blank" rel="noopener">15.1</a>（再帰的な型と Box）。The Rust Reference の <a href="https://doc.rust-lang.org/reference/influences.html" target="_blank" rel="noopener">Influences</a>。<a href="https://blog.rust-lang.org/2015/05/15/Rust-1.0/" target="_blank" rel="noopener">Announcing Rust 1.0</a>（2015-05-15）。<a href="https://github.com/rust-lang/rust/blob/master/RELEASES.md" target="_blank" rel="noopener">RELEASES.md</a>（1.15、1.30、1.31、1.63、1.100）。<a href="https://blog.rust-lang.org/2022/08/05/nll-by-default/" target="_blank" rel="noopener">NLL の告知</a>（2022-08-05）と <a href="https://rust-lang.github.io/rfcs/2094-nll.html" target="_blank" rel="noopener">RFC 2094</a></li><li>関数型とパラダイム: Backus <a href="https://dl.acm.org/doi/10.1145/359576.359579" target="_blank" rel="noopener">Can Programming Be Liberated from the von Neumann Style?</a>（1978）、Hughes <a href="https://www.cs.kent.ac.uk/people/staff/dat/miranda/whyfp90.pdf" target="_blank" rel="noopener">Why Functional Programming Matters</a>（1989）、Van Roy <a href="https://webperso.info.ucl.ac.be/~pvr/VanRoyChapter.pdf" target="_blank" rel="noopener">Programming Paradigms for Dummies</a>（2009）</li><li>言語の成り立ち: Ritchie <a href="https://www.nokia.com/bell-labs/about/dennis-m-ritchie/chist.html" target="_blank" rel="noopener">The Development of the C Language</a>、Gordon <a href="https://www.cl.cam.ac.uk/archive/mjcg/papers/HolHistory.pdf" target="_blank" rel="noopener">From LCF to HOL: a short history</a>、Eich <a href="https://brendaneich.com/2008/04/popularity/" target="_blank" rel="noopener">Popularity</a>（2008-04-03）、<a href="https://go.dev/doc/faq" target="_blank" rel="noopener">Go の FAQ</a></li></ul></div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2017-04-04","title":"関数型プログラマからみた Rust","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]} });
+</script>
+</body>
+</html>
