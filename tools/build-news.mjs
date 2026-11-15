@@ -3,10 +3,14 @@
    ニュースのページを作る (tools/build-news.mjs)
 
    news/*.md（README.md を除く）を、場面に分けたページ news/<同じ名前>.html にし、
-   一覧のページ news/index.html と、news/README.md の一覧の表（印の行の間）を作り直す。
+   一覧のページ news/index.html、月ごとのページ news/YYYY-MM.html、
+   news/README.md の一覧の表（印の行の間）を作り直す。
    ノートを足したり直したりしたら走らせる:  node tools/build-news.mjs
    news/ の .html はすべてこの道具が作る（手で置かない。元のノートが無い .html は消す）。
    ノートの書き方（どの見出しが場面になるか）は news/README.md。
+
+   一覧のページは、新着（新しい順の PER_SCENE 件）、月ごと（月のページへのリンク）、詳しいノート（日刊でないノート）。
+   日刊のノート（毎朝 1 件を自動で書くノート。行だけの印 <!-- kind: daily --> を持つ）は、新着と月のページに出る。
 
    読める Markdown は、ノートで使う分だけ: 見出し（# ## ###）、段落、箇条書き（入れ子は 1 段）、
    表、`コード`、**太字**、[リンク](URL) と [リンク][参照]・参照の定義、> 引用、``` で囲んだコード。
@@ -21,6 +25,8 @@ const NEWS = path.join(ROOT, 'news');
 const SITE = 'https://okayus.github.io/youtube-ga-mieru-made/';
 const REPO = 'https://github.com/okayus/youtube-ga-mieru-made/blob/main/news/';
 const PER_SCENE = 6;   // 一覧の 1 場面に並べるノートの数（1画面版で収まる数）
+const PER_MONTHS = 24;   // 「月ごと」の 1 場面に並べる月の数（4 列 × 6 行）
+const RE_DAILY = /^<!--\s*kind:\s*daily\s*-->\s*$/m;   // 日刊のノートの印（行だけの注釈。本文には出ない）
 
 /* ---------- 章の一覧（帯に使う） ---------- */
 const PARTS = [['I', '電気'], ['II', '計算機'], ['III', 'ソフト'], ['IV', 'つながる'], ['V', '約束ごと'], ['VI', 'YouTube'], ['VII', '横断'], ['VIII', ''], ['IX', 'ブラウザ']];
@@ -157,8 +163,9 @@ function render(bs, refs) {
 /* ---------- ノート 1 件 ---------- */
 /* # が題、## 要点 は表紙のリード、ほかの ## が場面 1 つ、場面の中の ### が 1画面版の列 1 つ */
 function readNote(file) {
-  const { blocks, refs } = parse(fs.readFileSync(path.join(NEWS, file), 'utf8'));
-  const n = { file, slug: file.replace(/\.md$/, ''), date: file.slice(0, 10), title: '', head: [], lead: [], scenes: [] };
+  const src = fs.readFileSync(path.join(NEWS, file), 'utf8');
+  const { blocks, refs } = parse(src);
+  const n = { file, slug: file.replace(/\.md$/, ''), date: file.slice(0, 10), month: file.slice(0, 7), daily: RE_DAILY.test(src), title: '', head: [], lead: [], scenes: [] };
   let into = n.head;
   for (const b of blocks) {
     if (b.t === 'h' && b.level === 1 && !n.title) n.title = b.text.replace(/\s*（\d{4}-\d\d-\d\d）$/, '');
@@ -178,7 +185,7 @@ function readNote(file) {
   n.leadFirst = first ? (first.text.match(/^.*?。/) || [first.text])[0] : '';
   n.refs = refs;
   /* ノートがリンクしている章（帯に印を付ける） */
-  const all = [...refs.values(), ...[...fs.readFileSync(path.join(NEWS, file), 'utf8').matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1])];
+  const all = [...refs.values(), ...[...src.matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1])];
   n.chapters = [...new Set(all.map((u) => /chapters\/(\d\d)-[a-z0-9-]+\.html/.exec(href(u))).filter(Boolean).map((m) => Number(m[1])))].sort((a, b) => a - b);
   return n;
 }
@@ -235,12 +242,19 @@ const STYLE = `<style>
   .nw-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.9rem; align-content: start; }
   .fit .nw-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
   .nw-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.75rem 0.95rem 0.8rem; display: grid; gap: 0.35rem; align-content: start; }
-  .nw-card .nw-date { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; color: var(--fg-dim); }
+  .nw-card .nw-date, .nw-month .nw-date { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; color: var(--fg-dim); }
   .nw-card h3 { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
   .nw-card h3 a { text-decoration: none; }
   .nw-card h3 a:hover { text-decoration: underline; text-underline-offset: 0.2em; }
-  .nw-card .nw-lead { font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-card .nw-lead, .nw-month .nw-lead { font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
   .nw-card .nw-strip { margin-top: 0.35rem; }
+
+  /* 月ごと */
+  .nw-months { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; align-content: start; }
+  .fit .nw-months { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; }
+  .nw-month { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.6rem 0.9rem 0.65rem; display: grid; gap: 0.1rem; align-content: start; color: var(--fg); text-decoration: none; }
+  .nw-month:hover { border-color: var(--fg-dim); }
+  .nw-month b { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
 </style>`;
 
 function page({ title, description, body, meta }) {
@@ -305,10 +319,11 @@ ${groups}
   </div>
 </section>`;
   }).join('\n\n');
+  const eyebrow = `ニュースから層へ ／ ${n.daily ? '日刊 ／ ' : ''}${n.date}`;
   const body = `<!-- ================= 表紙 ================= -->
 <section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
   <div class="a-main">
-    <p class="eyebrow">ニュースから層へ ／ ${esc(n.date)}</p>
+    <p class="eyebrow">${esc(eyebrow)}</p>
     <h1 id="h-s0">${inline(n.title, n.refs)}</h1>
     ${lead}
     <ul class="nw-meta">${head}</ul>
@@ -322,7 +337,7 @@ ${groups}
     </ol>
   </nav>
   <footer class="cover-foot a-foot">
-    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">読む ›</a><a href="index.html">ニュースの一覧</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">読む ›</a><a href="index.html">ニュースの一覧</a><a href="${esc(n.month)}.html">${esc(monthLabel(n.month))}</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
     <p>元のノート: <a href="${REPO}${esc(n.file)}" target="_blank" rel="noopener">news/${esc(n.file)}</a>（このページは <code>node tools/build-news.mjs</code> で作る）</p>
   </footer>
 </section>
@@ -332,56 +347,104 @@ ${scenes}`;
     title: `${n.title} — ニュースから層へ`,
     description: plain(n.leadFirst),
     body,
-    meta: { eyebrow: `ニュースから層へ ／ ${n.date}`, title: n.title, home: 'index.html', actions: [{ href: 'index.html', label: 'ニュースの一覧' }] }
+    meta: { eyebrow, title: n.title, home: 'index.html', actions: [{ href: 'index.html', label: 'ニュースの一覧' }] }
   });
 }
 
-function indexPage(notes) {
-  const chunks = [];
-  for (let i = 0; i < notes.length; i += PER_SCENE) chunks.push(notes.slice(i, i + PER_SCENE));
-  if (!chunks.length) chunks.push([]);
-  const card = (n) => `<article class="nw-card">
-  <p class="nw-date">${esc(n.date)}</p>
+/* ---------- 一覧のカードと、カードを並べた場面 ---------- */
+const monthLabel = (m) => `${m.slice(0, 4)} 年 ${Number(m.slice(5))} 月`;
+const card = (n) => `<article class="nw-card">
+  <p class="nw-date">${esc(n.date)}${n.daily ? ' ／ 日刊' : ''}</p>
   <h3><a href="${esc(n.slug)}.html">${inline(n.title, n.refs)}</a></h3>
   <p class="nw-lead">${inline(n.leadFirst, n.refs)}</p>
   ${strip(n.chapters, 'リンクしている章')}
 </article>`;
-  const scenes = chunks.map((ns, i) => {
-    const k = i + 1;
-    const range = !ns.length ? 'まだ無い' : ns[0].date === ns[ns.length - 1].date ? ns[0].date : `${ns[ns.length - 1].date} 〜 ${ns[0].date}`;
-    return `<!-- ================= ${k} 一覧 ================= -->
-<section class="scene sc-nwlist" id="s${k}" data-tab="${chunks.length > 1 ? `一覧 ${k}` : '一覧'}" aria-labelledby="h-s${k}">
+const span = (ns) => (!ns.length ? 'まだ無い' : ns[0].date === ns[ns.length - 1].date ? ns[0].date : `${ns[ns.length - 1].date} 〜 ${ns[0].date}`);
+const tocItem = (s) => `<li><a href="#s${s.k}" data-go="${s.k}"><span class="n">${s.k}</span>${esc(s.label)}</a><p>${esc(s.note)}</p></li>`;
+
+/* ノート（新しい順）を PER_SCENE 件ずつ場面にする。k0 は最初の場面の番号。2 つ以上に分かれたら、名前に番号を付ける */
+function cardScenes(notes, k0, name) {
+  const chunks = [];
+  for (let i = 0; i < notes.length; i += PER_SCENE) chunks.push(notes.slice(i, i + PER_SCENE));
+  if (!chunks.length) chunks.push([]);
+  return chunks.map((ns, i) => {
+    const k = k0 + i;
+    const label = name + (chunks.length > 1 ? ` ${i + 1}` : '');
+    return {
+      k, label, note: ns.length ? `${span(ns)} の ${ns.length} 件` : 'まだ無い',
+      html: `<!-- ================= ${k} ${esc(label)} ================= -->
+<section class="scene sc-nwlist" id="s${k}" data-tab="${esc(label)}" aria-labelledby="h-s${k}">
   <header class="sh a-sh">
-    <h2 id="h-s${k}"><span class="n">${k}</span>一覧 — 新しい順</h2>
-    <p class="sh-meta"><span class="chip">${esc(range)}</span><span class="chip">塗りつぶした番号 = ノートがリンクしている章</span></p>
+    <h2 id="h-s${k}"><span class="n">${k}</span>${esc(name)} — 新しい順</h2>
+    <p class="sh-meta"><span class="chip">${esc(span(ns))}</span><span class="chip">塗りつぶした番号 = ノートがリンクしている章</span></p>
   </header>
   <div class="nw-cards a-tbl">
 ${ns.map(card).join('\n')}
   </div>
-</section>`;
-  }).join('\n\n');
-  const toc = chunks.map((ns, i) => `<li><a href="#s${i + 1}" data-go="${i + 1}"><span class="n">${i + 1}</span>一覧${chunks.length > 1 ? ` ${i + 1}` : ''}</a><p>${ns.length ? `${esc(ns[ns.length - 1].date)} 〜 ${esc(ns[0].date)} の ${ns.length} 件` : 'まだ無い'}</p></li>`).join('\n      ');
+</section>`
+    };
+  });
+}
+
+/* ニュースが出た月ごとにまとめる。新しい月から */
+function byMonth(notes) {
+  const map = new Map();
+  for (const n of notes) { if (!map.has(n.month)) map.set(n.month, []); map.get(n.month).push(n); }
+  return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([m, ns]) => ({ m, notes: ns, daily: ns.filter((n) => n.daily).length }));
+}
+const monthCount = (x) => [x.daily ? `日刊 ${x.daily} 件` : '', x.notes.length - x.daily ? `詳しいノート ${x.notes.length - x.daily} 件` : ''].filter(Boolean).join('・');
+
+/* 月のページへのリンクを PER_MONTHS 個ずつ場面にする */
+function monthScenes(ms, k0) {
+  const chunks = [];
+  for (let i = 0; i < ms.length; i += PER_MONTHS) chunks.push(ms.slice(i, i + PER_MONTHS));
+  if (!chunks.length) chunks.push([]);
+  return chunks.map((xs, i) => {
+    const k = k0 + i;
+    const label = '月ごと' + (chunks.length > 1 ? ` ${i + 1}` : '');
+    const range = !xs.length ? 'まだ無い' : xs.length === 1 ? xs[0].m : `${xs[xs.length - 1].m} 〜 ${xs[0].m}`;
+    return {
+      k, label, note: xs.length ? `${range} の ${xs.length} か月分` : 'まだ無い',
+      html: `<!-- ================= ${k} ${esc(label)} ================= -->
+<section class="scene sc-nwlist" id="s${k}" data-tab="${esc(label)}" aria-labelledby="h-s${k}">
+  <header class="sh a-sh">
+    <h2 id="h-s${k}"><span class="n">${k}</span>月ごと — ニュースが出た月</h2>
+    <p class="sh-meta"><span class="chip">${esc(range)}</span><span class="chip">日刊 = 毎朝 1 件を自動で選んで書いたノート</span></p>
+  </header>
+  <div class="nw-months a-tbl">
+${xs.map((x) => `<a class="nw-month" href="${esc(x.m)}.html"><span class="nw-date">${esc(x.m)}</span><b>${x.notes.length} 件</b><span class="nw-lead">${esc(monthCount(x))}</span></a>`).join('\n')}
+  </div>
+</section>`
+    };
+  });
+}
+
+function indexPage(notes, ms) {
+  const fresh = cardScenes(notes.slice(0, PER_SCENE), 1, '新着');
+  const mon = monthScenes(ms, 1 + fresh.length);
+  const deep = cardScenes(notes.filter((n) => !n.daily), 1 + fresh.length + mon.length, '詳しいノート');
+  const all = [...fresh, ...mon, ...deep];
   const body = `<!-- ================= 表紙 ================= -->
 <section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
   <div class="a-main">
     <p class="eyebrow">ニュースから層へ ／ ${notes.length} 件</p>
     <h1 id="h-s0">ニュースから層へ</h1>
-    <p class="standfirst">tech ニュースを 1 件ずつ調べ、この教材のどの層の話かを、章と場面へのリンクで示したノート。各ノートは、層ごとに何が起きるかを表にする。脆弱性と事故のノートは確かなことと確かでないことを、更新のノートは解決することと前提知識を書き分ける。</p>
-    <p class="keys fit-only">${KEYS}一覧の帯は全 36 章を部ごとに並べたもので、塗りつぶした番号がそのノートのリンクしている章。</p>
+    <p class="standfirst">tech ニュースを 1 件ずつ調べ、この教材のどの層の話かを、章と場面へのリンクで示したノート。各ノートは、層ごとに何が起きるかを表にする。脆弱性と事故のノートは確かなことと確かでないことを、更新のノートは解決することと前提知識を書き分ける。日刊のノートは、毎朝 1 件を自動で選んで書いた短いノートで、人は確かめていない。</p>
+    <p class="keys fit-only">${KEYS}一覧の帯は全 ${chapters.length} 章を部ごとに並べたもので、塗りつぶした番号がそのノートのリンクしている章。</p>
   </div>
   <nav class="toc a-toc" aria-labelledby="h-toc">
     <h2 id="h-toc">構成</h2>
     <ol>
-      ${toc}
+      ${all.map(tocItem).join('\n      ')}
     </ol>
   </nav>
   <footer class="cover-foot a-foot">
-    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">一覧 ›</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">新着 ›</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
     <p>ノートの元は news/ の Markdown（書き方は <a href="${REPO}README.md" target="_blank" rel="noopener">news/README.md</a>）。このページは <code>node tools/build-news.mjs</code> で作る。</p>
   </footer>
 </section>
 
-${scenes}`;
+${all.map((s) => s.html).join('\n\n')}`;
   return page({
     title: 'ニュースから層へ — YouTubeが見えるまで',
     description: 'tech ニュースを 1 件ずつ調べ、教材「YouTubeが見えるまで」のどの層（章・場面）の話かに結びつけたノートの一覧。',
@@ -390,28 +453,73 @@ ${scenes}`;
   });
 }
 
+/* 月のページ。x はその月、older・newer は前後の月（ノートのある月。無ければ undefined） */
+function monthPage(x, older, newer) {
+  const label = monthLabel(x.m);
+  const scenes = cardScenes(x.notes, 1, '一覧');
+  const near = (y, word) => (y ? `<a href="${esc(y.m)}.html"><small>${word}</small> ${esc(monthLabel(y.m))}</a>` : '');
+  const body = `<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">ニュースから層へ ／ ${esc(x.m)} ／ ${x.notes.length} 件</p>
+    <h1 id="h-s0">${esc(label)}のニュース</h1>
+    <p class="standfirst">${esc(label)}に出たニュースのノート ${x.notes.length} 件（${esc(monthCount(x))}）を、新しい順に並べる。日付はニュースが出た日で、ノートを書いた日ではない。</p>
+    <p class="keys fit-only">${KEYS}一覧の帯は全 ${chapters.length} 章を部ごとに並べたもので、塗りつぶした番号がそのノートのリンクしている章。</p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      ${scenes.map(tocItem).join('\n      ')}
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">一覧 ›</a>${near(newer, '次の月')}${near(older, '前の月')}<a href="index.html">ニュースの一覧</a><a href="../index.html">目次</a></nav>
+    <p>ノートの元は news/ の Markdown（書き方は <a href="${REPO}README.md" target="_blank" rel="noopener">news/README.md</a>）。このページは <code>node tools/build-news.mjs</code> で作る。</p>
+  </footer>
+</section>
+
+${scenes.map((s) => s.html).join('\n\n')}`;
+  return page({
+    title: `${label}のニュース — ニュースから層へ`,
+    description: `${label}に出た tech ニュースを、教材「YouTubeが見えるまで」のどの層（章・場面）の話かに結びつけたノート ${x.notes.length} 件の一覧。`,
+    body,
+    meta: { eyebrow: `ニュースから層へ ／ ${x.m}`, title: `${label}のニュース`, home: 'index.html', actions: [{ href: 'index.html', label: 'ニュースの一覧' }] }
+  });
+}
+
 /* ---------- README の一覧の表（印の行の間を作り直す） ---------- */
-function updateReadme(notes) {
+/* news-list は詳しいノート（日刊でないノート）、news-months は月のページ */
+function updateReadme(notes, ms) {
   const file = path.join(NEWS, 'README.md');
-  const src = fs.readFileSync(file, 'utf8');
-  const A = '<!-- news-list:start -->', B = '<!-- news-list:end -->';
-  if (!src.includes(A) || !src.includes(B)) { console.warn('news/README.md に一覧の印が無いので、表は書かない'); return; }
-  const rows = notes.map((n) => `| ${n.date} | [${n.title}](${n.file}) | ${n.chapters.join('・') || '—'} |`);
-  const table = ['| ニュースの日付 | ノート | リンクしている章 |', '|---|---|---|', ...rows].join('\n');
-  fs.writeFileSync(file, src.replace(new RegExp(`${A}[\\s\\S]*?${B}`), `${A}\n${table}\n${B}`));
+  let src = fs.readFileSync(file, 'utf8');
+  const put = (name, lines) => {
+    const A = `<!-- ${name}:start -->`, B = `<!-- ${name}:end -->`;
+    if (!src.includes(A) || !src.includes(B)) { console.warn(`news/README.md に ${name} の印が無いので、その表は書かない`); return; }
+    src = src.replace(new RegExp(`${A}[\\s\\S]*?${B}`), () => `${A}\n${lines.join('\n')}\n${B}`);
+  };
+  put('news-list', ['| ニュースの日付 | ノート | リンクしている章 |', '|---|---|---|',
+    ...notes.filter((n) => !n.daily).map((n) => `| ${n.date} | [${n.title}](${n.file}) | ${n.chapters.join('・') || '—'} |`)]);
+  put('news-months', ['| 月 | ノート | うち日刊 |', '|---|---|---|',
+    ...ms.map((x) => `| [${x.m}](${SITE}news/${x.m}.html) | ${x.notes.length} 件 | ${x.daily} 件 |`)]);
+  fs.writeFileSync(file, src);
 }
 
 /* ---------- 実行 ---------- */
 const notes = fs.readdirSync(NEWS).filter((f) => /^\d{4}-\d\d-\d\d-[a-z0-9-]+\.md$/.test(f)).sort().reverse().map(readNote);
-const wanted = new Set(notes.map((n) => n.slug + '.html').concat('index.html'));
+const ms = byMonth(notes);
+const wanted = new Set(notes.map((n) => n.slug + '.html').concat(ms.map((x) => x.m + '.html'), 'index.html'));
 for (const f of fs.readdirSync(NEWS)) {
   // ノートを消したり名前を変えたりしたときに残る古いページを消す
   if (f.endsWith('.html') && !wanted.has(f)) { fs.unlinkSync(path.join(NEWS, f)); console.log(`消した: news/${f}`); }
 }
 for (const n of notes) {
   fs.writeFileSync(path.join(NEWS, n.slug + '.html'), notePage(n));
-  console.log(`news/${n.slug}.html: ${n.title} — 場面 ${n.scenes.length}、章 ${n.chapters.join('・') || 'なし'}`);
+  console.log(`news/${n.slug}.html: ${n.title} — ${n.daily ? '日刊、' : ''}場面 ${n.scenes.length}、章 ${n.chapters.join('・') || 'なし'}`);
 }
-fs.writeFileSync(path.join(NEWS, 'index.html'), indexPage(notes));
-updateReadme(notes);
-console.log(`→ news/index.html（${notes.length} 件）、news/README.md の一覧`);
+ms.forEach((x, i) => {   // ms は新しい月から並ぶ。前の月は i + 1、次の月は i - 1
+  fs.writeFileSync(path.join(NEWS, x.m + '.html'), monthPage(x, ms[i + 1], ms[i - 1]));
+  console.log(`news/${x.m}.html: ${x.notes.length} 件（${monthCount(x)}）`);
+});
+fs.writeFileSync(path.join(NEWS, 'index.html'), indexPage(notes, ms));
+updateReadme(notes, ms);
+console.log(`→ news/index.html（${notes.length} 件、${ms.length} か月分）、news/README.md の一覧`);

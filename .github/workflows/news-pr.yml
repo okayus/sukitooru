@@ -1,0 +1,105 @@
+name: 日刊のノートの検査とマージ
+
+# 毎朝の自動の実行（docs/daily-news.md）が出す claude/news-* のプルリクエストを検査し、通ればマージして公開する。
+#
+# pull_request_target で動かすので、このファイルも tools/ も main の版が使われる。
+# プルリクエストの側のファイルは実行しない（データとして読むだけ）。検査の中身は tools/news-pr-check.mjs の頭の説明。
+# 検査が落ちたプルリクエストは開いたまま残る。直すか閉じるかは持ち主が決める。
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: news-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: 検査
+    # 同じリポジトリの claude/news-* から、持ち主が出したプルリクエストだけ（fork からのものでは動かさない）
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == github.repository_owner &&
+      startsWith(github.event.pull_request.head.ref, 'claude/news-')
+    runs-on: ubuntu-24.04   # Node.js 22 と Google Chrome が入っている（verify.mjs が使う）
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      head: ${{ steps.merge.outputs.head }}
+    steps:
+      - name: main を取り出す（検査の道具）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - name: main を取り出す（作業ツリー）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: work
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: プルリクエストの先頭を取り込む（コミットしない）
+        id: merge
+        working-directory: work
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags origin "refs/pull/${PR}/head"
+          test "$(git rev-parse FETCH_HEAD)" = "$HEAD_SHA"
+          git -c user.name=news-pr -c user.email=news-pr@example.invalid merge --no-commit --no-ff FETCH_HEAD
+          echo "head=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: 変わるファイルとノートの中身を検査する
+        id: check
+        run: node base/tools/news-pr-check.mjs work
+
+      # ここから先は作業ツリーの tools/ を使う。上の検査が、プルリクエストが news/ の外を変えていないことを確かめている
+      - name: ページを作り直し、プルリクエストの中身と一致するか確かめる
+        working-directory: work
+        run: |
+          node tools/build-news.mjs
+          if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+            echo "::error::news/ のページか README.md が tools/build-news.mjs の出力と一致しない"
+            git status --short
+            git diff --stat
+            exit 1
+          fi
+
+      - name: ページを検証する（はみ出し・リンク切れ・JS のエラー）
+        working-directory: work
+        env:
+          NOTE: ${{ steps.check.outputs.note }}
+          MONTH: ${{ steps.check.outputs.month }}
+        run: node tools/verify.mjs --sizes all news/index.html "$MONTH" "$NOTE"
+
+  merge:
+    name: マージ
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      pages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ needs.check.outputs.head }}
+    steps:
+      - name: 検査した先頭のままならマージする
+        run: gh pr merge "$PR" --repo "$REPO" --squash --delete-branch --match-head-commit "$HEAD_SHA"
+
+      # GITHUB_TOKEN による push は、ブランチから公開する GitHub Pages のビルドを起動しないことがある。明示して頼む
+      - name: GitHub Pages を作り直させる
+        run: gh api --method POST "repos/${REPO}/pages/builds"

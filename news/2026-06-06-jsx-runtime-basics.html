@@ -54,12 +54,19 @@
   .nw-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.9rem; align-content: start; }
   .fit .nw-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
   .nw-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.75rem 0.95rem 0.8rem; display: grid; gap: 0.35rem; align-content: start; }
-  .nw-card .nw-date { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; color: var(--fg-dim); }
+  .nw-card .nw-date, .nw-month .nw-date { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; color: var(--fg-dim); }
   .nw-card h3 { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
   .nw-card h3 a { text-decoration: none; }
   .nw-card h3 a:hover { text-decoration: underline; text-underline-offset: 0.2em; }
-  .nw-card .nw-lead { font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-card .nw-lead, .nw-month .nw-lead { font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
   .nw-card .nw-strip { margin-top: 0.35rem; }
+
+  /* 月ごと */
+  .nw-months { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; align-content: start; }
+  .fit .nw-months { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; }
+  .nw-month { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.6rem 0.9rem 0.65rem; display: grid; gap: 0.1rem; align-content: start; color: var(--fg); text-decoration: none; }
+  .nw-month:hover { border-color: var(--fg-dim); }
+  .nw-month b { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -88,7 +95,7 @@
     </ol>
   </nav>
   <footer class="cover-foot a-foot">
-    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">読む ›</a><a href="index.html">ニュースの一覧</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">読む ›</a><a href="index.html">ニュースの一覧</a><a href="2026-06.html">2026 年 6 月</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
     <p>元のノート: <a href="https://github.com/okayus/youtube-ga-mieru-made/blob/main/news/2026-06-06-jsx-runtime-basics.md" target="_blank" rel="noopener">news/2026-06-06-jsx-runtime-basics.md</a>（このページは <code>node tools/build-news.mjs</code> で作る）</p>
   </footer>
 </section>

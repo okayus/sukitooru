@@ -1,5 +1,12 @@
 # 引き継ぎ（2026-10-19）
 
+> **途中（2026-11-15）**: 「トレンドの技術ニュースを毎日 1 つ解説したページを作成して欲しい。claude の 100$ プランと chatGPT 30$ プランには契約してるので、どういう定時タスクでどういうワークフローにするかを調査して」の依頼で、
+> 日刊のノートの仕組みを作った。持ち主の決定は「マージは自動、日刊は予想なし、話題は Web プラットフォーム・言語・OS・ネットワーク・セキュリティ（AI の製品は外す）」。仕組み・理由・確かめたこと・確かめていないことは [log/2026-11-15-daily-news.md](log/2026-11-15-daily-news.md)、毎朝の実行の手順は [daily-news.md](daily-news.md)。
+> - 作ったもの: `tools/news-candidates.mjs`（候補集め）、`tools/news-pr-check.mjs`（プルリクエストの検査）、`.github/workflows/news-pr.yml`（検査とマージ）、`AGENTS.md`（Codex のレビューの決まり）、`docs/daily-news.md`、`news/README.md` の「日刊の型」、1 件目の日刊のノート（`news/2026-11-08-dtl-nand-chip-reverse-engineering.md`。型の手本）。
+> - 変えたもの: `tools/build-news.mjs`（一覧を、新着・月ごと・詳しいノートに。月のページ `news/YYYY-MM.html`。日刊の印 `<!-- kind: daily -->`）。ニュースの全ページを作り直した。
+> - 手順書は、持ち主の empirical-prompt-tuning スキルで評価した（白紙のサブエージェントに実行させる）。結果は log に書いた。
+> - **状態: main に push した。** 残り: (1) クラウドの scheduled task を登録する（`/schedule`。毎朝 5:07、Fable 5.2、コネクタなし。持ち主が 2026-11-15 に承認）。(2) 持ち主が claude.ai でネットワークが Full の環境を作って task に付ける（既定の環境は Limited で、候補集めの 3 か所に届かない）。(3) 持ち主が chatgpt.com/settings/code-review で Codex の自動レビューを有効にする。(4) 最初の実行で、log の「確かめていないこと」を見る。
+
 > **途中（2026-11-14）**: 「Web プラットフォームや言語のアップデートなどの技術ニュースを、どのレイヤーの話か、どんな前提知識があれば何を解決するものか分かるようになりたい。そのためにこのリポジトリを活用したい」の依頼で、
 > `news/` を脆弱性の調査から、更新のニュースを分類する練習へ広げる案を出し（会話）、3 件書いた。3 件とも公開した（コミット `0be48c8`、`135a392`、3 件目はその次のコミット）。次は、持ち主から 4 件目の URL と予想を受け取る。持ち主は、URL と予想（問いを含む）を貼る形で続けている。
 > - 3 件目: `news/2026-06-06-jsx-runtime-basics.md`（syumai「作って学ぶ、JSX (TSX) ランタイムの基本」、Speaker Deck、56 枚。章 10・22・26〜30・33・36。中心は第28章 場面1 と第26章 場面4 の段階6）。持ち主の予想は「ブラウザレイヤーの話。その中のどの層かは分からない」で、答えは「ブラウザの層ではなく、届く前の変換（作る側）と、JavaScript エンジンの上のライブラリ」。スライドの本文は Speaker Deck の Transcript、コードはスライドの PDF の画像とサンプル（syumai/minimum-jsx、737a3e4、MIT）で読んだ。手元で確かめたこと: Node.js 24.22.1 は JSX を `Unexpected token '<'` で拒む。Bun 1.3.14 の変換（classic と automatic）。変換結果を最小の `h` と Node.js で実行。Deno 2.8.0 の TypeScript 6.0.3 で TS7026・TS2786 と、`JSX.Element` が無いと式が any になること。サンプルそのもの（tsc・Oxc）は走らせていない。tsc と esbuild はこの PC に入っていない（Bun と Deno はある）。検証は `--sizes all` で ✓（表紙の余りは 1280×688 で 44px）。外部リンク 15 本は 200。ノートが 7 件になり、一覧は 2 場面になった。3 件目で「教材に無い」とした前提: トランスパイラ、モジュール（import と export）、関数を値として渡す（JavaScript）、TypeScript の名前空間と型の宣言、テンプレートエンジン（1・2 件目との重なりは無い）。

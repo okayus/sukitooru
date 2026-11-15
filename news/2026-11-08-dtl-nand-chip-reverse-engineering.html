@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<!-- このページは tools/build-news.mjs が news/ の Markdown から作る（手で直さない） -->
+<title>1960 年代の論理 IC「Signetics ST680A」の解析 — ニュースから層へ</title>
+<meta name="description" content="論理ゲート（第4章）を、MOSFET より前の部品であるダイオードとバイポーラトランジスタで作った IC の話である。">
+<meta property="og:title" content="1960 年代の論理 IC「Signetics ST680A」の解析 — ニュースから層へ">
+<meta property="og:description" content="論理ゲート（第4章）を、MOSFET より前の部品であるダイオードとバイポーラトランジスタで作った IC の話である。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
+  .sc-nw { grid-template-areas: "sh" "text"; }
+  .fit .sc-nw { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh" "text"; }
+  .nw-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.15rem; align-content: start; }
+  .fit .nw-body { grid-template-columns: var(--cols, minmax(0, 1fr)); column-gap: 40px; }
+  .fit .nw-body.nw-narrow { max-width: 60em; }
+  .nw-body h3 { font-family: var(--display); font-weight: 700; font-size: 1.05rem; line-height: 1.5; }
+  .nw-body h4 { font-weight: 600; font-size: 0.95rem; }
+  .nw-body ul, .nw-body ol { padding-left: 1.3em; display: grid; gap: 0.35rem; }
+  .nw-body li > ul, .nw-body li > ol { margin-top: 0.3rem; }
+  .nw-body blockquote { border-left: 3px solid var(--rule); padding-left: 0.9rem; color: var(--fg-mid); }
+  .nw-body pre { background: var(--inset); border-radius: 4px; padding: 0.6rem 0.8rem; overflow-x: auto; font-size: 0.8rem; }
+  .nw-tbl b { font-weight: 600; }
+  table.nw-tbl td[data-label]::before { border-left: 0; padding-left: 0; }   /* 縦読み版の見出しの色見本（章の表で使う）は出さない */
+  a.nw-ch { white-space: nowrap; text-decoration: underline dotted; text-decoration-color: var(--fg-dim); text-underline-offset: 0.22em; }
+  a.nw-ch:hover { text-decoration-style: solid; text-decoration-color: var(--fg); }
+  .nw-meta { list-style: none; padding: 0; margin-top: 1rem; display: grid; gap: 0.2rem; font-size: 0.84rem; line-height: 1.7; color: var(--fg-mid); }
+  .fit .nw-meta { margin-top: 18px; }
+  .nw-meta li { padding-left: 1em; text-indent: -1em; }
+  .nw-meta li::before { content: "・"; }
+
+  /* 全章の帯 */
+  .nw-strip { display: flex; flex-wrap: wrap; gap: 6px 6px; margin-top: 1rem; }
+  .nw-grp { flex: var(--n) 1 calc(var(--n) * 17px); min-width: 0; display: grid; gap: 2px; }
+  .nw-part { font-size: 0.68rem; line-height: 1.5; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 2px solid var(--rule); padding-left: 3px; }
+  .nw-cells { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; }
+  .nw-cell { font-family: var(--mono); font-size: 0.68rem; line-height: 1.75rem; text-align: center; border-radius: 3px; background: var(--inset); color: var(--fg-dim); text-decoration: none; }
+  a.nw-cell.on { background: var(--fg); color: var(--surface); font-weight: 600; }
+  a.nw-cell.on:hover { outline: 2px solid var(--fg-dim); outline-offset: 1px; }
+
+  /* 一覧 */
+  .sc-nwlist { grid-template-areas: "sh" "tbl"; }
+  .fit .sc-nwlist { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh" "tbl"; }
+  .nw-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.9rem; align-content: start; }
+  .fit .nw-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
+  .nw-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.75rem 0.95rem 0.8rem; display: grid; gap: 0.35rem; align-content: start; }
+  .nw-card .nw-date, .nw-month .nw-date { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; color: var(--fg-dim); }
+  .nw-card h3 { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
+  .nw-card h3 a { text-decoration: none; }
+  .nw-card h3 a:hover { text-decoration: underline; text-underline-offset: 0.2em; }
+  .nw-card .nw-lead, .nw-month .nw-lead { font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-card .nw-strip { margin-top: 0.35rem; }
+
+  /* 月ごと */
+  .nw-months { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; align-content: start; }
+  .fit .nw-months { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; }
+  .nw-month { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.6rem 0.9rem 0.65rem; display: grid; gap: 0.1rem; align-content: start; color: var(--fg); text-decoration: none; }
+  .nw-month:hover { border-color: var(--fg-dim); }
+  .nw-month b { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">ニュースから層へ ／ 日刊 ／ 2026-11-08</p>
+    <h1 id="h-s0">1960 年代の論理 IC「Signetics ST680A」の解析</h1>
+    <p class="standfirst">論理ゲート（第4章）を、MOSFET より前の部品であるダイオードとバイポーラトランジスタで作った IC の話である。Ken Shirriff が、1965 年に出た Signetics 600 シリーズの ST680A を開封して顕微鏡で読み、DTL（ダイオード・トランジスタ論理）の NAND が 4 つ入ったチップだと突き止めた。同じシリコンに金属の配線層だけを替えて、3 つの品種を作り分けていたことも分かった。教材の CMOS の NAND と比べると、出力が 0 の間も抵抗に電流が流れ続ける点が違う。</p>
+    <ul class="nw-meta"><li>出典: <a href="https://www.righto.com/2026/11/signetics-st680a-dtl-nand.html" target="_blank" rel="noopener">Reverse engineering a vintage diode-transistor logic chip</a>（Ken Shirriff、2026-11-08）。解析した本人の記事。</li><li>話題: <a href="https://news.ycombinator.com/item?id=50416011" target="_blank" rel="noopener">Hacker News</a> の front page（80 点、2026-11-15 の朝の時点）。</li><li>調べた時点: 2026-11-15。日刊のノート（自動で選んで書いた）。人は確かめていない。実行して確かめたことは無い。</li></ul>
+    <div class="nw-strip" role="group" aria-label="このノートがリンクしている章: 第1章 電子と電流、第2章 半導体とダイオード、第3章 トランジスタ、第4章 論理ゲートと2進数"><div class="nw-grp" style="--n:3"><span class="nw-part">I 電気</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/01-denshi.html" title="第1章 電子と電流">1</a><a class="nw-cell on" href="../chapters/02-handoutai.html" title="第2章 半導体とダイオード">2</a><a class="nw-cell on" href="../chapters/03-transistor.html" title="第3章 トランジスタ">3</a></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">II 計算機</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/04-ronri.html" title="第4章 論理ゲートと2進数">4</a><span class="nw-cell" title="第5章 記憶">5</span><span class="nw-cell" title="第6章 CPU">6</span><span class="nw-cell" title="第7章 入出力と周辺機器">7</span><span class="nw-cell" title="第8章 画面と音">8</span></div></div><div class="nw-grp" style="--n:2"><span class="nw-part">III ソフト</span><div class="nw-cells"><span class="nw-cell" title="第9章 OS">9</span><span class="nw-cell" title="第10章 ブラウザ">10</span></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IV つながる</span><div class="nw-cells"><span class="nw-cell" title="第11章 ネットワークの層">11</span><span class="nw-cell" title="第12章 Wi-Fi">12</span><span class="nw-cell" title="第13章 Ethernet とスイッチ">13</span><span class="nw-cell" title="第14章 ホームルーター">14</span><span class="nw-cell" title="第15章 光回線">15</span><span class="nw-cell" title="第16章 インターネットの骨格">16</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">V 約束ごと</span><div class="nw-cells"><span class="nw-cell" title="第17章 DNS">17</span><span class="nw-cell" title="第18章 IP">18</span><span class="nw-cell" title="第19章 TCP・UDP・QUIC">19</span><span class="nw-cell" title="第20章 TLS">20</span><span class="nw-cell" title="第21章 HTTP">21</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VI YouTube</span><div class="nw-cells"><span class="nw-cell" title="第22章 YouTube のサーバー側">22</span><span class="nw-cell" title="第23章 動画の圧縮">23</span><span class="nw-cell" title="第24章 ストリーミングと再生">24</span><span class="nw-cell" title="第25章 通しで見る">25</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VII 横断</span><div class="nw-cells"><span class="nw-cell" title="第26章 型とメモリ">26</span><span class="nw-cell" title="第27章 データ構造とアルゴリズム">27</span><span class="nw-cell" title="第28章 コンパイラ">28</span><span class="nw-cell" title="第29章 型で意味を表す">29</span></div></div><div class="nw-grp" style="--n:1"><span class="nw-part">VIII </span><div class="nw-cells"><span class="nw-cell" title="第30章 エミュレータの外側">30</span></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IX ブラウザ</span><div class="nw-cells"><span class="nw-cell" title="第31章 URL と HTTP">31</span><span class="nw-cell" title="第32章 HTML トークナイザ">32</span><span class="nw-cell" title="第33章 HTML パーサと DOM">33</span><span class="nw-cell" title="第34章 CSS とスタイル">34</span><span class="nw-cell" title="第35章 レイアウトと描画">35</span><span class="nw-cell" title="第36章 JavaScript エンジン">36</span></div></div></div>
+    <p class="keys fit-only">上のタブで場面を選ぶ。<kbd>↓</kbd><kbd>↑</kbd>（または右上の <kbd>‹</kbd><kbd>›</kbd>）で場面を移る。帯の塗りつぶした番号は、このノートがリンクしている章。</p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>どの層の話か</a></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>中身</a></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>前提と出典</a></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">読む ›</a><a href="index.html">ニュースの一覧</a><a href="2026-11.html">2026 年 11 月</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
+    <p>元のノート: <a href="https://github.com/okayus/youtube-ga-mieru-made/blob/main/news/2026-11-08-dtl-nand-chip-reverse-engineering.md" target="_blank" rel="noopener">news/2026-11-08-dtl-nand-chip-reverse-engineering.md</a>（このページは <code>node tools/build-news.mjs</code> で作る）</p>
+  </footer>
+</section>
+
+<!-- ================= 1 どの層の話か ================= -->
+<section class="scene sc-nw" id="s1" data-tab="層" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>どの層の話か</h2>
+  </header>
+  <div class="nw-body a-text">
+<div class="col"><p>種類は解説で、新しい機能や事故の話ではない。ソフトウェアは出てこない。ビルド時と実行時に当たるのは、チップを作るとき（配線層の作り分け）と、ゲートが動くとき（電流の流れ方）である。表は下の層から並べた。</p>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>この記事で起きること</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="層">不純物の領域</td><td data-label="この記事で起きること">n 型（リンやヒ素）と p 型（ホウ素やガリウム）の領域が、顕微鏡では赤と緑に見分けられる。抵抗は n 型の囲いの中の細長い p 型で、囲いを電源につなぎ、pn 接合で抵抗どうしを切り離す</td><td data-label="章・場面"><a href="../chapters/02-handoutai.html#s2" class="nw-ch">2章 場面2</a>、<a href="../chapters/02-handoutai.html#s3" class="nw-ch">2章 場面3</a>、<a href="../chapters/02-handoutai.html#s4" class="nw-ch">2章 場面4</a></td></tr>
+<tr><td data-label="層">抵抗</td><td data-label="この記事で起きること">16 個ある。細長いシリコンを蛇行させ、小さい面積に長い抵抗を収める</td><td data-label="章・場面"><a href="../chapters/01-denshi.html#s3" class="nw-ch">1章 場面3</a></td></tr>
+<tr><td data-label="層">ダイオード</td><td data-label="この記事で起きること">入力ごとに 1 個あり、片方の入力が他方に影響するのを止める。段の間の 1 個は、1 段目のトランジスタがオンになる電圧を上げて、雑音に強くする</td><td data-label="章・場面"><a href="../chapters/02-handoutai.html#s5" class="nw-ch">2章 場面5</a>、<a href="../chapters/04-ronri.html#s1" class="nw-ch">4章 場面1</a></td></tr>
+<tr><td data-label="層">トランジスタ</td><td data-label="この記事で起きること">バイポーラの NPN。ベースの電流で、コレクタからエミッタへの電流を制御する。電圧で通り道を開け閉めする MOSFET とは作りが違う</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/03-transistor.html#s1" class="nw-ch">3章 場面1</a>、<a href="../chapters/03-transistor.html#s3" class="nw-ch">3章 場面3</a></td></tr>
+<tr><td data-label="層">論理ゲート</td><td data-label="この記事で起きること">入力が両方 1 のときだけ出力が 0 になる NAND。出力を 1 にするのは抵抗で、出力が 0 の間も電流が流れ続ける</td><td data-label="章・場面"><a href="../chapters/04-ronri.html#s2" class="nw-ch">4章 場面2</a>、<a href="../chapters/03-transistor.html#s4" class="nw-ch">3章 場面4</a></td></tr>
+<tr><td data-label="層">製造</td><td data-label="この記事で起きること">シリコンの層は共通にし、金属の配線層のマスクだけを替えて、NAND が 4 つ・3 つ・2 つの 3 品種にする</td><td data-label="章・場面"><a href="../chapters/03-transistor.html#s6" class="nw-ch">3章 場面6</a></td></tr>
+</tbody></table></div></div>
+  </div>
+</section>
+
+<!-- ================= 2 中身 ================= -->
+<section class="scene sc-nw" id="s2" data-tab="中身" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>中身</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 2fr 2fr 3fr">
+<div class="col"><h3>分かったこと</h3>
+<ul><li>チップは Signetics ST680A で、2 入力の NAND が 4 つ入っている。パッケージの日付の印は 1971 年。</li><li>600 シリーズは、プラスチックの DIP で売られた最初の IC の系列である（1965 年の終わり）。</li><li>このチップには保護膜が無く、樹脂の残りを落とす酸で金属の配線も溶けた。配線は、シリコンに残った色の差から推定した。後からデータシートが見つかり、記事の回路図はそこから引いている。</li><li>使われていないダイオードが 2 個あった。同じシリコンから 5 入力の NAND 2 つの品種（616A）を作るときに使う分だった。3 入力の NAND 3 つの品種（670A）も同じシリコンである。</li><li>電源は 8 番ピン、グランドは 1 番ピン。後の TTL で定着する 14 番と 7 番ではない。</li></ul></div>
+<div class="col"><h3>DTL の NAND の動き</h3>
+<ol><li>入力が両方 1 のとき、1 本目の抵抗からの電流が 1 段目のトランジスタのベースへ流れ、1 段目がオンになる。増幅された電流が 2 段目のベースへ流れ、2 段目が出力をグランドへ引いて 0 にする。</li><li>入力のどちらかが 0 のとき、抵抗からの電流は入力のダイオードを通って入力の側へ流れる。1 段目も 2 段目もオフになり、出力は別の抵抗で引き上げられて 1 になる。</li></ol>
+<p>出力のトランジスタが引ける電流は、データシートで 2.5 mA。DTL の前には抵抗とトランジスタの RTL があり、後には速くて電力の小さい TTL（7400 シリーズ）が主流になった。</p></div>
+<div class="col"><h3>CMOS の NAND との違い</h3>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th></th><th>DTL（このチップ）</th><th>CMOS（<a href="../chapters/04-ronri.html#s2" class="nw-ch">4章 場面2</a>）</th></tr></thead><tbody>
+<tr><td data-label="">部品</td><td data-label="DTL（このチップ）">ダイオード、NPN トランジスタ 2 個、抵抗</td><td data-label="CMOS（4章 場面2）">pMOS 2 個と nMOS 2 個</td></tr>
+<tr><td data-label="">出力を 1 にするもの</td><td data-label="DTL（このチップ）">抵抗</td><td data-label="CMOS（4章 場面2）">pMOS</td></tr>
+<tr><td data-label="">出力が 0 の間の電流</td><td data-label="DTL（このチップ）">抵抗を通って流れ続ける</td><td data-label="CMOS（4章 場面2）">漏れの分だけ</td></tr>
+<tr><td data-label="">1 の出力の強さ</td><td data-label="DTL（このチップ）">抵抗が電流を絞るので弱い</td><td data-label="CMOS（4章 場面2）">pMOS が電源につなぐ</td></tr>
+</tbody></table></div>
+<p>片側が抵抗の論理が電流を流し続けることは、教材では nMOS 論理の例で <a href="../chapters/03-transistor.html#s4" class="nw-ch">3章 場面4</a> が触れている。</p></div>
+  </div>
+</section>
+
+<!-- ================= 3 前提と出典 ================= -->
+<section class="scene sc-nw" id="s3" data-tab="前提" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>前提と出典</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 3fr 2fr">
+<div class="col"><h3>前提知識</h3>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>概念</th><th>この記事での役割</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="概念">n 型・p 型の半導体</td><td data-label="この記事での役割">部品の材料。顕微鏡の色で領域を見分ける</td><td data-label="章・場面"><a href="../chapters/02-handoutai.html#s2" class="nw-ch">2章 場面2</a>、<a href="../chapters/02-handoutai.html#s3" class="nw-ch">2章 場面3</a></td></tr>
+<tr><td data-label="概念">pn 接合とダイオード</td><td data-label="この記事での役割">入力のダイオード、抵抗の切り離し、順方向の電圧降下の分だけオンになる電圧を上げる使い方</td><td data-label="章・場面"><a href="../chapters/02-handoutai.html#s4" class="nw-ch">2章 場面4</a>、<a href="../chapters/02-handoutai.html#s5" class="nw-ch">2章 場面5</a></td></tr>
+<tr><td data-label="概念">バイポーラトランジスタ</td><td data-label="この記事での役割">ゲートの増幅とスイッチ</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/03-transistor.html#s3" class="nw-ch">3章 場面3</a></td></tr>
+<tr><td data-label="概念">NAND と真理値表</td><td data-label="この記事での役割">チップの機能。NAND だけでほかのゲートを組めるので、NAND の IC が汎用の部品になる</td><td data-label="章・場面"><a href="../chapters/04-ronri.html#s3" class="nw-ch">4章 場面3</a></td></tr>
+<tr><td data-label="概念">露光とマスク</td><td data-label="この記事での役割">配線層だけを替えて品種を作り分ける</td><td data-label="章・場面"><a href="../chapters/03-transistor.html#s6" class="nw-ch">3章 場面6</a></td></tr>
+</tbody></table></div></div>
+<div class="col"><h3>出典と確かさ</h3>
+<ul><li><a href="https://www.righto.com/2026/11/signetics-st680a-dtl-nand.html" target="_blank" rel="noopener">Reverse engineering a vintage diode-transistor logic chip</a>（Ken Shirriff、2026-11-08）。このノートの事実はすべてこの記事から取った。</li><li>配線は推定である。金属の層が失われたので、記事は配線の図を「おそらくこうだった」として示し、670A と 616A の配線は仮説と書いている。</li><li>記事はダイオードの電流を「カソード（p 型）からアノード（n 型）へ」と書く。通常の呼び方では p 型の側がアノード、n 型の側がカソードである（<a href="../chapters/02-handoutai.html#s5" class="nw-ch">2章 場面5</a>）。順方向の電流が p 型から n 型へ流れる点は同じ。</li><li>確かめていないこと: データシート（Signetics Condensed Catalog 1969 など）は開いていない。2.5 mA とピンの番号は、記事からの孫引きである。</li></ul></div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 日刊 ／ 2026-11-08","title":"1960 年代の論理 IC「Signetics ST680A」の解析","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]} });
+</script>
+</body>
+</html>
