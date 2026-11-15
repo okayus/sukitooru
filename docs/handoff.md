@@ -5,7 +5,8 @@
 > - 作ったもの: `tools/news-candidates.mjs`（候補集め）、`tools/news-pr-check.mjs`（プルリクエストの検査）、`.github/workflows/news-pr.yml`（検査とマージ）、`AGENTS.md`（Codex のレビューの決まり）、`docs/daily-news.md`、`news/README.md` の「日刊の型」、1 件目の日刊のノート（`news/2026-11-08-dtl-nand-chip-reverse-engineering.md`。型の手本）。
 > - 変えたもの: `tools/build-news.mjs`（一覧を、新着・月ごと・詳しいノートに。月のページ `news/YYYY-MM.html`。日刊の印 `<!-- kind: daily -->`）。ニュースの全ページを作り直した。
 > - 手順書は、持ち主の empirical-prompt-tuning スキルで評価した（白紙のサブエージェントに実行させる）。結果は log に書いた。
-> - **状態: main に push した。** 残り: (1) クラウドの scheduled task を登録する（`/schedule`。毎朝 5:07、Fable 5.2、コネクタなし。持ち主が 2026-11-15 に承認）。(2) 持ち主が claude.ai でネットワークが Full の環境を作って task に付ける（既定の環境は Limited で、候補集めの 3 か所に届かない）。(3) 持ち主が chatgpt.com/settings/code-review で Codex の自動レビューを有効にする。(4) 最初の実行で、log の「確かめていないこと」を見る。
+> - **状態: main に push し（コミット `2f9e31d`）、クラウドの scheduled task を登録した。** task は「日刊のノート（youtube-ga-mieru-made）」（https://claude.ai/code/routines/trig_0141BpJHeWeLvHDzpSD1BztY）。毎朝 5:07（cron は UTC で `7 20 * * *`）、Fable 5.2、コネクタなし、環境は Default。最初の起動は 2026-11-16 05:07。
+> - 残り: (1) 持ち主が claude.ai でネットワークが Full の環境を作って task に付ける。Default は Limited で、候補集めの 3 か所に届かないので、付け替えるまで実行は手順 2 で終わる。(2) 持ち主が chatgpt.com/settings/code-review で Codex の自動レビューを有効にする。(3) 最初の実行で、log の「確かめていないこと」を見る（実行の記録は `/schedule` で「なぜ何もしなかったか」と聞くと読める）。
 
 > **途中（2026-11-14）**: 「Web プラットフォームや言語のアップデートなどの技術ニュースを、どのレイヤーの話か、どんな前提知識があれば何を解決するものか分かるようになりたい。そのためにこのリポジトリを活用したい」の依頼で、
 > `news/` を脆弱性の調査から、更新のニュースを分類する練習へ広げる案を出し（会話）、3 件書いた。3 件とも公開した（コミット `0be48c8`、`135a392`、3 件目はその次のコミット）。次は、持ち主から 4 件目の URL と予想を受け取る。持ち主は、URL と予想（問いを含む）を貼る形で続けている。
