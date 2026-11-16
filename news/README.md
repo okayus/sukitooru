@@ -23,7 +23,7 @@ tech ニュースを 1 件ずつ調べ、この教材のどの層（章・場面
 <!-- news-months:start -->
 | 月 | ノート | うち日刊 |
 |---|---|---|
-| [2026-11](https://okayus.github.io/youtube-ga-mieru-made/news/2026-11.html) | 1 件 | 1 件 |
+| [2026-11](https://okayus.github.io/youtube-ga-mieru-made/news/2026-11.html) | 2 件 | 2 件 |
 | [2026-10](https://okayus.github.io/youtube-ga-mieru-made/news/2026-10.html) | 4 件 | 0 件 |
 | [2026-09](https://okayus.github.io/youtube-ga-mieru-made/news/2026-09.html) | 1 件 | 0 件 |
 | [2026-06](https://okayus.github.io/youtube-ga-mieru-made/news/2026-06.html) | 1 件 | 0 件 |
