@@ -96,7 +96,7 @@
 <section class="scene sc-map" id="s1" data-tab="地図" aria-labelledby="h-s1">
   <header class="sh a-sh">
     <h2 id="h-s1"><span class="n">1</span>全体の地図 — 要求が出ていき、映像が帰ってくる道</h2>
-    <p class="sh-meta"><span class="chip">箱を押すと章が開く</span></p>
+    <p class="sh-meta"><span class="chip">箱を押すと章が開く</span><a class="chip" href="news/index.html">ニュースを層で見る ›</a></p>
   </header>
   <figure class="map-fig a-fig">
     <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 1400 696" role="img" aria-label="パソコンの中の層、家の中の機器、光回線とインターネット、YouTubeのサーバーを並べた地図。要求が右へ、映像が左へ流れる。下の帯は、どの層にも出てくる型・データ構造・コンパイラの章と、実物のプログラムを読む章"></svg></div>
@@ -213,7 +213,9 @@
     if (file) {
       const n = /第\d+章/.exec(last.eyebrow || '');
       const sc = Number(last.scene) || 0, st = Number(last.step) || 0;
-      resume = { href: 'chapters/' + file[1] + '#s' + sc + (st > 0 ? '.' + (st + 1) : ''), label: (n ? n[0] + ' ' : '') + (last.title || '') + (sc ? '・場面' + sc + (st > 0 ? ' 段階' + (st + 1) : '') : '') + ' ›' };
+      // 上部バーの幅が足りないときは title（「・」まで）を消す。章の番号（sub）と場面・段階（tail）は残す
+      const no = n ? n[0] : '', title = (last.title || '') + (sc ? '・' : ''), tail = (sc ? '場面' + sc + (st > 0 ? ' 段階' + (st + 1) : '') : '') + ' ›';
+      resume = { href: 'chapters/' + file[1] + '#s' + sc + (st > 0 ? '.' + (st + 1) : ''), no, title, tail, label: (no ? no + ' ' : '') + title + tail };
     }
   } catch (e) { /* 使えなければ出さない */ }
   const nav = document.getElementById('start-nav');
@@ -368,9 +370,10 @@
       // 上部バーのボタン（1画面版）。縦読み版では表紙の下の同じボタン（#start-nav）を使う
       actions: [
         { href: 'chapters/01-denshi.html#s1', sub: '第1章から', label: '最初から通して見る ›', primary: true },
-        resume && { href: resume.href, sub: '続きから', label: resume.label, primary: true },
+        resume && { href: resume.href, sub: '続きから' + (resume.no ? ' ' + resume.no : ''), label: resume.title, tail: resume.tail, title: '続きから ' + resume.label, primary: true },
         { href: '#s1', go: 1, label: '全体の地図を見る' },
-        { href: '#s2', go: 2, label: '36章の一覧' }
+        { href: '#s2', go: 2, label: '36章の一覧' },
+        { href: 'news/index.html', label: 'ニュースから層へ' }
       ].filter(Boolean),
       legend: [{ c: 'e', label: '電子・電気信号' }, { c: 'h', label: '＋の電荷' }, { c: 'p', label: '光' }, { c: 'r', label: '電波' }, { c: 'd', label: 'データ' }, { c: 'x', label: '注目' }]
     },

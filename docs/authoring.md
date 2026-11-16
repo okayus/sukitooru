@@ -68,7 +68,7 @@ YT.chapter({
     prev: { href: '01-denshi.html', title: '電子と電流' },   // 第1章では省略
     next: { href: '03-transistor.html', title: 'トランジスタ', lead: '前の章の n 型・p 型・pn 接合を使って、「電圧で動くスイッチ」を作る。' }, // 最後の章（第36章）では省略。lead は次の章の表紙のリードの 1 文目（まとめの下に「次の章の導入」として出る。通しで進むときは表紙を飛ばすため）
     legend: [{ c: 'e', label: '電子・電流' }, { c: 'h', label: '＋の電荷' }, …],   // 2〜5 個
-    actions: [{ href, label, sub, go, primary }]   // （目次だけ）上部バーに凡例の代わりに並べるボタン。go は data-go（場面番号）
+    actions: [{ href, label, sub, go, primary, title, tail }]   // （目次とニュースのページ）上部バーに凡例の代わりに並べるボタン。go は data-go（場面番号）。tail があると、幅が足りないときに label を消し、tail は残す（目次の「続きから」。全文は title に書く）
   },
   stepDur: 10,          // 「自動で進む」の1段階の秒数（省略可。省略すると本文の字数から 8 秒 ＋ 0.1 秒×字数、12〜30 秒）
   stillDur: 15,         // 「自動で進む」で段階の無い場面（表紙・まとめ）に留まる秒数の既定（省略可。場面ごとには def.dur）

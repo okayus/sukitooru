@@ -371,7 +371,8 @@
     var bar = $('.topbar', app);
     if (!bar) { bar = document.createElement('header'); bar.className = 'topbar'; app.insertBefore(bar, app.firstChild); }
     var home = meta.home || '../index.html';
-    // meta.actions（[{ href, label, sub, go, primary, title }]）があれば、色の凡例の代わりにボタンを並べる（目次で使う）
+    // meta.actions（[{ href, label, sub, go, primary, title, tail }]）があれば、色の凡例の代わりにボタンを並べる（目次とニュースのページで使う）。
+    // tail は label の後ろに続く文字で、幅が足りないときも消さない（fitActs）
     var acts = meta.actions && meta.actions.length ? meta.actions : null;
     bar.innerHTML =
       '<a class="brand" href="' + esc(home) + '" title="目次へ"><span class="brand-eyebrow"></span><span class="brand-title"></span></a>' +
@@ -407,9 +408,13 @@
         a.href = x.href;
         if (x.go !== undefined) a.dataset.go = x.go;
         if (x.title) a.title = x.title;
-        a.innerHTML = (x.sub ? '<small>' + esc(x.sub) + '</small> ' : '') + esc(x.label);
+        a.innerHTML = (x.sub ? '<small>' + esc(x.sub) + '</small> ' : '') +
+          (x.tail ? '<span class="act-fold">' + esc(x.label) + '</span><span>' + esc(x.tail) + '</span>' : esc(x.label));
+        if (x.tail) { a.classList.add('shrink'); actNav.classList.add('shrink'); }
         actNav.appendChild(a);
       });
+      fitActs();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitActs);
     } else {
       $('.topbar-key', bar).innerHTML = legendHtml(meta.legend);
     }
@@ -424,6 +429,14 @@
     ui.auto.checked = motion.auto;
     ui.auto.addEventListener('change', function () { motion.auto = ui.auto.checked; saveMotion(); if (active) active.ts = 0; });
     syncPlay();
+  }
+  /* tail のあるボタンの label（.act-fold）が切れるなら、切れ端を出さずに label ごと消す。幅が戻れば出す。全文は呼び出し側が title に書く */
+  function fitActs() {
+    $$('.topbar-acts .act.shrink').forEach(function (a) {
+      var f = $('.act-fold', a);
+      a.classList.remove('folded');
+      if (f && f.scrollWidth > f.clientWidth + 1) a.classList.add('folded');
+    });
   }
   function legendHtml(legend) {
     return (legend || []).map(function (l) { return '<span><i class="sw ' + esc(l.c) + '"></i>' + esc(l.label) + '</span>'; }).join('');
@@ -745,6 +758,7 @@
     function relayout() {
       raf = 0;
       fit();
+      fitActs();
       var f = isFit();
       if (f !== wasFit) {
         wasFit = f;

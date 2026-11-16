@@ -556,6 +556,12 @@ table.gloss th .sw { margin-right: 0.4rem; }
 .topbar-acts .act.primary { background: var(--fg); border-color: var(--fg); color: var(--surface); }
 .topbar-acts .act small { font-size: 11px; font-weight: 400; color: var(--fg-dim); }
 .topbar-acts .act.primary small { color: var(--inset); }
+/* tail のあるボタンだけが縮む。.act-fold が切れるなら、engine.js の fitActs が .folded を付けて消す */
+.topbar-acts.shrink { flex: 0 1 auto; min-width: 0; }
+.topbar-acts .act.shrink { min-width: 0; gap: 0; }
+.topbar-acts .act.shrink small { margin-right: 6px; }
+.topbar-acts .act-fold { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.topbar-acts .act.folded .act-fold { display: none; }
 /* 上部バー右上の ‹ ›。› だけ押していけば、段階・場面・章の順に全ページを通せる（engine.js） */
 .pager { display: flex; gap: 6px; flex: none; }
 .pg {
