@@ -1,5 +1,6 @@
 # 1960 年代の論理 IC「Signetics ST680A」の解析（2026-11-08）
 <!-- kind: daily -->
+<!-- missing: バイポーラトランジスタ -->
 
 - 出典: [Reverse engineering a vintage diode-transistor logic chip](https://www.righto.com/2026/11/signetics-st680a-dtl-nand.html)（Ken Shirriff、2026-11-08）。解析した本人の記事。
 - 話題: [Hacker News](https://news.ycombinator.com/item?id=50416011) の front page（80 点、2026-11-15 の朝の時点）。

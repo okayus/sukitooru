@@ -344,6 +344,7 @@
     LINKS = chapterLinks(meta);
     buildTopbar(meta);
     fillAuto(meta);
+    newsChips();
     ctxs = scenes.map(function (s, i) { return makeCtx(s, i, (DEF.scenes || {})[s.id]); });
     wireNav();
     wireKeys();
@@ -480,6 +481,40 @@
       }
     });
     $$('[data-chapter-title]').forEach(function (e) { e.textContent = meta.title || ''; });
+  }
+
+  /* 章のページだけ: 場面の見出しに「この場面のニュース N ›」、まとめの見出しに「この章に関わるニュース N ›」を出す。
+     数えるのは、その場面（まとめは章のどこか）にリンクしているノート。1 件ならノートへ、2 件からは層の地図を絞って開く。
+     ノートのデータ（news/news-data.js、tools/build-news.mjs が作る）は要るときに読み、読めなければ何も出さない */
+  function newsChips() {
+    var m = /\/chapters\/(\d\d)-[a-z0-9-]+\.html$/.exec(location.pathname);
+    if (!m) return;
+    var ch = String(Number(m[1]));
+    var put = function () {
+      var news = window.YT_NEWS;
+      if (!news || !news.length) return;
+      scenes.forEach(function (sec) {
+        var head = $('.sh', sec), k = Number(sec.id.slice(1)), wrap = sec.classList.contains('sc-wrap');
+        if (!head || (!wrap && !(k >= 1))) return;
+        var hits = news.filter(function (n) {
+          return wrap ? n.scenes.some(function (s) { return s === ch || s.indexOf(ch + '-') === 0; }) : n.scenes.indexOf(ch + '-' + k) >= 0;
+        });
+        if (!hits.length) return;
+        var box = $('.sh-meta', head);
+        if (!box) { box = document.createElement('p'); box.className = 'sh-meta'; head.appendChild(box); }
+        var a = document.createElement('a');
+        a.className = 'chip nw-chip';
+        a.href = hits.length === 1 ? '../news/' + hits[0].slug + '.html' : '../news/index.html?' + (wrap ? 'ch=' + ch : 'scene=' + ch + '-' + k) + '#s1';
+        a.title = hits.map(function (n) { return n.date + ' ' + n.title; }).join('\n');
+        a.textContent = (wrap ? 'この章に関わるニュース ' : 'この場面のニュース ') + hits.length + ' ›';
+        box.appendChild(a);
+      });
+    };
+    if (window.YT_NEWS) { put(); return; }
+    var s = document.createElement('script');
+    s.src = '../news/news-data.js';
+    s.onload = put;
+    document.head.appendChild(s);
   }
 
   /* ---------- 場面ごとの文脈（ctx） ---------- */

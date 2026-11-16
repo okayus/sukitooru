@@ -67,6 +67,52 @@
   .nw-month { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.6rem 0.9rem 0.65rem; display: grid; gap: 0.1rem; align-content: start; color: var(--fg); text-decoration: none; }
   .nw-month:hover { border-color: var(--fg-dim); }
   .nw-month b { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
+
+  /* 層の札（中心の層は太字） */
+  .nw-layers { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .nw-card .nw-layers { margin-top: 0.2rem; }
+  .nw-eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 1rem; margin-bottom: 0.9rem; }
+  .nw-eyebrow .eyebrow { margin-bottom: 0; }
+  a.nw-lc { text-decoration: none; }
+  a.nw-lc:hover { border-color: var(--fg-dim); color: var(--fg); }
+  a.nw-lc.c { color: var(--fg); border-color: var(--fg); font-weight: 600; }
+  .nw-more { color: var(--fg-dim); border-style: dashed; }
+
+  /* 層の地図（assets/news-graph.js が中身を入れる） */
+  .sc-nwmap { grid-template-areas: "sh" "left" "fig"; }
+  .fit .sc-nwmap { grid-template-columns: 31fr 69fr; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh sh" "left fig"; }
+  .fit .sc-nwmap .a-left { align-self: stretch; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+  .nwg-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; font-size: 0.8rem; color: var(--fg-mid); }
+  .nwg-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+  .nwg-seg button { font: inherit; padding: 0.15rem 0.65rem; background: var(--surface); color: var(--fg-mid); border: 0; cursor: pointer; }
+  .nwg-seg button + button { border-left: 1px solid var(--rule); }
+  .nwg-seg button[aria-pressed="true"] { background: var(--fg); color: var(--surface); }
+  .nwg-chip { display: inline-flex; align-items: center; border: 1px solid var(--fg); border-radius: 3px; padding-left: 0.45rem; color: var(--fg); }
+  .nwg-chip button { font: inherit; border: 0; background: none; cursor: pointer; color: var(--fg-mid); padding: 0 0.4rem; }
+  .nwg-list { list-style: none; padding: 0; margin-top: 0.7rem; display: grid; gap: 0.25rem; align-content: start; }
+  .fit .nwg-list { overflow-y: auto; min-height: 0; padding-right: 4px; }
+  .nwg-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.6rem; border-left: 3px solid transparent; padding: 0.3rem 0.5rem 0.35rem 0.6rem; border-radius: 0 4px 4px 0; }
+  .nwg-list li.on { border-left-color: var(--c-x); background: var(--inset); }
+  .nwg-list li.nwg-none { display: block; color: var(--fg-dim); font-size: 0.86rem; }
+  .nwg-pick { font: inherit; text-align: left; background: none; border: 0; padding: 0; cursor: pointer; color: var(--fg); display: grid; gap: 0.05rem; min-width: 0; }
+  .nwg-pick .d { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); }
+  .nwg-pick b { font-weight: 600; font-size: 0.88rem; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .nwg-pick .c { font-size: 0.74rem; color: var(--fg-mid); }
+  .nwg-list a { font-size: 0.8rem; white-space: nowrap; }
+  .nwg-foot { font-size: 0.78rem; line-height: 1.6; color: var(--fg-dim); margin-top: 0.6rem; }
+  .nwg-box { cursor: pointer; }
+  .nwg-box:focus-visible { outline: none; }
+  .nwg-box:focus-visible rect { stroke: var(--fg); stroke-width: 2.5; }
+
+  /* 教材に無い */
+  .nw-miss { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.55rem 1.4rem; align-content: start; }
+  .fit .nw-miss { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; }
+  .nw-miss li { display: grid; gap: 0.1rem; border-left: 2px dashed var(--rule); padding-left: 0.7rem; }
+  .nw-miss li.cand { border-left: 2px solid var(--c-x); }
+  .nw-miss b { font-weight: 600; }
+  .nw-miss .nw-n { font-family: var(--mono); font-size: 0.78rem; color: var(--fg-mid); margin-left: 0.4rem; }
+  .nw-miss .cand-mark { color: var(--c-x); border-color: var(--c-x); margin-left: 0.4rem; }
+  .nw-miss small { font-size: 0.8rem; line-height: 1.6; color: var(--fg-mid); }
 </style>
 </head>
 <body>
@@ -76,12 +122,12 @@
 <!-- ================= 表紙 ================= -->
 <section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
   <div class="a-main">
-    <p class="eyebrow">ニュースから層へ ／ 2026-09-14</p>
+    <div class="nw-eyebrow"><p class="eyebrow">ニュースから層へ ／ 2026-09-14</p><p class="nw-layers" aria-label="層（先頭が中心の層）"><a class="chip nw-lc c" href="index.html?layer=compiler#s1" title="コンパイラ（中心の層）">コンパイラ</a><a class="chip nw-lc" href="index.html?layer=type#s1" title="型とメモリ">型とメモリ</a><a class="chip nw-lc" href="index.html?layer=algo#s1" title="データ構造とアルゴリズム">データ構造</a><a class="chip nw-lc" href="index.html?layer=ronri#s1" title="論理回路">論理回路</a><a class="chip nw-lc" href="index.html?layer=runtime#s1" title="言語処理系">言語処理系</a></p></div>
     <h1 id="h-s0">MoonBit の形式検証をアルゴリズムの実装に使った報告</h1>
     <p class="standfirst">言語処理系の作る側（第28章）に、型検査の先の検査として証明を足す話である。MoonBit は wasm と JavaScript に下ろせる静的型付けの言語で、0.9（2026-04）から、関数に書いた契約を SMT ソルバで証明する <code>moon prove</code> を持つ。記事は、図形を照合するアルゴリズムで「補完の後の配列に番兵の -1 が残らない」ことを、事前条件を満たすすべての入力について証明した。型では書けず、18,937 件のテストでは試した分しか言えない性質である。証明が届くのは整数の計算までで、浮動小数点と 32 ビットのあふれはテストが受け持つ。アルゴリズム（第27章）は題材で、新しいのは確かめる道具である。</p>
     <ul class="nw-meta"><li>出典: <a href="https://eng.mates.education/blog/b-moonbit-formal-verification/" target="_blank" rel="noopener">アルゴリズムの実装に MoonBit の Formal Verification を活用する</a>（株式会社メイツ エンジニアリングチーム、ubugeeei、2026-09-14）と、公開サンプル <a href="https://github.com/MatesEngineer/moon-formal-examples" target="_blank" rel="noopener">MatesEngineer/moon-formal-examples</a>（コミット c52ffac、CC BY-NC-SA 4.0）</li><li>調べた時点: 2026-11-14（MoonBit の最新の版は v0.10.19）。手元では確かめていない。証明は走らせていない。</li></ul>
     <div class="nw-strip" role="group" aria-label="このノートがリンクしている章: 第4章 論理ゲートと2進数、第10章 ブラウザ、第26章 型とメモリ、第27章 データ構造とアルゴリズム、第28章 コンパイラ、第29章 型で意味を表す"><div class="nw-grp" style="--n:3"><span class="nw-part">I 電気</span><div class="nw-cells"><span class="nw-cell" title="第1章 電子と電流">1</span><span class="nw-cell" title="第2章 半導体とダイオード">2</span><span class="nw-cell" title="第3章 トランジスタ">3</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">II 計算機</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/04-ronri.html" title="第4章 論理ゲートと2進数">4</a><span class="nw-cell" title="第5章 記憶">5</span><span class="nw-cell" title="第6章 CPU">6</span><span class="nw-cell" title="第7章 入出力と周辺機器">7</span><span class="nw-cell" title="第8章 画面と音">8</span></div></div><div class="nw-grp" style="--n:2"><span class="nw-part">III ソフト</span><div class="nw-cells"><span class="nw-cell" title="第9章 OS">9</span><a class="nw-cell on" href="../chapters/10-browser.html" title="第10章 ブラウザ">10</a></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IV つながる</span><div class="nw-cells"><span class="nw-cell" title="第11章 ネットワークの層">11</span><span class="nw-cell" title="第12章 Wi-Fi">12</span><span class="nw-cell" title="第13章 Ethernet とスイッチ">13</span><span class="nw-cell" title="第14章 ホームルーター">14</span><span class="nw-cell" title="第15章 光回線">15</span><span class="nw-cell" title="第16章 インターネットの骨格">16</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">V 約束ごと</span><div class="nw-cells"><span class="nw-cell" title="第17章 DNS">17</span><span class="nw-cell" title="第18章 IP">18</span><span class="nw-cell" title="第19章 TCP・UDP・QUIC">19</span><span class="nw-cell" title="第20章 TLS">20</span><span class="nw-cell" title="第21章 HTTP">21</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VI YouTube</span><div class="nw-cells"><span class="nw-cell" title="第22章 YouTube のサーバー側">22</span><span class="nw-cell" title="第23章 動画の圧縮">23</span><span class="nw-cell" title="第24章 ストリーミングと再生">24</span><span class="nw-cell" title="第25章 通しで見る">25</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VII 横断</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/26-kata.html" title="第26章 型とメモリ">26</a><a class="nw-cell on" href="../chapters/27-algorithm.html" title="第27章 データ構造とアルゴリズム">27</a><a class="nw-cell on" href="../chapters/28-compiler.html" title="第28章 コンパイラ">28</a><a class="nw-cell on" href="../chapters/29-imi.html" title="第29章 型で意味を表す">29</a></div></div><div class="nw-grp" style="--n:1"><span class="nw-part">VIII </span><div class="nw-cells"><span class="nw-cell" title="第30章 エミュレータの外側">30</span></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IX ブラウザ</span><div class="nw-cells"><span class="nw-cell" title="第31章 URL と HTTP">31</span><span class="nw-cell" title="第32章 HTML トークナイザ">32</span><span class="nw-cell" title="第33章 HTML パーサと DOM">33</span><span class="nw-cell" title="第34章 CSS とスタイル">34</span><span class="nw-cell" title="第35章 レイアウトと描画">35</span><span class="nw-cell" title="第36章 JavaScript エンジン">36</span></div></div></div>
-    <p class="keys fit-only">上のタブで場面を選ぶ。<kbd>↓</kbd><kbd>↑</kbd>（または右上の <kbd>‹</kbd><kbd>›</kbd>）で場面を移る。帯の塗りつぶした番号は、このノートがリンクしている章。</p>
+    <p class="keys fit-only">上のタブで場面を選ぶ。<kbd>↓</kbd><kbd>↑</kbd>（または右上の <kbd>‹</kbd><kbd>›</kbd>）で場面を移る。上の札はこのノートの層（太字が中心の層。押すと層の地図で絞る）、帯の塗りつぶした番号はリンクしている章。</p>
   </div>
   <nav class="toc a-toc" aria-labelledby="h-toc">
     <h2 id="h-toc">構成</h2>

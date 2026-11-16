@@ -16,6 +16,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
 <link rel="stylesheet" href="assets/base.css">
 <script src="assets/engine.js"></script>
+<script src="assets/layers.js"></script>
+<script src="news/news-data.js"></script>
 <style>
   /* 目次ページだけのスタイル */
   .sc-map { grid-template-areas: "sh" "fig" "text"; }
@@ -52,6 +54,16 @@
 
   .fit #start-nav { display: none; }   /* 1画面版では同じボタンを上部バーに置く（縦読み版には上部バーが無いので表紙に残す） */
 
+  /* 表紙の「最新のニュース」（news/news-data.js から埋める。読めなければ出さない） */
+  .latest { margin-top: 1.2rem; border-top: 1px solid var(--rule-soft); padding-top: 0.7rem; }
+  .latest-h { display: flex; align-items: baseline; gap: 0.9rem; font-size: 0.86rem; }
+  .latest-h b { font-weight: 600; }
+  .latest ol { list-style: none; padding: 0; margin-top: 0.35rem; display: grid; gap: 0.2rem; }
+  .latest li { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; font-size: 0.9rem; line-height: 1.6; }
+  .latest li .d { font-family: var(--mono); font-size: 0.72rem; color: var(--fg-dim); flex: none; }
+  .latest li a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .latest li .chip { flex: none; }
+
   .sc-how { grid-template-areas: "sh" "text" "tbl"; }
   .fit .sc-how { grid-template-columns: 46fr 54fr; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh sh" "text tbl"; }
   .how-tbl th { white-space: nowrap; }
@@ -70,7 +82,10 @@
     <p class="legend" data-auto></p>
     <p class="keys fit-only">右上の <kbd>›</kbd>（または<kbd>→</kbd>）だけを押していけば、第1章の場面1から、段階・場面・章の順に全ページを通して見られる。章のまとめの次は、次の章の場面1。<kbd>‹</kbd>（<kbd>←</kbd>）で戻り、<kbd>スペース</kbd>で動きを止める。「自動で進む」で全章を自動で通す。</p>
     <p class="keys fit-only">用語は <a href="glossary.html">用語索引</a> から探せる。全 36 章の用語表を 1 か所に集めてあり、各章のまとめにも入口がある。</p>
-    <p class="keys fit-only">tech ニュースを、この教材のどの章・場面の話かに結びつけたノートは <a href="news/index.html">ニュースから層へ</a> で読める。</p>
+    <div class="latest" id="latest" hidden>
+      <p class="latest-h"><b>最新のニュース</b><a href="news/index.html#s1">層の地図で見る ›</a></p>
+      <ol></ol>
+    </div>
   </div>
   <nav class="toc a-toc" aria-labelledby="h-toc">
     <h2 id="h-toc">9 部の構成</h2>
@@ -96,7 +111,7 @@
 <section class="scene sc-map" id="s1" data-tab="地図" aria-labelledby="h-s1">
   <header class="sh a-sh">
     <h2 id="h-s1"><span class="n">1</span>全体の地図 — 要求が出ていき、映像が帰ってくる道</h2>
-    <p class="sh-meta"><span class="chip">箱を押すと章が開く</span><a class="chip" href="news/index.html">ニュースを層で見る ›</a></p>
+    <p class="sh-meta"><span class="chip">箱を押すと章が開く</span><a class="chip" href="news/index.html#s1">ニュースを層で見る ›</a></p>
   </header>
   <figure class="map-fig a-fig">
     <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 1400 696" role="img" aria-label="パソコンの中の層、家の中の機器、光回線とインターネット、YouTubeのサーバーを並べた地図。要求が右へ、映像が左へ流れる。下の帯は、どの層にも出てくる型・データ構造・コンパイラの章と、実物のプログラムを読む章"></svg></div>
@@ -192,7 +207,7 @@
         <tr><td>章の移動</td><td>—</td><td>まとめで › を押すと次の章へ。表紙とまとめの「前の章」、上部バーの題で目次へ。目次の上部バーの「続きから」で前回の場面へ</td></tr>
         <tr><td>特定の場面を開く</td><td>—</td><td>URL の末尾に <code>#s3</code>（場面3）や <code>#s3.2</code>（場面3 の段階2）を付ける。‹ › で移ると URL も今の場所に書き換わる</td></tr>
         <tr><td>用語を探す</td><td>—</td><td><a href="glossary.html">用語索引</a>。全 36 章の用語表を 1 か所に集め、同じ語の別の意味も並べる。各章のまとめからも開ける</td></tr>
-        <tr><td>ニュースから学ぶ</td><td>—</td><td><a href="news/index.html">ニュースから層へ</a>。tech ニュースを調べ、どの章・場面の話かを表とリンクで示したノート</td></tr>
+        <tr><td>ニュースから学ぶ</td><td>—</td><td><a href="news/index.html">ニュースから層へ</a>。tech ニュースを調べ、どの章・場面の話かを表とリンクで示したノート。層の地図で、どの層のニュースかを見る。章の場面の見出しには、その場面のニュースの札が出る</td></tr>
       </tbody>
     </table>
   </div>
@@ -218,6 +233,15 @@
       resume = { href: 'chapters/' + file[1] + '#s' + sc + (st > 0 ? '.' + (st + 1) : ''), no, title, tail, label: (no ? no + ' ' : '') + title + tail };
     }
   } catch (e) { /* 使えなければ出さない */ }
+  /* 最新のニュース 3 件（news/news-data.js は新しい順）。中心の層は assets/layers.js の名前で出す */
+  const latest = document.getElementById('latest');
+  if (latest && window.YT_NEWS && window.YT_NEWS.length) {
+    const L = window.YT_LAYERS;
+    latest.querySelector('ol').innerHTML = window.YT_NEWS.slice(0, 3).map((n) => '<li><span class="d">' + YT.esc(n.date) + '</span><a href="news/' + YT.esc(n.slug) + '.html" title="' + YT.esc(n.title) + '">' + YT.esc(n.title) + '</a>'
+      + (L && L.byId[n.center] ? '<span class="chip" title="中心の層">' + YT.esc(L.label(n.center)) + '</span>' : '') + '</li>').join('');
+    latest.hidden = false;
+  }
+
   const nav = document.getElementById('start-nav');
   if (resume && nav) {
     const a = document.createElement('a');

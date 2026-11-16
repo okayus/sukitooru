@@ -13,5 +13,6 @@
 - 配信: `tools/serve.sh` で http://127.0.0.1:8766/ 。止めるのは `tools/serve.sh stop`（pkill は使わない）。
 - 公開: GitHub Pages（https://okayus.github.io/youtube-ga-mieru-made/）。main の root をそのまま配る（`.nojekyll` で Jekyll を止めている）。main に push すると公開サイトも変わる。
 - 表示方針は one-screen-artifact スキルに従う（デスクトップは場面ごとに1画面、スマートフォンは縦読み）。
-- ニュースの学習: `news/`（tech ニュースを調べ、この教材のどの層＝章・場面の話かに結びつけたノート）。ノートは Markdown で書き、`node tools/build-news.mjs` でページ（`news/*.html`）、一覧（`news/index.html`）、月のページ（`news/YYYY-MM.html`）を作る。書き方は `news/README.md`。
+- 層の登録簿: `assets/layers.js`（24 の層、層の上下、全 216 場面の層）。ニュースの層・層の地図（`assets/news-graph.js`）・章の見出しのニュースの札が読む。章の場面を足したり層を変えたりしたら `node tools/layercheck.mjs` で確かめる。
+- ニュースの学習: `news/`（tech ニュースを調べ、この教材のどの層＝章・場面の話かに結びつけたノート）。ノートは Markdown で書き、`node tools/build-news.mjs` でページ（`news/*.html`）、一覧（`news/index.html`。層の地図と「教材に無い」を含む）、月のページ（`news/YYYY-MM.html`）、ノートのデータ（`news/news-data.js`）を作る。書き方は `news/README.md`。
 - 日刊のノート: 毎朝、クラウドの scheduled task が `docs/daily-news.md` の手順で 1 件書き、`claude/news-*` のプルリクエストを出す。`.github/workflows/news-pr.yml` が検査（`tools/news-pr-check.mjs`、作り直しとの一致、`verify.mjs`）してマージする。候補集めは `node tools/news-candidates.mjs`。

@@ -1,4 +1,5 @@
 # Node.js の 2026 年 10 月のセキュリティリリース（2026-10-21）
+<!-- missing: SQLite、ZIP（zlib.ZipFile） -->
 
 - 出典: [Wednesday, October 21, 2026 Security Releases](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases)（Node.js、10-14 に予告、10-21 に公開）と、[22.23.4](https://nodejs.org/en/blog/release/v22.23.4)・[24.22.1](https://nodejs.org/en/blog/release/v24.22.1)・[26.12.1](https://nodejs.org/en/blog/release/v26.12.1) のリリースノート
 - 調べた時点: 2026-10-22 08:30 JST。CVE の記録はまだ RESERVED。各件の仕組みは、修正のコミットの差分と試験から読んだ。

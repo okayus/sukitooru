@@ -1,4 +1,5 @@
 # 作って学ぶ、JSX (TSX) ランタイムの基本（2026-06-06）
+<!-- missing: トランスパイラ、モジュール、関数を値として渡す、名前空間と型の宣言、テンプレートエンジン -->
 
 - 出典: [作って学ぶ、JSX (TSX) ランタイムの基本](https://speakerdeck.com/syumai/jsx-runtime-basics)（syumai、フロントエンド・PHPカンファレンス北海道2026、2026-06-06、56 枚）と、サンプル [syumai/minimum-jsx](https://github.com/syumai/minimum-jsx)（コミット 737a3e4、MIT）
 - 調べた時点: 2026-11-15。変換は Bun 1.3.14、実行は Node.js 24.22.1、型検査は Deno 2.8.0 に同梱の TypeScript 6.0.3 で確かめた。サンプルそのものは走らせていない。

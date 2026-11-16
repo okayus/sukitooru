@@ -1,4 +1,5 @@
 # eMudhra の中間 CA の秘密鍵の危殆化（2026-10-20）
+<!-- missing: 鍵の生成、失効（CRL・CRLSet・OneCRL）、コード署名、静的なピン -->
 
 - 出典: [eMudhra Intermediate CA Compromise](https://emudhra.we-have-a-problem.com/)（Mozilla の Dennis Jackson、2026-10-20）、[Mozilla の Bug 2083449](https://bugzilla.mozilla.org/show_bug.cgi?id=2083449)（インシデント報告）
 - 調べた時点: 2026-10-22 00:30 JST。eMudhra の根本原因の調べは続いている。

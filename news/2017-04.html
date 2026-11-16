@@ -17,6 +17,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
 <link rel="stylesheet" href="../assets/base.css">
 <script src="../assets/engine.js"></script>
+<script src="../assets/layers.js"></script>
+<script src="news-data.js"></script>
+<script src="../assets/news-graph.js"></script>
 <style>
   /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
   .sc-nw { grid-template-areas: "sh" "text"; }
@@ -67,6 +70,52 @@
   .nw-month { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.6rem 0.9rem 0.65rem; display: grid; gap: 0.1rem; align-content: start; color: var(--fg); text-decoration: none; }
   .nw-month:hover { border-color: var(--fg-dim); }
   .nw-month b { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
+
+  /* 層の札（中心の層は太字） */
+  .nw-layers { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .nw-card .nw-layers { margin-top: 0.2rem; }
+  .nw-eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 1rem; margin-bottom: 0.9rem; }
+  .nw-eyebrow .eyebrow { margin-bottom: 0; }
+  a.nw-lc { text-decoration: none; }
+  a.nw-lc:hover { border-color: var(--fg-dim); color: var(--fg); }
+  a.nw-lc.c { color: var(--fg); border-color: var(--fg); font-weight: 600; }
+  .nw-more { color: var(--fg-dim); border-style: dashed; }
+
+  /* 層の地図（assets/news-graph.js が中身を入れる） */
+  .sc-nwmap { grid-template-areas: "sh" "left" "fig"; }
+  .fit .sc-nwmap { grid-template-columns: 31fr 69fr; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh sh" "left fig"; }
+  .fit .sc-nwmap .a-left { align-self: stretch; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+  .nwg-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; font-size: 0.8rem; color: var(--fg-mid); }
+  .nwg-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+  .nwg-seg button { font: inherit; padding: 0.15rem 0.65rem; background: var(--surface); color: var(--fg-mid); border: 0; cursor: pointer; }
+  .nwg-seg button + button { border-left: 1px solid var(--rule); }
+  .nwg-seg button[aria-pressed="true"] { background: var(--fg); color: var(--surface); }
+  .nwg-chip { display: inline-flex; align-items: center; border: 1px solid var(--fg); border-radius: 3px; padding-left: 0.45rem; color: var(--fg); }
+  .nwg-chip button { font: inherit; border: 0; background: none; cursor: pointer; color: var(--fg-mid); padding: 0 0.4rem; }
+  .nwg-list { list-style: none; padding: 0; margin-top: 0.7rem; display: grid; gap: 0.25rem; align-content: start; }
+  .fit .nwg-list { overflow-y: auto; min-height: 0; padding-right: 4px; }
+  .nwg-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.6rem; border-left: 3px solid transparent; padding: 0.3rem 0.5rem 0.35rem 0.6rem; border-radius: 0 4px 4px 0; }
+  .nwg-list li.on { border-left-color: var(--c-x); background: var(--inset); }
+  .nwg-list li.nwg-none { display: block; color: var(--fg-dim); font-size: 0.86rem; }
+  .nwg-pick { font: inherit; text-align: left; background: none; border: 0; padding: 0; cursor: pointer; color: var(--fg); display: grid; gap: 0.05rem; min-width: 0; }
+  .nwg-pick .d { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); }
+  .nwg-pick b { font-weight: 600; font-size: 0.88rem; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .nwg-pick .c { font-size: 0.74rem; color: var(--fg-mid); }
+  .nwg-list a { font-size: 0.8rem; white-space: nowrap; }
+  .nwg-foot { font-size: 0.78rem; line-height: 1.6; color: var(--fg-dim); margin-top: 0.6rem; }
+  .nwg-box { cursor: pointer; }
+  .nwg-box:focus-visible { outline: none; }
+  .nwg-box:focus-visible rect { stroke: var(--fg); stroke-width: 2.5; }
+
+  /* 教材に無い */
+  .nw-miss { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.55rem 1.4rem; align-content: start; }
+  .fit .nw-miss { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; }
+  .nw-miss li { display: grid; gap: 0.1rem; border-left: 2px dashed var(--rule); padding-left: 0.7rem; }
+  .nw-miss li.cand { border-left: 2px solid var(--c-x); }
+  .nw-miss b { font-weight: 600; }
+  .nw-miss .nw-n { font-family: var(--mono); font-size: 0.78rem; color: var(--fg-mid); margin-left: 0.4rem; }
+  .nw-miss .cand-mark { color: var(--c-x); border-color: var(--c-x); margin-left: 0.4rem; }
+  .nw-miss small { font-size: 0.8rem; line-height: 1.6; color: var(--fg-mid); }
 </style>
 </head>
 <body>
@@ -79,24 +128,38 @@
     <p class="eyebrow">ニュースから層へ ／ 2017-04 ／ 1 件</p>
     <h1 id="h-s0">2017 年 4 月のニュース</h1>
     <p class="standfirst">2017 年 4 月に出たニュースのノート 1 件（詳しいノート 1 件）を、新しい順に並べる。日付はニュースが出た日で、ノートを書いた日ではない。</p>
-    <p class="keys fit-only">上のタブで場面を選ぶ。<kbd>↓</kbd><kbd>↑</kbd>（または右上の <kbd>‹</kbd><kbd>›</kbd>）で場面を移る。一覧の帯は全 36 章を部ごとに並べたもので、塗りつぶした番号がそのノートのリンクしている章。</p>
+    <p class="keys fit-only">上のタブで場面を選ぶ。<kbd>↓</kbd><kbd>↑</kbd>（または右上の <kbd>‹</kbd><kbd>›</kbd>）で場面を移る。一覧の札はそのノートの層（太字が中心の層）、帯は全 36 章を部ごとに並べたもので、塗りつぶした番号がリンクしている章。</p>
   </div>
   <nav class="toc a-toc" aria-labelledby="h-toc">
     <h2 id="h-toc">構成</h2>
     <ol>
-      <li><a href="#s1" data-go="1"><span class="n">1</span>一覧</a><p>2017-04-04 の 1 件</p></li>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>層の地図</a><p>2017 年 4 月のノート 1 件を、教材の層の上に置いた図</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>一覧</a><p>2017-04-04 の 1 件</p></li>
     </ol>
   </nav>
   <footer class="cover-foot a-foot">
-    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">一覧 ›</a><a href="2026-06.html"><small>次の月</small> 2026 年 6 月</a><a href="index.html">ニュースの一覧</a><a href="../index.html">目次</a></nav>
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">層の地図 ›</a><a href="#s2" data-go="2">一覧</a><a href="2026-06.html"><small>次の月</small> 2026 年 6 月</a><a href="index.html">ニュースの一覧</a><a href="../index.html">目次</a></nav>
     <p>ノートの元は news/ の Markdown（書き方は <a href="https://github.com/okayus/youtube-ga-mieru-made/blob/main/news/README.md" target="_blank" rel="noopener">news/README.md</a>）。このページは <code>node tools/build-news.mjs</code> で作る。</p>
   </footer>
 </section>
 
-<!-- ================= 1 一覧 ================= -->
-<section class="scene sc-nwlist" id="s1" data-tab="一覧" aria-labelledby="h-s1">
+<!-- ================= 1 層の地図 ================= -->
+<section class="scene sc-nwmap" id="s1" data-tab="層の地図" aria-labelledby="h-s1">
   <header class="sh a-sh">
-    <h2 id="h-s1"><span class="n">1</span>一覧 — 新しい順</h2>
+    <h2 id="h-s1"><span class="n">1</span>層の地図 — どの層のニュースか</h2>
+    <p class="sh-meta"><span class="chip">数 = その層に触れたノート</span><span class="chip">線の太さ = 両方の層に触れたノートの数</span></p>
+  </header>
+  <div class="nwg-side a-left"></div>
+  <figure class="nwg-fig anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を、計算機の中・通信・配信と動画・横断の列に並べ、層ごとのノートの数と、選んだノートの層を線で結んだ図"></svg></div>
+    <figcaption>図1　列の中は、下ほど電子に近い層。x の枠が選んだノートの層で、線は中心の層（塗った札）から引く。下の破線の札は、そのノートが挙げた教材に無い概念。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 一覧 ================= -->
+<section class="scene sc-nwlist" id="s2" data-tab="一覧" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>一覧 — 新しい順</h2>
     <p class="sh-meta"><span class="chip">2017-04-04</span><span class="chip">塗りつぶした番号 = ノートがリンクしている章</span></p>
   </header>
   <div class="nw-cards a-tbl">
@@ -104,6 +167,7 @@
   <p class="nw-date">2017-04-04</p>
   <h3><a href="2017-04-04-rust-from-functional-programmers.html">関数型プログラマからみた Rust</a></h3>
   <p class="nw-lead">言語とコンパイラの層（第28・29章）と、メモリの管理（第26章 場面6）の話である。</p>
+  <p class="nw-layers" aria-label="層（先頭が中心の層）"><a class="chip nw-lc c" href="index.html?layer=type#s1" title="型とメモリ（中心の層）">型とメモリ</a><a class="chip nw-lc" href="index.html?layer=compiler#s1" title="コンパイラ">コンパイラ</a><a class="chip nw-lc" href="index.html?layer=browser#s1" title="ブラウザ">ブラウザ</a><a class="chip nw-lc" href="index.html?layer=os#s1" title="OS">OS</a><a class="chip nw-lc" href="index.html?layer=algo#s1" title="データ構造とアルゴリズム">データ構造</a><span class="chip nw-more" title="CPU、画面と音、言語処理系">ほか 3</span></p>
   <div class="nw-strip" role="group" aria-label="リンクしている章: 第6章 CPU、第10章 ブラウザ、第26章 型とメモリ、第27章 データ構造とアルゴリズム、第28章 コンパイラ、第29章 型で意味を表す、第30章 エミュレータの外側、第31章 URL と HTTP、第32章 HTML トークナイザ、第33章 HTML パーサと DOM、第34章 CSS とスタイル"><div class="nw-grp" style="--n:3"><span class="nw-part">I 電気</span><div class="nw-cells"><span class="nw-cell" title="第1章 電子と電流">1</span><span class="nw-cell" title="第2章 半導体とダイオード">2</span><span class="nw-cell" title="第3章 トランジスタ">3</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">II 計算機</span><div class="nw-cells"><span class="nw-cell" title="第4章 論理ゲートと2進数">4</span><span class="nw-cell" title="第5章 記憶">5</span><a class="nw-cell on" href="../chapters/06-cpu.html" title="第6章 CPU">6</a><span class="nw-cell" title="第7章 入出力と周辺機器">7</span><span class="nw-cell" title="第8章 画面と音">8</span></div></div><div class="nw-grp" style="--n:2"><span class="nw-part">III ソフト</span><div class="nw-cells"><span class="nw-cell" title="第9章 OS">9</span><a class="nw-cell on" href="../chapters/10-browser.html" title="第10章 ブラウザ">10</a></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IV つながる</span><div class="nw-cells"><span class="nw-cell" title="第11章 ネットワークの層">11</span><span class="nw-cell" title="第12章 Wi-Fi">12</span><span class="nw-cell" title="第13章 Ethernet とスイッチ">13</span><span class="nw-cell" title="第14章 ホームルーター">14</span><span class="nw-cell" title="第15章 光回線">15</span><span class="nw-cell" title="第16章 インターネットの骨格">16</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">V 約束ごと</span><div class="nw-cells"><span class="nw-cell" title="第17章 DNS">17</span><span class="nw-cell" title="第18章 IP">18</span><span class="nw-cell" title="第19章 TCP・UDP・QUIC">19</span><span class="nw-cell" title="第20章 TLS">20</span><span class="nw-cell" title="第21章 HTTP">21</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VI YouTube</span><div class="nw-cells"><span class="nw-cell" title="第22章 YouTube のサーバー側">22</span><span class="nw-cell" title="第23章 動画の圧縮">23</span><span class="nw-cell" title="第24章 ストリーミングと再生">24</span><span class="nw-cell" title="第25章 通しで見る">25</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VII 横断</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/26-kata.html" title="第26章 型とメモリ">26</a><a class="nw-cell on" href="../chapters/27-algorithm.html" title="第27章 データ構造とアルゴリズム">27</a><a class="nw-cell on" href="../chapters/28-compiler.html" title="第28章 コンパイラ">28</a><a class="nw-cell on" href="../chapters/29-imi.html" title="第29章 型で意味を表す">29</a></div></div><div class="nw-grp" style="--n:1"><span class="nw-part">VIII </span><div class="nw-cells"><a class="nw-cell on" href="../chapters/30-gbemu-desktop.html" title="第30章 エミュレータの外側">30</a></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IX ブラウザ</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/31-saba-http.html" title="第31章 URL と HTTP">31</a><a class="nw-cell on" href="../chapters/32-saba-tokenizer.html" title="第32章 HTML トークナイザ">32</a><a class="nw-cell on" href="../chapters/33-saba-dom.html" title="第33章 HTML パーサと DOM">33</a><a class="nw-cell on" href="../chapters/34-saba-css.html" title="第34章 CSS とスタイル">34</a><span class="nw-cell" title="第35章 レイアウトと描画">35</span><span class="nw-cell" title="第36章 JavaScript エンジン">36</span></div></div></div>
 </article>
   </div>
@@ -113,6 +177,7 @@
 </div>
 
 <script>
+YT_NEWS_GRAPH.mount(document.getElementById('s1'), {"month":"2017-04"});
 YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2017-04","title":"2017 年 4 月のニュース","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]} });
 </script>
 </body>

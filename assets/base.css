@@ -228,6 +228,9 @@ p.prose { display: block; }
   line-height: 1.7;
   white-space: nowrap;
 }
+/* 章の場面の見出しの「この場面のニュース N ›」（engine.js の newsChips） */
+a.nw-chip { color: var(--fg); border-color: var(--fg-dim); text-decoration: none; }
+a.nw-chip:hover { border-color: var(--fg); }
 
 /* ---------- 表紙 ---------- */
 

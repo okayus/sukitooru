@@ -16,10 +16,12 @@
      ・変わるのは news/ の直下のふつうのファイルだけ。消すファイルが無い
      ・足す .md はちょうど 1 つで、日刊のノート（名前の形、<!-- kind: daily --> の印）
      ・既にあるノートの .md を変えていない（変えてよい .md は、一覧の表を持つ news/README.md だけ）
-     ・ほかに変わるのは news/ の .html だけ（tools/build-news.mjs が作るファイル）
+     ・ほかに変わるのは news/ の .html と news/news-data.js だけ（tools/build-news.mjs が作るファイル）
      ・ノートの中身: 大きさ、題と「要点」と場面の数、日付が未来でない、
-       リンクが https:// か http:// だけ、章の場面へのリンクが 2 つ以上の場面にある
-   .html と README.md が build-news.mjs の出力と一致するか、ページが 1 画面に収まるかは、
+       リンクが https:// か http:// だけ、章の場面へのリンクが 2 つ以上の場面にある、
+       <!-- tags: … --> の id が層の登録簿（この検査と同じ側の assets/layers.js）にある、
+       <!-- missing: … --> の名前の数と長さ
+   .html・news-data.js・README.md が build-news.mjs の出力と一致するか、ページが 1 画面に収まるかは、
    ワークフローがこの後に build-news.mjs と verify.mjs を走らせて確かめる。
 
    通ったら、環境変数 GITHUB_OUTPUT のファイルに note（ノートのページ）と month（月のページ）を書く。
@@ -28,8 +30,11 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 
+const L = createRequire(import.meta.url)('../assets/layers.js');   // main の側の登録簿（プルリクエストの側は読まない）
 const MAX_BYTES = 16000;
+const MAX_MISSING = 8, MAX_MISSING_LEN = 40;
 const SITE = 'https://okayus.github.io/youtube-ga-mieru-made/';
 const work = process.argv[2];
 if (!work || !fs.existsSync(path.join(work, '.git'))) { console.error('usage: node tools/news-pr-check.mjs <作業ツリー>'); process.exit(2); }
@@ -53,7 +58,7 @@ for (const { status, file } of diff) {
     if (status === 'A' && RE_NOTE.test(file)) added.push(file);
     else if (status === 'A') bad(`ノートの名前の形（YYYY-MM-DD-題.md。題は英小文字・数字・ハイフン）でない: ${file}`);
     else if (file !== 'news/README.md') bad(`既にあるノートを変えている: ${file}`);
-  } else if (!/^news\/[0-9a-z-]+\.html$/.test(file)) bad(`ノートでもページでもないファイル: ${file}`);
+  } else if (!/^news\/[0-9a-z-]+\.html$/.test(file) && file !== 'news/news-data.js') bad(`ノートでもページでもないファイル: ${file}`);
 }
 if (added.length !== 1) bad(`足すノートは 1 つだけ（今は ${added.length} つ: ${added.join('、') || 'なし'}）`);
 
@@ -84,6 +89,20 @@ if (note && added.length === 1) {
   const RE_SCENE = new RegExp('^' + SITE.replace(/[.]/g, '\\.') + 'chapters/\\d\\d-[a-z0-9-]+\\.html#s\\d+$');
   const scenesLinked = new Set(urls.filter((u) => RE_SCENE.test(u)));
   if (scenesLinked.size < 2) bad(`章の場面へのリンク（…/chapters/NN-名前.html#sK）は 2 つ以上の場面に張る（今は ${scenesLinked.size} つ）`);
+
+  /* 層の指定と、教材に無い概念（行だけの印。書き方は news/README.md） */
+  const tags = [...src.matchAll(/^<!--\s*tags:\s*([^>]*?)\s*-->\s*$/gm)];
+  if (tags.length > 1) bad('<!-- tags: … --> の行は 1 つだけ');
+  for (const id of tags.length ? tags[0][1].split(/[、,\s]+/).filter(Boolean) : []) if (!L.byId[id]) bad(`tags の ${id} は層の登録簿（assets/layers.js）に無い`);
+  if (/<!--\s*tags:/.test(src) && !tags.length) bad('<!-- tags: … --> は 1 行に書く');
+  const missing = [...src.matchAll(/^<!--\s*missing:\s*([^>]*?)\s*-->\s*$/gm)];
+  if (missing.length > 1) bad('<!-- missing: … --> の行は 1 つだけ');
+  if (/<!--\s*missing:/.test(src) && !missing.length) bad('<!-- missing: … --> は 1 行に書く');
+  const names = missing.length ? missing[0][1].split('、').map((s) => s.trim()) : [];
+  if (names.some((s) => !s)) bad('missing の名前に空のものがある（「、」が続いている）');
+  if (names.length > MAX_MISSING) bad(`missing の名前は ${MAX_MISSING} 個まで（今は ${names.length} 個）`);
+  for (const s of names) if (s.length > MAX_MISSING_LEN) bad(`missing の名前が長い（${MAX_MISSING_LEN} 字まで）: ${s}`);
+  if (new Set(names).size !== names.length) bad('missing に同じ名前が 2 回ある');
 }
 
 /* ---------- 結果 ---------- */

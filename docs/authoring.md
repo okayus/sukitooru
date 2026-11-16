@@ -44,6 +44,8 @@
 - 場面は `section.scene`、id は `s0` から順に。`data-tab` が上部バーのタブ名（2〜8文字）。
 - 上部バー（タブ・凡例・動きの操作・‹›）はエンジンが `meta` と `data-tab` から組み立てる。HTML には書かない。
 - 表紙の `<p class="legend" data-auto>`・`<p class="keys fit-only" data-auto>`（1画面版の操作の説明）と、`<nav class="chnav" data-auto>` はエンジンが `meta.legend` / `meta.prev` / `meta.next` から埋める。まとめの `chnav` の前には、次の章の導入（`meta.next.lead`）と用語索引へのリンクも出る。
+- 場面の見出し（`.sh-meta`）の最後に「この場面のニュース N ›」、まとめの見出しに「この章に関わるニュース N ›」の札を、エンジンが `news/news-data.js` から足す（その場面・章にリンクしているノートがあるときだけ）。見出しの札を増やすときは、この札の分の幅を残す。
+- 場面の層（ニュースの層と層の地図に使う）は `assets/layers.js` に書く。場面の題材を変えて層が変わったら、そこを直して `node tools/layercheck.mjs` を走らせる。
 
 ## 2. 場面の型
 
