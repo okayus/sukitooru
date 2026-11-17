@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
 <link rel="stylesheet" href="../assets/base.css">
 <script src="../assets/engine.js"></script>
+<script src="../assets/layers.js"></script>
+<script src="../assets/news-graph.js"></script>
 <style>
   /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
   .sc-nw { grid-template-areas: "sh" "text"; }
@@ -104,6 +106,30 @@
   .nwg-box:focus-visible { outline: none; }
   .nwg-box:focus-visible rect { stroke: var(--fg); stroke-width: 2.5; }
 
+  /* 層の歩き（assets/news-graph.js の walk）。1画面版は表を段階（説明欄と行の一覧）に置き換え、縦読み版は表を縦に並べる */
+  .sc-nwwalk { grid-template-areas: "sh" "lead" "fig" "tbl" "after"; }
+  .sc-nwwalk .a-panel, .sc-nwwalk .a-mbar, .fit .sc-nwwalk .a-tbl { display: none; }
+  .fit .sc-nwwalk .a-panel { display: block; }
+  .sc-nwwalk .drill-list { display: none; }   /* 板の行き先は、説明欄の「章・場面」の欄のリンクと図の ↓ の札 */
+  html:not(.fit) .sc-nwwalk .drill-badges { display: none; }   /* 縦読み版は、表の章と場面のリンクで板を開く */
+  .nw-fit { display: none; }
+  .fit .nw-fit { display: inline; }
+  .fit .nw-phone { display: none; }
+  .nw-route { list-style: none; padding: 0; }
+  .nw-route li + li { margin-top: 1px; }
+  .nw-route a { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); align-items: baseline; padding: 0.1rem 0.6rem 0.12rem 0.45rem; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; color: var(--fg-mid); text-decoration: none; font-size: 0.86rem; line-height: 1.6; }
+  .nw-route a:hover { color: var(--fg); background: var(--hl); }
+  .nw-route .n { font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); }
+  .nw-route .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nw-route b { color: var(--fg); }
+  .nw-route li.on a { border-left-color: var(--c-x); background: var(--inset); color: var(--fg); }
+  .nw-route li.on .n { color: var(--c-x); font-weight: 600; }
+  .nw-ref { margin-top: 0.55rem; font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-ref-l { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); border: 1px solid var(--rule); border-radius: 3px; padding: 0 0.35rem; margin-right: 0.5rem; white-space: nowrap; }
+  .nw-wtbl tbody { counter-reset: nw-row; }
+  .nw-wtbl tbody tr { counter-increment: nw-row; }
+  .nw-wtbl table.stack td[data-label]:first-child::before { content: counter(nw-row); font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); min-width: 1.4rem; margin-right: 0.2rem; }
+
   /* 教材に無い */
   .nw-miss { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.55rem 1.4rem; align-content: start; }
   .fit .nw-miss { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; }
@@ -169,26 +195,43 @@
   </div>
 </section>
 
-<!-- ================= 2 どの層の話か ================= -->
-<section class="scene sc-nw" id="s2" data-tab="層" aria-labelledby="h-s2">
+<!-- ================= 2 どの層の話か（層の歩き） ================= -->
+<section class="scene sc-anim sc-nwwalk" id="s2" data-tab="層" aria-labelledby="h-s2">
   <header class="sh a-sh">
     <h2 id="h-s2"><span class="n">2</span>どの層の話か</h2>
   </header>
-  <div class="nw-body a-text">
-<div class="col"><p><code>fetch('https://…')</code> 1 回が通る順に並べ、最後にプロセスの層を置く。欠陥があったのは太字の層。</p>
-<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>このニュースで起きること</th><th>章・場面</th></tr></thead><tbody>
-<tr><td data-label="層">URL のホスト</td><td data-label="このニュースで起きること"><code>１２７.0.0.1</code>（全角）・<code>127.1</code>・<code>2130706433</code> は、URL の規格ではどれも 127.0.0.1 になる。IPv4 アドレスは 32 ビットの番号で、10 進数 4 つは書き方の 1 つ</td><td data-label="章・場面"><a href="../chapters/10-browser.html#s1" class="nw-ch">10章 場面1</a> の段階2、<a href="../chapters/18-ip.html#s2" class="nw-ch">18章 場面2</a> の段階1</td></tr>
-<tr><td data-label="層"><b>DNS</b></td><td data-label="このニュースで起きること"><code>dns.resolve*()</code> は c-ares で DNS サーバーへ直接問い合わせる。名前の途中の NUL（0x00）で名前が切れ、別の名前を問い合わせた</td><td data-label="章・場面"><a href="../chapters/17-dns.html#s1" class="nw-ch">17章 場面1</a> の段階2・3</td></tr>
-<tr><td data-label="層"><b>TLS の名前の確認</b></td><td data-label="このニュースで起きること">非正規の書き方を、証明書の IP アドレスの欄と比べるか DNS の名前の欄と比べるかが版ごとに揺れ、つなぐ先と確かめる名前がずれた</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s4" class="nw-ch">20章 場面4</a> の段階5</td></tr>
-<tr><td data-label="層">TLS の証明書の連鎖</td><td data-label="このニュースで起きること">eMudhra の漏れた 8 つの鍵を、Node に組み込んだ一覧で拒むようにした。emSign のルート 3 つも外した（欠陥は CA の側）</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s4" class="nw-ch">20章 場面4</a> の段階3・4</td></tr>
-<tr><td data-label="層">OS の受信キュー</td><td data-label="このニュースで起きること">届いたバイトは、アプリが読むまでカーネルの受信キューに残る。Node の見張りは、イベントループが受信を調べたときにしか働かなかった</td><td data-label="章・場面"><a href="../chapters/09-os.html#s6" class="nw-ch">9章 場面6</a> の段階3・4、<a href="../chapters/10-browser.html#s5" class="nw-ch">10章 場面5</a> の段階3</td></tr>
-<tr><td data-label="層"><b>HTTP/1.1 の接続の使い回し</b></td><td data-label="このニュースで起きること">応答は接続の上の順番で要求と組になる。要求より先に届いていた応答を、その要求の応答として読んだ</td><td data-label="章・場面"><a href="../chapters/21-http.html#s3" class="nw-ch">21章 場面3</a> の段階1</td></tr>
-<tr><td data-label="層"><b>HTTP の本文の展開</b></td><td data-label="このニュースで起きること"><code>fetch()</code> は <code>Content-Encoding: br</code> の本文を自動で展開する。Brotli の展開が、確保した領域の外に書き込む</td><td data-label="章・場面"><a href="../chapters/21-http.html#s1" class="nw-ch">21章 場面1</a> の段階4、<a href="../chapters/23-codec.html#s3" class="nw-ch">23章 場面3</a> の段階3・5</td></tr>
-<tr><td data-label="層">メモリと CPU</td><td data-label="このニュースで起きること">範囲外の書き込みは、同じプロセスの仮想メモリの別のデータを壊す。関数の番地などを書き換えれば、PC を攻撃者の選んだ命令へ向けられる</td><td data-label="章・場面"><a href="../chapters/09-os.html#s4" class="nw-ch">9章 場面4</a>、<a href="../chapters/06-cpu.html#s1" class="nw-ch">6章 場面1</a> の段階2</td></tr>
-<tr><td data-label="層"><b>乱数とプロセスの写し</b></td><td data-label="このニュースで起きること">起動のスナップショット（ヒープの写し）に使い残しの乱数が残り、そこから起動したプロセスがみな同じ値を出した</td><td data-label="章・場面"><a href="../chapters/09-os.html#s2" class="nw-ch">9章 場面2</a> の段階1、<a href="../chapters/20-tls.html#s3" class="nw-ch">20章 場面3</a> の段階5</td></tr>
-<tr><td data-label="層"><b>Node の Permission Model</b></td><td data-label="このニュースで起きること">Node の API の入口で許可を調べる仕組みで、OS のサンドボックスではない。入口の調べ忘れと、許可の木の照合の誤りがあった</td><td data-label="章・場面"><a href="../chapters/09-os.html#s2" class="nw-ch">9章 場面2</a> の段階3</td></tr>
-</tbody></table></div></div>
+  <div class="col a-left">
+    <div class="prose a-lead nw-wtext"><p><code>fetch('https://…')</code> 1 回が通る順に並べ、最後にプロセスの層を置く。欠陥があったのは太字の層。</p></div>
+    <ol class="nw-route fit-only" aria-label="表の行（1 行が 1 段階）">
+      <li><a href="#s2.1" data-go="2" data-step="0"><span class="n">1</span><span class="t">URL のホスト</span></a></li>
+      <li><a href="#s2.2" data-go="2" data-step="1"><span class="n">2</span><span class="t"><b>DNS</b></span></a></li>
+      <li><a href="#s2.3" data-go="2" data-step="2"><span class="n">3</span><span class="t"><b>TLS の名前の確認</b></span></a></li>
+      <li><a href="#s2.4" data-go="2" data-step="3"><span class="n">4</span><span class="t">TLS の証明書の連鎖</span></a></li>
+      <li><a href="#s2.5" data-go="2" data-step="4"><span class="n">5</span><span class="t">OS の受信キュー</span></a></li>
+      <li><a href="#s2.6" data-go="2" data-step="5"><span class="n">6</span><span class="t"><b>HTTP/1.1 の接続の使い回し</b></span></a></li>
+      <li><a href="#s2.7" data-go="2" data-step="6"><span class="n">7</span><span class="t"><b>HTTP の本文の展開</b></span></a></li>
+      <li><a href="#s2.8" data-go="2" data-step="7"><span class="n">8</span><span class="t">メモリと CPU</span></a></li>
+      <li><a href="#s2.9" data-go="2" data-step="8"><span class="n">9</span><span class="t"><b>乱数とプロセスの写し</b></span></a></li>
+      <li><a href="#s2.10" data-go="2" data-step="9"><span class="n">10</span><span class="t"><b>Node の Permission Model</b></span></a></li>
+    </ol>
+    <div class="narr-slot a-panel"></div>
   </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を列に並べ、このノートの表の行が触れる層を行の順に線でたどる図"></svg></div>
+    <figcaption>図1　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
+  </figure>
+  <div class="nw-wtbl a-tbl"><div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>このニュースで起きること</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="層">URL のホスト</td><td data-label="このニュースで起きること"><code>１２７.0.0.1</code>（全角）・<code>127.1</code>・<code>2130706433</code> は、URL の規格ではどれも 127.0.0.1 になる。IPv4 アドレスは 32 ビットの番号で、10 進数 4 つは書き方の 1 つ</td><td data-label="章・場面"><a href="../chapters/10-browser.html#s1" class="nw-ch" data-to="10-browser.html#s1.2">10章 場面1</a> の段階2、<a href="../chapters/18-ip.html#s2" class="nw-ch" data-to="18-ip.html#s2.1">18章 場面2</a> の段階1</td></tr>
+<tr><td data-label="層"><b>DNS</b></td><td data-label="このニュースで起きること"><code>dns.resolve*()</code> は c-ares で DNS サーバーへ直接問い合わせる。名前の途中の NUL（0x00）で名前が切れ、別の名前を問い合わせた</td><td data-label="章・場面"><a href="../chapters/17-dns.html#s1" class="nw-ch" data-to="17-dns.html#s1.2">17章 場面1</a> の段階2・3</td></tr>
+<tr><td data-label="層"><b>TLS の名前の確認</b></td><td data-label="このニュースで起きること">非正規の書き方を、証明書の IP アドレスの欄と比べるか DNS の名前の欄と比べるかが版ごとに揺れ、つなぐ先と確かめる名前がずれた</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s4" class="nw-ch" data-to="20-tls.html#s4.5">20章 場面4</a> の段階5</td></tr>
+<tr><td data-label="層">TLS の証明書の連鎖</td><td data-label="このニュースで起きること">eMudhra の漏れた 8 つの鍵を、Node に組み込んだ一覧で拒むようにした。emSign のルート 3 つも外した（欠陥は CA の側）</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s4" class="nw-ch" data-to="20-tls.html#s4.3">20章 場面4</a> の段階3・4</td></tr>
+<tr><td data-label="層">OS の受信キュー</td><td data-label="このニュースで起きること">届いたバイトは、アプリが読むまでカーネルの受信キューに残る。Node の見張りは、イベントループが受信を調べたときにしか働かなかった</td><td data-label="章・場面"><a href="../chapters/09-os.html#s6" class="nw-ch" data-to="09-os.html#s6.3">9章 場面6</a> の段階3・4、<a href="../chapters/10-browser.html#s5" class="nw-ch" data-to="10-browser.html#s5.3">10章 場面5</a> の段階3</td></tr>
+<tr><td data-label="層"><b>HTTP/1.1 の接続の使い回し</b></td><td data-label="このニュースで起きること">応答は接続の上の順番で要求と組になる。要求より先に届いていた応答を、その要求の応答として読んだ</td><td data-label="章・場面"><a href="../chapters/21-http.html#s3" class="nw-ch" data-to="21-http.html#s3.1">21章 場面3</a> の段階1</td></tr>
+<tr><td data-label="層"><b>HTTP の本文の展開</b></td><td data-label="このニュースで起きること"><code>fetch()</code> は <code>Content-Encoding: br</code> の本文を自動で展開する。Brotli の展開が、確保した領域の外に書き込む</td><td data-label="章・場面"><a href="../chapters/21-http.html#s1" class="nw-ch" data-to="21-http.html#s1.4">21章 場面1</a> の段階4、<a href="../chapters/23-codec.html#s3" class="nw-ch" data-to="23-codec.html#s3.3">23章 場面3</a> の段階3・5</td></tr>
+<tr><td data-label="層">メモリと CPU</td><td data-label="このニュースで起きること">範囲外の書き込みは、同じプロセスの仮想メモリの別のデータを壊す。関数の番地などを書き換えれば、PC を攻撃者の選んだ命令へ向けられる</td><td data-label="章・場面"><a href="../chapters/09-os.html#s4" class="nw-ch" data-to="09-os.html#s4">9章 場面4</a>、<a href="../chapters/06-cpu.html#s1" class="nw-ch" data-to="06-cpu.html#s1.2">6章 場面1</a> の段階2</td></tr>
+<tr><td data-label="層"><b>乱数とプロセスの写し</b></td><td data-label="このニュースで起きること">起動のスナップショット（ヒープの写し）に使い残しの乱数が残り、そこから起動したプロセスがみな同じ値を出した</td><td data-label="章・場面"><a href="../chapters/09-os.html#s2" class="nw-ch" data-to="09-os.html#s2.1">9章 場面2</a> の段階1、<a href="../chapters/20-tls.html#s3" class="nw-ch" data-to="20-tls.html#s3.5">20章 場面3</a> の段階5</td></tr>
+<tr><td data-label="層"><b>Node の Permission Model</b></td><td data-label="このニュースで起きること">Node の API の入口で許可を調べる仕組みで、OS のサンドボックスではない。入口の調べ忘れと、許可の木の照合の誤りがあった</td><td data-label="章・場面"><a href="../chapters/09-os.html#s2" class="nw-ch" data-to="09-os.html#s2.3">9章 場面2</a> の段階3</td></tr>
+</tbody></table></div></div>
 </section>
 
 <!-- ================= 3 Brotli の展開（CVE-2026-111497） ================= -->
@@ -324,7 +367,7 @@
 </div>
 
 <script>
-YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2026-10-21","title":"Node.js の 2026 年 10 月のセキュリティリリース","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]} });
+YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2026-10-21","title":"Node.js の 2026 年 10 月のセキュリティリリース","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]}, scenes: { s2: YT_NEWS_GRAPH.walk(document.getElementById('s2'), {"layers":["http","os","tls","cpu","runtime","browser","ip","transport","codec"],"missing":["SQLite","ZIP（zlib.ZipFile）"],"rows":[{"l":[{"to":"10-browser.html#s1.2","ids":["browser"],"n":0},{"to":"18-ip.html#s2.1","ids":["ip"],"n":0}],"m":[]},{"l":[{"to":"17-dns.html#s1.2","ids":["http"],"n":0}],"m":[]},{"l":[{"to":"20-tls.html#s4.5","ids":["tls"],"n":0}],"m":[]},{"l":[{"to":"20-tls.html#s4.3","ids":["tls"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s6.3","ids":["os","transport"],"n":0},{"to":"10-browser.html#s5.3","ids":["runtime"],"n":0}],"m":[]},{"l":[{"to":"21-http.html#s3.1","ids":["http"],"n":0}],"m":[]},{"l":[{"to":"21-http.html#s1.4","ids":["http"],"n":0},{"to":"23-codec.html#s3.3","ids":["codec"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s4","ids":["os"],"n":0},{"to":"06-cpu.html#s1.2","ids":["cpu"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s2.1","ids":["os"],"n":0},{"to":"20-tls.html#s3.5","ids":["tls"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s2.3","ids":["os"],"n":0}],"m":[]}]}) } });
 </script>
 </body>
 </html>

@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
 <link rel="stylesheet" href="../assets/base.css">
 <script src="../assets/engine.js"></script>
+<script src="../assets/layers.js"></script>
+<script src="../assets/news-graph.js"></script>
 <style>
   /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
   .sc-nw { grid-template-areas: "sh" "text"; }
@@ -104,6 +106,30 @@
   .nwg-box:focus-visible { outline: none; }
   .nwg-box:focus-visible rect { stroke: var(--fg); stroke-width: 2.5; }
 
+  /* 層の歩き（assets/news-graph.js の walk）。1画面版は表を段階（説明欄と行の一覧）に置き換え、縦読み版は表を縦に並べる */
+  .sc-nwwalk { grid-template-areas: "sh" "lead" "fig" "tbl" "after"; }
+  .sc-nwwalk .a-panel, .sc-nwwalk .a-mbar, .fit .sc-nwwalk .a-tbl { display: none; }
+  .fit .sc-nwwalk .a-panel { display: block; }
+  .sc-nwwalk .drill-list { display: none; }   /* 板の行き先は、説明欄の「章・場面」の欄のリンクと図の ↓ の札 */
+  html:not(.fit) .sc-nwwalk .drill-badges { display: none; }   /* 縦読み版は、表の章と場面のリンクで板を開く */
+  .nw-fit { display: none; }
+  .fit .nw-fit { display: inline; }
+  .fit .nw-phone { display: none; }
+  .nw-route { list-style: none; padding: 0; }
+  .nw-route li + li { margin-top: 1px; }
+  .nw-route a { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); align-items: baseline; padding: 0.1rem 0.6rem 0.12rem 0.45rem; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; color: var(--fg-mid); text-decoration: none; font-size: 0.86rem; line-height: 1.6; }
+  .nw-route a:hover { color: var(--fg); background: var(--hl); }
+  .nw-route .n { font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); }
+  .nw-route .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nw-route b { color: var(--fg); }
+  .nw-route li.on a { border-left-color: var(--c-x); background: var(--inset); color: var(--fg); }
+  .nw-route li.on .n { color: var(--c-x); font-weight: 600; }
+  .nw-ref { margin-top: 0.55rem; font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-ref-l { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); border: 1px solid var(--rule); border-radius: 3px; padding: 0 0.35rem; margin-right: 0.5rem; white-space: nowrap; }
+  .nw-wtbl tbody { counter-reset: nw-row; }
+  .nw-wtbl tbody tr { counter-increment: nw-row; }
+  .nw-wtbl table.stack td[data-label]:first-child::before { content: counter(nw-row); font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); min-width: 1.4rem; margin-right: 0.2rem; }
+
   /* 教材に無い */
   .nw-miss { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.55rem 1.4rem; align-content: start; }
   .fit .nw-miss { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; }
@@ -168,26 +194,43 @@
   </div>
 </section>
 
-<!-- ================= 2 どの層の話か ================= -->
-<section class="scene sc-nw" id="s2" data-tab="層" aria-labelledby="h-s2">
+<!-- ================= 2 どの層の話か（層の歩き） ================= -->
+<section class="scene sc-anim sc-nwwalk" id="s2" data-tab="層" aria-labelledby="h-s2">
   <header class="sh a-sh">
     <h2 id="h-s2"><span class="n">2</span>どの層の話か</h2>
   </header>
-  <div class="nw-body a-text">
-<div class="col"><p>SYN が届いてから解放された領域を読むまでの順に並べ、最後に権限と MPTCP を置く。欠陥があったのは太字の層。</p>
-<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>このニュースで起きること</th><th>章・場面</th></tr></thead><tbody>
-<tr><td data-label="層">IP ヘッダ</td><td data-label="このニュースで起きること">ヘッダ長を 5 より大きくすると、後ろにオプションを足せる。攻撃者は SYN に Record Route や Timestamp を付ける</td><td data-label="章・場面"><a href="../chapters/18-ip.html#s1" class="nw-ch">18章 場面1</a> の段階2・6</td></tr>
-<tr><td data-label="層">家のルーター</td><td data-label="このニュースで起きること">ポート開放が無ければ、外からの IPv4 の SYN は NAT の内側へ届かない。同じ LAN の機器からは届く</td><td data-label="章・場面"><a href="../chapters/14-router.html#s5" class="nw-ch">14章 場面5</a> の段階1・4</td></tr>
-<tr><td data-label="層">ネットワークスタック</td><td data-label="このニュースで起きること">受信はカーネルが処理し、待ち受けのアプリは関わらない</td><td data-label="章・場面"><a href="../chapters/09-os.html#s6" class="nw-ch">9章 場面6</a> の段階2・3</td></tr>
-<tr><td data-label="層"><b>TCP のハンドシェイク</b></td><td data-label="このニュースで起きること">SYN でカーネルが request socket を作り、IP オプションの写しを持つ。最後の ACK で子ソケットができ、写しをコピーせずに引き継ぐ</td><td data-label="章・場面"><a href="../chapters/19-tcp.html#s2" class="nw-ch">19章 場面2</a> の段階1〜3</td></tr>
-<tr><td data-label="層">TCP の再送</td><td data-label="このニュースで起きること">同じ SYN が再送されると、カーネルは SYN/ACK を作り直し、そのとき写しを読む</td><td data-label="章・場面"><a href="../chapters/19-tcp.html#s3" class="nw-ch">19章 場面3</a> の段階5</td></tr>
-<tr><td data-label="層">複数のコア</td><td data-label="このニュースで起きること">再送の処理と子ソケットの解放は、別のコアで同時に走る</td><td data-label="章・場面"><a href="../chapters/09-os.html#s5" class="nw-ch">9章 場面5</a> の段階6</td></tr>
-<tr><td data-label="層"><b>メモリの寿命</b></td><td data-label="このニュースで起きること">解放された領域が別の物に使い回されると、古いポインタで読む長さの欄も別の値になる</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s6" class="nw-ch">26章 場面6</a> の段階3</td></tr>
-<tr><td data-label="層">ハッシュ表</td><td data-label="このニュースで起きること">2015 年の変更で request socket を ehash 表に入れ、リスナーのロックなしで処理するようになった。この欠陥の入口である</td><td data-label="章・場面"><a href="../chapters/27-algorithm.html#s3" class="nw-ch">27章 場面3</a> の段階2</td></tr>
-<tr><td data-label="層">カーネルの権限</td><td data-label="このニュースで起きること">カーネルは ring 0 で動く。ここで制御を奪えば、root のコマンドも実行できる</td><td data-label="章・場面"><a href="../chapters/09-os.html#s1" class="nw-ch">9章 場面1</a> の段階2</td></tr>
-<tr><td data-label="層">MPTCP</td><td data-label="このニュースで起きること">1 本の接続を複数の TCP のサブフローで運ぶ拡張で、教材に無い。近いのは QUIC の接続 ID。Go 1.24 以降の Linux の待ち受けは、既定で MPTCP を使う</td><td data-label="章・場面"><a href="../chapters/19-tcp.html#s6" class="nw-ch">19章 場面6</a> の段階4</td></tr>
-</tbody></table></div></div>
+  <div class="col a-left">
+    <div class="prose a-lead nw-wtext"><p>SYN が届いてから解放された領域を読むまでの順に並べ、最後に権限と MPTCP を置く。欠陥があったのは太字の層。</p></div>
+    <ol class="nw-route fit-only" aria-label="表の行（1 行が 1 段階）">
+      <li><a href="#s2.1" data-go="2" data-step="0"><span class="n">1</span><span class="t">IP ヘッダ</span></a></li>
+      <li><a href="#s2.2" data-go="2" data-step="1"><span class="n">2</span><span class="t">家のルーター</span></a></li>
+      <li><a href="#s2.3" data-go="2" data-step="2"><span class="n">3</span><span class="t">ネットワークスタック</span></a></li>
+      <li><a href="#s2.4" data-go="2" data-step="3"><span class="n">4</span><span class="t"><b>TCP のハンドシェイク</b></span></a></li>
+      <li><a href="#s2.5" data-go="2" data-step="4"><span class="n">5</span><span class="t">TCP の再送</span></a></li>
+      <li><a href="#s2.6" data-go="2" data-step="5"><span class="n">6</span><span class="t">複数のコア</span></a></li>
+      <li><a href="#s2.7" data-go="2" data-step="6"><span class="n">7</span><span class="t"><b>メモリの寿命</b></span></a></li>
+      <li><a href="#s2.8" data-go="2" data-step="7"><span class="n">8</span><span class="t">ハッシュ表</span></a></li>
+      <li><a href="#s2.9" data-go="2" data-step="8"><span class="n">9</span><span class="t">カーネルの権限</span></a></li>
+      <li><a href="#s2.10" data-go="2" data-step="9"><span class="n">10</span><span class="t">MPTCP</span></a></li>
+    </ol>
+    <div class="narr-slot a-panel"></div>
   </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を列に並べ、このノートの表の行が触れる層を行の順に線でたどる図"></svg></div>
+    <figcaption>図1　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
+  </figure>
+  <div class="nw-wtbl a-tbl"><div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>このニュースで起きること</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="層">IP ヘッダ</td><td data-label="このニュースで起きること">ヘッダ長を 5 より大きくすると、後ろにオプションを足せる。攻撃者は SYN に Record Route や Timestamp を付ける</td><td data-label="章・場面"><a href="../chapters/18-ip.html#s1" class="nw-ch" data-to="18-ip.html#s1.2">18章 場面1</a> の段階2・6</td></tr>
+<tr><td data-label="層">家のルーター</td><td data-label="このニュースで起きること">ポート開放が無ければ、外からの IPv4 の SYN は NAT の内側へ届かない。同じ LAN の機器からは届く</td><td data-label="章・場面"><a href="../chapters/14-router.html#s5" class="nw-ch" data-to="14-router.html#s5.1">14章 場面5</a> の段階1・4</td></tr>
+<tr><td data-label="層">ネットワークスタック</td><td data-label="このニュースで起きること">受信はカーネルが処理し、待ち受けのアプリは関わらない</td><td data-label="章・場面"><a href="../chapters/09-os.html#s6" class="nw-ch" data-to="09-os.html#s6.2">9章 場面6</a> の段階2・3</td></tr>
+<tr><td data-label="層"><b>TCP のハンドシェイク</b></td><td data-label="このニュースで起きること">SYN でカーネルが request socket を作り、IP オプションの写しを持つ。最後の ACK で子ソケットができ、写しをコピーせずに引き継ぐ</td><td data-label="章・場面"><a href="../chapters/19-tcp.html#s2" class="nw-ch" data-to="19-tcp.html#s2.1">19章 場面2</a> の段階1〜3</td></tr>
+<tr><td data-label="層">TCP の再送</td><td data-label="このニュースで起きること">同じ SYN が再送されると、カーネルは SYN/ACK を作り直し、そのとき写しを読む</td><td data-label="章・場面"><a href="../chapters/19-tcp.html#s3" class="nw-ch" data-to="19-tcp.html#s3.5">19章 場面3</a> の段階5</td></tr>
+<tr><td data-label="層">複数のコア</td><td data-label="このニュースで起きること">再送の処理と子ソケットの解放は、別のコアで同時に走る</td><td data-label="章・場面"><a href="../chapters/09-os.html#s5" class="nw-ch" data-to="09-os.html#s5.6">9章 場面5</a> の段階6</td></tr>
+<tr><td data-label="層"><b>メモリの寿命</b></td><td data-label="このニュースで起きること">解放された領域が別の物に使い回されると、古いポインタで読む長さの欄も別の値になる</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s6" class="nw-ch" data-to="26-kata.html#s6.3">26章 場面6</a> の段階3</td></tr>
+<tr><td data-label="層">ハッシュ表</td><td data-label="このニュースで起きること">2015 年の変更で request socket を ehash 表に入れ、リスナーのロックなしで処理するようになった。この欠陥の入口である</td><td data-label="章・場面"><a href="../chapters/27-algorithm.html#s3" class="nw-ch" data-to="27-algorithm.html#s3.2">27章 場面3</a> の段階2</td></tr>
+<tr><td data-label="層">カーネルの権限</td><td data-label="このニュースで起きること">カーネルは ring 0 で動く。ここで制御を奪えば、root のコマンドも実行できる</td><td data-label="章・場面"><a href="../chapters/09-os.html#s1" class="nw-ch" data-to="09-os.html#s1.2">9章 場面1</a> の段階2</td></tr>
+<tr><td data-label="層">MPTCP</td><td data-label="このニュースで起きること">1 本の接続を複数の TCP のサブフローで運ぶ拡張で、教材に無い。近いのは QUIC の接続 ID。Go 1.24 以降の Linux の待ち受けは、既定で MPTCP を使う</td><td data-label="章・場面"><a href="../chapters/19-tcp.html#s6" class="nw-ch" data-to="19-tcp.html#s6.4">19章 場面6</a> の段階4</td></tr>
+</tbody></table></div></div>
 </section>
 
 <!-- ================= 3 欠陥の仕組み ================= -->
@@ -313,7 +356,7 @@
 </div>
 
 <script>
-YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2026-10-15","title":"Linux の IPv4 TCP の解放後の使用 CVE-2026-98432","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]} });
+YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2026-10-15","title":"Linux の IPv4 TCP の解放後の使用 CVE-2026-98432","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]}, scenes: { s2: YT_NEWS_GRAPH.walk(document.getElementById('s2'), {"layers":["transport","os","ip","tls","type","algo","cpu"],"missing":["MPTCP","KASLR","RCU"],"rows":[{"l":[{"to":"18-ip.html#s1.2","ids":["ip"],"n":0}],"m":[]},{"l":[{"to":"14-router.html#s5.1","ids":["ip","transport"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s6.2","ids":["os","transport"],"n":0}],"m":[]},{"l":[{"to":"19-tcp.html#s2.1","ids":["transport"],"n":0}],"m":[]},{"l":[{"to":"19-tcp.html#s3.5","ids":["transport"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s5.6","ids":["os"],"n":0}],"m":[]},{"l":[{"to":"26-kata.html#s6.3","ids":["type"],"n":0}],"m":[]},{"l":[{"to":"27-algorithm.html#s3.2","ids":["algo"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s1.2","ids":["os"],"n":0}],"m":[]},{"l":[{"to":"19-tcp.html#s6.4","ids":["transport","tls"],"n":0}],"m":[0]}]}) } });
 </script>
 </body>
 </html>

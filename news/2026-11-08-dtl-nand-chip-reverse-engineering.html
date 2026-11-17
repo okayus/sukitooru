@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
 <link rel="stylesheet" href="../assets/base.css">
 <script src="../assets/engine.js"></script>
+<script src="../assets/layers.js"></script>
+<script src="../assets/news-graph.js"></script>
 <style>
   /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
   .sc-nw { grid-template-areas: "sh" "text"; }
@@ -104,6 +106,30 @@
   .nwg-box:focus-visible { outline: none; }
   .nwg-box:focus-visible rect { stroke: var(--fg); stroke-width: 2.5; }
 
+  /* 層の歩き（assets/news-graph.js の walk）。1画面版は表を段階（説明欄と行の一覧）に置き換え、縦読み版は表を縦に並べる */
+  .sc-nwwalk { grid-template-areas: "sh" "lead" "fig" "tbl" "after"; }
+  .sc-nwwalk .a-panel, .sc-nwwalk .a-mbar, .fit .sc-nwwalk .a-tbl { display: none; }
+  .fit .sc-nwwalk .a-panel { display: block; }
+  .sc-nwwalk .drill-list { display: none; }   /* 板の行き先は、説明欄の「章・場面」の欄のリンクと図の ↓ の札 */
+  html:not(.fit) .sc-nwwalk .drill-badges { display: none; }   /* 縦読み版は、表の章と場面のリンクで板を開く */
+  .nw-fit { display: none; }
+  .fit .nw-fit { display: inline; }
+  .fit .nw-phone { display: none; }
+  .nw-route { list-style: none; padding: 0; }
+  .nw-route li + li { margin-top: 1px; }
+  .nw-route a { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); align-items: baseline; padding: 0.1rem 0.6rem 0.12rem 0.45rem; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; color: var(--fg-mid); text-decoration: none; font-size: 0.86rem; line-height: 1.6; }
+  .nw-route a:hover { color: var(--fg); background: var(--hl); }
+  .nw-route .n { font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); }
+  .nw-route .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nw-route b { color: var(--fg); }
+  .nw-route li.on a { border-left-color: var(--c-x); background: var(--inset); color: var(--fg); }
+  .nw-route li.on .n { color: var(--c-x); font-weight: 600; }
+  .nw-ref { margin-top: 0.55rem; font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-ref-l { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); border: 1px solid var(--rule); border-radius: 3px; padding: 0 0.35rem; margin-right: 0.5rem; white-space: nowrap; }
+  .nw-wtbl tbody { counter-reset: nw-row; }
+  .nw-wtbl tbody tr { counter-increment: nw-row; }
+  .nw-wtbl table.stack td[data-label]:first-child::before { content: counter(nw-row); font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); min-width: 1.4rem; margin-right: 0.2rem; }
+
   /* 教材に無い */
   .nw-miss { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.55rem 1.4rem; align-content: start; }
   .fit .nw-miss { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; }
@@ -143,22 +169,35 @@
   </footer>
 </section>
 
-<!-- ================= 1 どの層の話か ================= -->
-<section class="scene sc-nw" id="s1" data-tab="層" aria-labelledby="h-s1">
+<!-- ================= 1 どの層の話か（層の歩き） ================= -->
+<section class="scene sc-anim sc-nwwalk" id="s1" data-tab="層" aria-labelledby="h-s1">
   <header class="sh a-sh">
     <h2 id="h-s1"><span class="n">1</span>どの層の話か</h2>
   </header>
-  <div class="nw-body a-text">
-<div class="col"><p>種類は解説で、新しい機能や事故の話ではない。ソフトウェアは出てこない。ビルド時と実行時に当たるのは、チップを作るとき（配線層の作り分け）と、ゲートが動くとき（電流の流れ方）である。表は下の層から並べた。</p>
-<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>この記事で起きること</th><th>章・場面</th></tr></thead><tbody>
-<tr><td data-label="層">不純物の領域</td><td data-label="この記事で起きること">n 型（リンやヒ素）と p 型（ホウ素やガリウム）の領域が、顕微鏡では赤と緑に見分けられる。抵抗は n 型の囲いの中の細長い p 型で、囲いを電源につなぎ、pn 接合で抵抗どうしを切り離す</td><td data-label="章・場面"><a href="../chapters/02-handoutai.html#s2" class="nw-ch">2章 場面2</a>、<a href="../chapters/02-handoutai.html#s3" class="nw-ch">2章 場面3</a>、<a href="../chapters/02-handoutai.html#s4" class="nw-ch">2章 場面4</a></td></tr>
-<tr><td data-label="層">抵抗</td><td data-label="この記事で起きること">16 個ある。細長いシリコンを蛇行させ、小さい面積に長い抵抗を収める</td><td data-label="章・場面"><a href="../chapters/01-denshi.html#s3" class="nw-ch">1章 場面3</a></td></tr>
-<tr><td data-label="層">ダイオード</td><td data-label="この記事で起きること">入力ごとに 1 個あり、片方の入力が他方に影響するのを止める。段の間の 1 個は、1 段目のトランジスタがオンになる電圧を上げて、雑音に強くする</td><td data-label="章・場面"><a href="../chapters/02-handoutai.html#s5" class="nw-ch">2章 場面5</a>、<a href="../chapters/04-ronri.html#s1" class="nw-ch">4章 場面1</a></td></tr>
-<tr><td data-label="層">トランジスタ</td><td data-label="この記事で起きること">バイポーラの NPN。ベースの電流で、コレクタからエミッタへの電流を制御する。電圧で通り道を開け閉めする MOSFET とは作りが違う</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/03-transistor.html#s1" class="nw-ch">3章 場面1</a>、<a href="../chapters/03-transistor.html#s3" class="nw-ch">3章 場面3</a></td></tr>
-<tr><td data-label="層">論理ゲート</td><td data-label="この記事で起きること">入力が両方 1 のときだけ出力が 0 になる NAND。出力を 1 にするのは抵抗で、出力が 0 の間も電流が流れ続ける</td><td data-label="章・場面"><a href="../chapters/04-ronri.html#s2" class="nw-ch">4章 場面2</a>、<a href="../chapters/03-transistor.html#s4" class="nw-ch">3章 場面4</a></td></tr>
-<tr><td data-label="層">製造</td><td data-label="この記事で起きること">シリコンの層は共通にし、金属の配線層のマスクだけを替えて、NAND が 4 つ・3 つ・2 つの 3 品種にする</td><td data-label="章・場面"><a href="../chapters/03-transistor.html#s6" class="nw-ch">3章 場面6</a></td></tr>
-</tbody></table></div></div>
+  <div class="col a-left">
+    <div class="prose a-lead nw-wtext"><p>種類は解説で、新しい機能や事故の話ではない。ソフトウェアは出てこない。ビルド時と実行時に当たるのは、チップを作るとき（配線層の作り分け）と、ゲートが動くとき（電流の流れ方）である。表は下の層から並べた。</p></div>
+    <ol class="nw-route fit-only" aria-label="表の行（1 行が 1 段階）">
+      <li><a href="#s1.1" data-go="1" data-step="0"><span class="n">1</span><span class="t">不純物の領域</span></a></li>
+      <li><a href="#s1.2" data-go="1" data-step="1"><span class="n">2</span><span class="t">抵抗</span></a></li>
+      <li><a href="#s1.3" data-go="1" data-step="2"><span class="n">3</span><span class="t">ダイオード</span></a></li>
+      <li><a href="#s1.4" data-go="1" data-step="3"><span class="n">4</span><span class="t">トランジスタ</span></a></li>
+      <li><a href="#s1.5" data-go="1" data-step="4"><span class="n">5</span><span class="t">論理ゲート</span></a></li>
+      <li><a href="#s1.6" data-go="1" data-step="5"><span class="n">6</span><span class="t">製造</span></a></li>
+    </ol>
+    <div class="narr-slot a-panel"></div>
   </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を列に並べ、このノートの表の行が触れる層を行の順に線でたどる図"></svg></div>
+    <figcaption>図1　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
+  </figure>
+  <div class="nw-wtbl a-tbl"><div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>この記事で起きること</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="層">不純物の領域</td><td data-label="この記事で起きること">n 型（リンやヒ素）と p 型（ホウ素やガリウム）の領域が、顕微鏡では赤と緑に見分けられる。抵抗は n 型の囲いの中の細長い p 型で、囲いを電源につなぎ、pn 接合で抵抗どうしを切り離す</td><td data-label="章・場面"><a href="../chapters/02-handoutai.html#s2" class="nw-ch" data-to="02-handoutai.html#s2">2章 場面2</a>、<a href="../chapters/02-handoutai.html#s3" class="nw-ch" data-to="02-handoutai.html#s3">2章 場面3</a>、<a href="../chapters/02-handoutai.html#s4" class="nw-ch" data-to="02-handoutai.html#s4">2章 場面4</a></td></tr>
+<tr><td data-label="層">抵抗</td><td data-label="この記事で起きること">16 個ある。細長いシリコンを蛇行させ、小さい面積に長い抵抗を収める</td><td data-label="章・場面"><a href="../chapters/01-denshi.html#s3" class="nw-ch" data-to="01-denshi.html#s3">1章 場面3</a></td></tr>
+<tr><td data-label="層">ダイオード</td><td data-label="この記事で起きること">入力ごとに 1 個あり、片方の入力が他方に影響するのを止める。段の間の 1 個は、1 段目のトランジスタがオンになる電圧を上げて、雑音に強くする</td><td data-label="章・場面"><a href="../chapters/02-handoutai.html#s5" class="nw-ch" data-to="02-handoutai.html#s5">2章 場面5</a>、<a href="../chapters/04-ronri.html#s1" class="nw-ch" data-to="04-ronri.html#s1">4章 場面1</a></td></tr>
+<tr><td data-label="層">トランジスタ</td><td data-label="この記事で起きること">バイポーラの NPN。ベースの電流で、コレクタからエミッタへの電流を制御する。電圧で通り道を開け閉めする MOSFET とは作りが違う</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/03-transistor.html#s1" class="nw-ch" data-to="03-transistor.html#s1">3章 場面1</a>、<a href="../chapters/03-transistor.html#s3" class="nw-ch" data-to="03-transistor.html#s3">3章 場面3</a></td></tr>
+<tr><td data-label="層">論理ゲート</td><td data-label="この記事で起きること">入力が両方 1 のときだけ出力が 0 になる NAND。出力を 1 にするのは抵抗で、出力が 0 の間も電流が流れ続ける</td><td data-label="章・場面"><a href="../chapters/04-ronri.html#s2" class="nw-ch" data-to="04-ronri.html#s2">4章 場面2</a>、<a href="../chapters/03-transistor.html#s4" class="nw-ch" data-to="03-transistor.html#s4">3章 場面4</a></td></tr>
+<tr><td data-label="層">製造</td><td data-label="この記事で起きること">シリコンの層は共通にし、金属の配線層のマスクだけを替えて、NAND が 4 つ・3 つ・2 つの 3 品種にする</td><td data-label="章・場面"><a href="../chapters/03-transistor.html#s6" class="nw-ch" data-to="03-transistor.html#s6">3章 場面6</a></td></tr>
+</tbody></table></div></div>
 </section>
 
 <!-- ================= 2 中身 ================= -->
@@ -206,7 +245,7 @@
 </div>
 
 <script>
-YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 日刊 ／ 2026-11-08","title":"1960 年代の論理 IC「Signetics ST680A」の解析","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]} });
+YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 日刊 ／ 2026-11-08","title":"1960 年代の論理 IC「Signetics ST680A」の解析","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]}, scenes: { s1: YT_NEWS_GRAPH.walk(document.getElementById('s1'), {"layers":["ronri","transistor","handoutai","denshi"],"missing":["バイポーラトランジスタ"],"rows":[{"l":[{"to":"02-handoutai.html#s2","ids":["handoutai"],"n":0},{"to":"02-handoutai.html#s3","ids":["handoutai"],"n":0},{"to":"02-handoutai.html#s4","ids":["handoutai"],"n":0}],"m":[]},{"l":[{"to":"01-denshi.html#s3","ids":["denshi"],"n":0}],"m":[]},{"l":[{"to":"02-handoutai.html#s5","ids":["handoutai"],"n":0},{"to":"04-ronri.html#s1","ids":["ronri"],"n":0}],"m":[]},{"l":[{"to":"03-transistor.html#s1","ids":["transistor"],"n":1},{"to":"03-transistor.html#s3","ids":["transistor"],"n":1}],"m":[]},{"l":[{"to":"04-ronri.html#s2","ids":["ronri"],"n":0},{"to":"03-transistor.html#s4","ids":["transistor"],"n":0}],"m":[]},{"l":[{"to":"03-transistor.html#s6","ids":["transistor"],"n":0}],"m":[]}]}) } });
 </script>
 </body>
 </html>

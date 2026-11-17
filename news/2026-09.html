@@ -107,6 +107,30 @@
   .nwg-box:focus-visible { outline: none; }
   .nwg-box:focus-visible rect { stroke: var(--fg); stroke-width: 2.5; }
 
+  /* 層の歩き（assets/news-graph.js の walk）。1画面版は表を段階（説明欄と行の一覧）に置き換え、縦読み版は表を縦に並べる */
+  .sc-nwwalk { grid-template-areas: "sh" "lead" "fig" "tbl" "after"; }
+  .sc-nwwalk .a-panel, .sc-nwwalk .a-mbar, .fit .sc-nwwalk .a-tbl { display: none; }
+  .fit .sc-nwwalk .a-panel { display: block; }
+  .sc-nwwalk .drill-list { display: none; }   /* 板の行き先は、説明欄の「章・場面」の欄のリンクと図の ↓ の札 */
+  html:not(.fit) .sc-nwwalk .drill-badges { display: none; }   /* 縦読み版は、表の章と場面のリンクで板を開く */
+  .nw-fit { display: none; }
+  .fit .nw-fit { display: inline; }
+  .fit .nw-phone { display: none; }
+  .nw-route { list-style: none; padding: 0; }
+  .nw-route li + li { margin-top: 1px; }
+  .nw-route a { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); align-items: baseline; padding: 0.1rem 0.6rem 0.12rem 0.45rem; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; color: var(--fg-mid); text-decoration: none; font-size: 0.86rem; line-height: 1.6; }
+  .nw-route a:hover { color: var(--fg); background: var(--hl); }
+  .nw-route .n { font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); }
+  .nw-route .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nw-route b { color: var(--fg); }
+  .nw-route li.on a { border-left-color: var(--c-x); background: var(--inset); color: var(--fg); }
+  .nw-route li.on .n { color: var(--c-x); font-weight: 600; }
+  .nw-ref { margin-top: 0.55rem; font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-ref-l { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); border: 1px solid var(--rule); border-radius: 3px; padding: 0 0.35rem; margin-right: 0.5rem; white-space: nowrap; }
+  .nw-wtbl tbody { counter-reset: nw-row; }
+  .nw-wtbl tbody tr { counter-increment: nw-row; }
+  .nw-wtbl table.stack td[data-label]:first-child::before { content: counter(nw-row); font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); min-width: 1.4rem; margin-right: 0.2rem; }
+
   /* 教材に無い */
   .nw-miss { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.55rem 1.4rem; align-content: start; }
   .fit .nw-miss { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; }

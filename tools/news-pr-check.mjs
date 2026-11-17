@@ -20,7 +20,8 @@
      ・ノートの中身: 大きさ、題と「要点」と場面の数、日付が未来でない、
        リンクが https:// か http:// だけ、章の場面へのリンクが 2 つ以上の場面にある、
        <!-- tags: … --> の id が層の登録簿（この検査と同じ側の assets/layers.js）にある、
-       <!-- missing: … --> の名前の数と長さ
+       <!-- missing: … --> の名前の数と長さ、
+       「層」の場面の表が「層 | 起きること | 章と場面」の 3 列で 2〜6 行（ページでは行が層の歩きの段階になる）
    .html・news-data.js・README.md が build-news.mjs の出力と一致するか、ページが 1 画面に収まるかは、
    ワークフローがこの後に build-news.mjs と verify.mjs を走らせて確かめる。
 
@@ -35,6 +36,7 @@ import { createRequire } from 'node:module';
 const L = createRequire(import.meta.url)('../assets/layers.js');   // main の側の登録簿（プルリクエストの側は読まない）
 const MAX_BYTES = 16000;
 const MAX_MISSING = 8, MAX_MISSING_LEN = 40;
+const MAX_LAYER_ROWS = 6;   // 「層」の場面の表の行（news/README.md の日刊の型）
 const SITE = 'https://okayus.github.io/youtube-ga-mieru-made/';
 const work = process.argv[2];
 if (!work || !fs.existsSync(path.join(work, '.git'))) { console.error('usage: node tools/news-pr-check.mjs <作業ツリー>'); process.exit(2); }
@@ -103,6 +105,42 @@ if (note && added.length === 1) {
   if (names.length > MAX_MISSING) bad(`missing の名前は ${MAX_MISSING} 個まで（今は ${names.length} 個）`);
   for (const s of names) if (s.length > MAX_MISSING_LEN) bad(`missing の名前が長い（${MAX_MISSING_LEN} 字まで）: ${s}`);
   if (new Set(names).size !== names.length) bad('missing に同じ名前が 2 回ある');
+
+  /* 「層」の場面の表。ページでは表の行が層の歩きの段階になる（tools/build-news.mjs の walkOf と同じ形） */
+  const lines = src.split('\n');
+  const at = lines.findIndex((l) => /^##\s.*<!--\s*tab:\s*層\s*-->/.test(l));
+  if (at < 0) bad('「層」の場面（## … <!-- tab: 層 -->）が無い');
+  else {
+    const end = lines.findIndex((l, i) => i > at && /^##?\s/.test(l));
+    const body = lines.slice(at + 1, end < 0 ? lines.length : end);
+    const starts = body.map((l, i) => (/^\s*\|/.test(l) && /^\s*\|?\s*:?-{3,}/.test(body[i + 1] || '') ? i : -1)).filter((i) => i >= 0);
+    if (starts.length !== 1) bad(`「層」の場面の表は 1 つ（今は ${starts.length} つ）`);
+    else {
+      const rows = [];
+      for (let i = starts[0]; i < body.length && /^\s*\|/.test(body[i]); i++) rows.push(cellsOf(body[i]));
+      const head = rows[0].map((c) => c.replace(/\*\*/g, '').trim()), data = rows.slice(2);
+      if (head.length !== 3 || head[0] !== '層' || !head[2].includes('章')) bad(`「層」の場面の表の列は「層 | 起きること | 章と場面」の 3 つ（今は ${head.join(' | ')}）`);
+      if (data.length < 2 || data.length > MAX_LAYER_ROWS) bad(`「層」の場面の表の行は 2〜${MAX_LAYER_ROWS} 行（今は ${data.length} 行）`);
+      data.forEach((r, i) => { if (r.length !== 3) bad(`「層」の場面の表の ${i + 1} 行目のセルが 3 つでない（${r.length} つ）`); });
+    }
+  }
+}
+
+/* 表の行をセルに分ける（`…` の中の | と \| では分けない。tools/build-news.mjs の cells と同じ） */
+function cellsOf(row) {
+  let s = row.trim().replace(/^\|/, '');
+  if (/[^\\]\|$/.test(s)) s = s.slice(0, -1);
+  const out = [];
+  let cur = '', code = false;
+  for (let k = 0; k < s.length; k++) {
+    const c = s[k];
+    if (c === '\\' && s[k + 1] === '|') { cur += '|'; k++; continue; }
+    if (c === '`') code = !code;
+    if (c === '|' && !code) { out.push(cur.trim()); cur = ''; continue; }
+    cur += c;
+  }
+  out.push(cur.trim());
+  return out;
 }
 
 /* ---------- 結果 ---------- */

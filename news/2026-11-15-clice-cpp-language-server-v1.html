@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
 <link rel="stylesheet" href="../assets/base.css">
 <script src="../assets/engine.js"></script>
+<script src="../assets/layers.js"></script>
+<script src="../assets/news-graph.js"></script>
 <style>
   /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
   .sc-nw { grid-template-areas: "sh" "text"; }
@@ -104,6 +106,30 @@
   .nwg-box:focus-visible { outline: none; }
   .nwg-box:focus-visible rect { stroke: var(--fg); stroke-width: 2.5; }
 
+  /* 層の歩き（assets/news-graph.js の walk）。1画面版は表を段階（説明欄と行の一覧）に置き換え、縦読み版は表を縦に並べる */
+  .sc-nwwalk { grid-template-areas: "sh" "lead" "fig" "tbl" "after"; }
+  .sc-nwwalk .a-panel, .sc-nwwalk .a-mbar, .fit .sc-nwwalk .a-tbl { display: none; }
+  .fit .sc-nwwalk .a-panel { display: block; }
+  .sc-nwwalk .drill-list { display: none; }   /* 板の行き先は、説明欄の「章・場面」の欄のリンクと図の ↓ の札 */
+  html:not(.fit) .sc-nwwalk .drill-badges { display: none; }   /* 縦読み版は、表の章と場面のリンクで板を開く */
+  .nw-fit { display: none; }
+  .fit .nw-fit { display: inline; }
+  .fit .nw-phone { display: none; }
+  .nw-route { list-style: none; padding: 0; }
+  .nw-route li + li { margin-top: 1px; }
+  .nw-route a { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); align-items: baseline; padding: 0.1rem 0.6rem 0.12rem 0.45rem; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; color: var(--fg-mid); text-decoration: none; font-size: 0.86rem; line-height: 1.6; }
+  .nw-route a:hover { color: var(--fg); background: var(--hl); }
+  .nw-route .n { font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); }
+  .nw-route .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nw-route b { color: var(--fg); }
+  .nw-route li.on a { border-left-color: var(--c-x); background: var(--inset); color: var(--fg); }
+  .nw-route li.on .n { color: var(--c-x); font-weight: 600; }
+  .nw-ref { margin-top: 0.55rem; font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-ref-l { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); border: 1px solid var(--rule); border-radius: 3px; padding: 0 0.35rem; margin-right: 0.5rem; white-space: nowrap; }
+  .nw-wtbl tbody { counter-reset: nw-row; }
+  .nw-wtbl tbody tr { counter-increment: nw-row; }
+  .nw-wtbl table.stack td[data-label]:first-child::before { content: counter(nw-row); font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); min-width: 1.4rem; margin-right: 0.2rem; }
+
   /* 教材に無い */
   .nw-miss { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.55rem 1.4rem; align-content: start; }
   .fit .nw-miss { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; }
@@ -143,22 +169,35 @@
   </footer>
 </section>
 
-<!-- ================= 1 どの層の話か ================= -->
-<section class="scene sc-nw" id="s1" data-tab="層" aria-labelledby="h-s1">
+<!-- ================= 1 どの層の話か（層の歩き） ================= -->
+<section class="scene sc-anim sc-nwwalk" id="s1" data-tab="層" aria-labelledby="h-s1">
   <header class="sh a-sh">
     <h2 id="h-s1"><span class="n">1</span>どの層の話か</h2>
   </header>
-  <div class="nw-body a-text">
-<div class="col"><p>種類はリリース（最初の安定版）で、言語サーバーという道具の機能の話である。働くのは、利用者がエディタでコードを書いている間で、利用者のコードをビルドする前に当たる。clice にとっては実行時の仕組みである。</p>
-<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>このニュースで起きること</th><th>章・場面</th></tr></thead><tbody>
-<tr><td data-label="層">プロセス</td><td data-label="このニュースで起きること">コンパイルを子のプロセスの組（プール）で行う。1 つの子が落ちても、定義へ飛ぶ・色付けなどの他の働きは続く。記事は、今のブラウザに倣った作りだと書く</td><td data-label="章・場面"><a href="../chapters/09-os.html#s2" class="nw-ch">9章 場面2</a></td></tr>
-<tr><td data-label="層">プロセス間の通信</td><td data-label="このニュースで起きること">本体はメインスレッドでイベントループを回し、複数のプロセス（IPC）と複数のスレッドをまとめる</td><td data-label="章・場面"><a href="../chapters/09-os.html#s2" class="nw-ch">9章 場面2</a></td></tr>
-<tr><td data-label="層">構文解析</td><td data-label="このニュースで起きること">編集中の書きかけのコードもコンパイルする。記事によれば、コンパイラは完成したコードで試されることが多く、書きかけのコードでは経験則に頼り、落ちたりメモリを漏らしたりしやすい</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s1" class="nw-ch">28章 場面1</a></td></tr>
-<tr><td data-label="層">名前解決</td><td data-label="このニュースで起きること">テンプレートの中で、型引数に依存する名前が何に当たるかを、具体的な型を決めずに推す（DFS pseudo instantiator）</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s2" class="nw-ch">28章 場面2</a></td></tr>
-<tr><td data-label="層">テンプレートの実体化</td><td data-label="このニュースで起きること">一度実体化されたテンプレートの結果を、補完に使う。テンプレートを型ごとの実装を持つ口のように扱い、呼び先を全部の実体化から集める</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s3" class="nw-ch">28章 場面3</a></td></tr>
-<tr><td data-label="層">モジュールとキャッシュ</td><td data-label="このニュースで起きること">C++20 のモジュールの依存を自分で調べ、要るものを作る。作った PCH と PCM はディスクに置き、次の起動でも使う</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/28-compiler.html#s6" class="nw-ch">28章 場面6</a></td></tr>
-</tbody></table></div></div>
+  <div class="col a-left">
+    <div class="prose a-lead nw-wtext"><p>種類はリリース（最初の安定版）で、言語サーバーという道具の機能の話である。働くのは、利用者がエディタでコードを書いている間で、利用者のコードをビルドする前に当たる。clice にとっては実行時の仕組みである。</p></div>
+    <ol class="nw-route fit-only" aria-label="表の行（1 行が 1 段階）">
+      <li><a href="#s1.1" data-go="1" data-step="0"><span class="n">1</span><span class="t">プロセス</span></a></li>
+      <li><a href="#s1.2" data-go="1" data-step="1"><span class="n">2</span><span class="t">プロセス間の通信</span></a></li>
+      <li><a href="#s1.3" data-go="1" data-step="2"><span class="n">3</span><span class="t">構文解析</span></a></li>
+      <li><a href="#s1.4" data-go="1" data-step="3"><span class="n">4</span><span class="t">名前解決</span></a></li>
+      <li><a href="#s1.5" data-go="1" data-step="4"><span class="n">5</span><span class="t">テンプレートの実体化</span></a></li>
+      <li><a href="#s1.6" data-go="1" data-step="5"><span class="n">6</span><span class="t">モジュールとキャッシュ</span></a></li>
+    </ol>
+    <div class="narr-slot a-panel"></div>
   </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を列に並べ、このノートの表の行が触れる層を行の順に線でたどる図"></svg></div>
+    <figcaption>図1　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
+  </figure>
+  <div class="nw-wtbl a-tbl"><div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>このニュースで起きること</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="層">プロセス</td><td data-label="このニュースで起きること">コンパイルを子のプロセスの組（プール）で行う。1 つの子が落ちても、定義へ飛ぶ・色付けなどの他の働きは続く。記事は、今のブラウザに倣った作りだと書く</td><td data-label="章・場面"><a href="../chapters/09-os.html#s2" class="nw-ch" data-to="09-os.html#s2">9章 場面2</a></td></tr>
+<tr><td data-label="層">プロセス間の通信</td><td data-label="このニュースで起きること">本体はメインスレッドでイベントループを回し、複数のプロセス（IPC）と複数のスレッドをまとめる</td><td data-label="章・場面"><a href="../chapters/09-os.html#s2" class="nw-ch" data-to="09-os.html#s2">9章 場面2</a></td></tr>
+<tr><td data-label="層">構文解析</td><td data-label="このニュースで起きること">編集中の書きかけのコードもコンパイルする。記事によれば、コンパイラは完成したコードで試されることが多く、書きかけのコードでは経験則に頼り、落ちたりメモリを漏らしたりしやすい</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s1" class="nw-ch" data-to="28-compiler.html#s1">28章 場面1</a></td></tr>
+<tr><td data-label="層">名前解決</td><td data-label="このニュースで起きること">テンプレートの中で、型引数に依存する名前が何に当たるかを、具体的な型を決めずに推す（DFS pseudo instantiator）</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s2" class="nw-ch" data-to="28-compiler.html#s2">28章 場面2</a></td></tr>
+<tr><td data-label="層">テンプレートの実体化</td><td data-label="このニュースで起きること">一度実体化されたテンプレートの結果を、補完に使う。テンプレートを型ごとの実装を持つ口のように扱い、呼び先を全部の実体化から集める</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s3" class="nw-ch" data-to="28-compiler.html#s3">28章 場面3</a></td></tr>
+<tr><td data-label="層">モジュールとキャッシュ</td><td data-label="このニュースで起きること">C++20 のモジュールの依存を自分で調べ、要るものを作る。作った PCH と PCM はディスクに置き、次の起動でも使う</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/28-compiler.html#s6" class="nw-ch" data-to="28-compiler.html#s6">28章 場面6</a></td></tr>
+</tbody></table></div></div>
 </section>
 
 <!-- ================= 2 中身 ================= -->
@@ -199,7 +238,7 @@
 </div>
 
 <script>
-YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 日刊 ／ 2026-11-15","title":"C++ の言語サーバー clice の 1.0 版","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]} });
+YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 日刊 ／ 2026-11-15","title":"C++ の言語サーバー clice の 1.0 版","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]}, scenes: { s1: YT_NEWS_GRAPH.walk(document.getElementById('s1'), {"layers":["compiler","os"],"missing":["モジュール","1 ファイルずつ作る（分割コンパイル）"],"rows":[{"l":[{"to":"09-os.html#s2","ids":["os"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s2","ids":["os"],"n":0}],"m":[]},{"l":[{"to":"28-compiler.html#s1","ids":["compiler"],"n":0}],"m":[]},{"l":[{"to":"28-compiler.html#s2","ids":["compiler"],"n":0}],"m":[]},{"l":[{"to":"28-compiler.html#s3","ids":["compiler"],"n":0}],"m":[]},{"l":[{"to":"28-compiler.html#s6","ids":["compiler"],"n":1}],"m":[0]}]}) } });
 </script>
 </body>
 </html>

@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
 <link rel="stylesheet" href="../assets/base.css">
 <script src="../assets/engine.js"></script>
+<script src="../assets/layers.js"></script>
+<script src="../assets/news-graph.js"></script>
 <style>
   /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
   .sc-nw { grid-template-areas: "sh" "text"; }
@@ -104,6 +106,30 @@
   .nwg-box:focus-visible { outline: none; }
   .nwg-box:focus-visible rect { stroke: var(--fg); stroke-width: 2.5; }
 
+  /* 層の歩き（assets/news-graph.js の walk）。1画面版は表を段階（説明欄と行の一覧）に置き換え、縦読み版は表を縦に並べる */
+  .sc-nwwalk { grid-template-areas: "sh" "lead" "fig" "tbl" "after"; }
+  .sc-nwwalk .a-panel, .sc-nwwalk .a-mbar, .fit .sc-nwwalk .a-tbl { display: none; }
+  .fit .sc-nwwalk .a-panel { display: block; }
+  .sc-nwwalk .drill-list { display: none; }   /* 板の行き先は、説明欄の「章・場面」の欄のリンクと図の ↓ の札 */
+  html:not(.fit) .sc-nwwalk .drill-badges { display: none; }   /* 縦読み版は、表の章と場面のリンクで板を開く */
+  .nw-fit { display: none; }
+  .fit .nw-fit { display: inline; }
+  .fit .nw-phone { display: none; }
+  .nw-route { list-style: none; padding: 0; }
+  .nw-route li + li { margin-top: 1px; }
+  .nw-route a { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); align-items: baseline; padding: 0.1rem 0.6rem 0.12rem 0.45rem; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; color: var(--fg-mid); text-decoration: none; font-size: 0.86rem; line-height: 1.6; }
+  .nw-route a:hover { color: var(--fg); background: var(--hl); }
+  .nw-route .n { font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); }
+  .nw-route .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nw-route b { color: var(--fg); }
+  .nw-route li.on a { border-left-color: var(--c-x); background: var(--inset); color: var(--fg); }
+  .nw-route li.on .n { color: var(--c-x); font-weight: 600; }
+  .nw-ref { margin-top: 0.55rem; font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-ref-l { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); border: 1px solid var(--rule); border-radius: 3px; padding: 0 0.35rem; margin-right: 0.5rem; white-space: nowrap; }
+  .nw-wtbl tbody { counter-reset: nw-row; }
+  .nw-wtbl tbody tr { counter-increment: nw-row; }
+  .nw-wtbl table.stack td[data-label]:first-child::before { content: counter(nw-row); font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); min-width: 1.4rem; margin-right: 0.2rem; }
+
   /* 教材に無い */
   .nw-miss { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.55rem 1.4rem; align-content: start; }
   .fit .nw-miss { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; }
@@ -146,24 +172,39 @@
   </footer>
 </section>
 
-<!-- ================= 1 何が変わるか ================= -->
-<section class="scene sc-nw" id="s1" data-tab="層" aria-labelledby="h-s1">
+<!-- ================= 1 何が変わるか（層の歩き） ================= -->
+<section class="scene sc-anim sc-nwwalk" id="s1" data-tab="層" aria-labelledby="h-s1">
   <header class="sh a-sh">
     <h2 id="h-s1"><span class="n">1</span>何が変わるか</h2>
   </header>
-  <div class="nw-body a-text">
-<div class="col"><p>変更の種類はインターフェースの追加（契約の構文と <code>moon prove</code> の命令）で、働くのはビルド時だけである。契約を書いた関数にだけ効き、実行する側は何も変わらない。表は、記事の計算が作られて動くまでの順に並べた。新しい段と、記事が落とし穴として挙げる層が太字。</p>
-<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>この記事で起きること</th><th>章・場面</th></tr></thead><tbody>
-<tr><td data-label="層">型（作る側）</td><td data-label="この記事で起きること"><code>FixedArray[Int]</code> が言うのは「整数の配列」まで。-1 を <code>Option</code> で締め出す形と、補完の関数だけが作れる抽象型も検討している。型が言えるのは「その関数を通った」までで、関数が全部を埋めたかは言えない</td><td data-label="章・場面"><a href="../chapters/29-imi.html#s2" class="nw-ch">29章 場面2</a> の段階3・5、<a href="../chapters/29-imi.html#s3" class="nw-ch">29章 場面3</a> の段階2・5</td></tr>
-<tr><td data-label="層"><b>証明（作る側）</b></td><td data-label="この記事で起きること">関数の <code>where</code> 節に事前条件・事後条件・ループ不変条件を書く。<code>moon prove</code> は、事前条件を満たすすべての入力で事後条件が成り立つことを、実行せずに確かめる。<code>moon build</code>・<code>moon test</code> と並ぶ別の命令である</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s2" class="nw-ch">28章 場面2</a> の段階2、<a href="../chapters/29-imi.html#s3" class="nw-ch">29章 場面3</a> の段階6、<a href="../chapters/29-imi.html#s6" class="nw-ch">29章 場面6</a> の段階3</td></tr>
-<tr><td data-label="層">別の形へ下ろす（作る側）</td><td data-label="この記事で起きること">契約付きの関数は Why3 の言語に訳され、Why3 が証明義務を作って Z3・cvc5 に渡す。機械語へ下ろす道とは別の、2 本目の下ろし先である</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s3" class="nw-ch">28章 場面3</a>。Why3 と SMT ソルバは教材に無い</td></tr>
-<tr><td data-label="層">成果物</td><td data-label="この記事で起きること">契約は検証にだけ使われ、wasm にも JavaScript にも残らない。wasm は約 37 KiB で、import が 1 つも無い</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s4" class="nw-ch">26章 場面4</a> の段階6、<a href="../chapters/26-kata.html#s5" class="nw-ch">26章 場面5</a> の段階1。WebAssembly は教材に無い</td></tr>
-<tr><td data-label="層"><b>機械の整数（動かす側）</b></td><td data-label="この記事で起きること">既定の証明は <code>Int</code> を数学の整数として扱い、あふれが無い。実行時の <code>Int</code> は 32 ビットで折り返す。<code>0 &lt;= result</code> が証明された引き算が、動かすと -2 を返す</td><td data-label="章・場面"><a href="../chapters/04-ronri.html#s4" class="nw-ch">4章 場面4</a> の段階3、<a href="../chapters/26-kata.html#s1" class="nw-ch">26章 場面1</a> の段階3、<a href="../chapters/28-compiler.html#s3" class="nw-ch">28章 場面3</a> の段階2</td></tr>
-<tr><td data-label="層">浮動小数点（動かす側）</td><td data-label="この記事で起きること">距離の計算は <code>Double</code> で、契約付きの関数の本体には書けない。足す順が変わると丸めが変わり、同点の候補の順位が入れ替わる。移植の互換性の不具合は全部これで、差分テストが見つけた</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s1" class="nw-ch">26章 場面1</a> の段階4、<a href="../chapters/26-kata.html#s3" class="nw-ch">26章 場面3</a> の段階2</td></tr>
-<tr><td data-label="層">配列の範囲（動かす側）</td><td data-label="この記事で起きること">残った -1 を添字に使うと範囲外になる。wasm の版は trap で止まり、元の JavaScript の版は undefined を読む</td><td data-label="章・場面"><a href="../chapters/27-algorithm.html#s1" class="nw-ch">27章 場面1</a> の段階1、<a href="../chapters/26-kata.html#s6" class="nw-ch">26章 場面6</a> の段階4</td></tr>
-<tr><td data-label="層">アルゴリズム（題材）</td><td data-label="この記事で起きること">貪欲法と局所改善で対応を探し、残った -1 を補完で埋める。証明したのは添字の計算で、選んだ対応が距離を最小にするかは証明していない</td><td data-label="章・場面"><a href="../chapters/27-algorithm.html#s6" class="nw-ch">27章 場面6</a> の段階6。貪欲法と局所探索は教材に無い</td></tr>
-</tbody></table></div></div>
+  <div class="col a-left">
+    <div class="prose a-lead nw-wtext"><p>変更の種類はインターフェースの追加（契約の構文と <code>moon prove</code> の命令）で、働くのはビルド時だけである。契約を書いた関数にだけ効き、実行する側は何も変わらない。表は、記事の計算が作られて動くまでの順に並べた。新しい段と、記事が落とし穴として挙げる層が太字。</p></div>
+    <ol class="nw-route fit-only" aria-label="表の行（1 行が 1 段階）">
+      <li><a href="#s1.1" data-go="1" data-step="0"><span class="n">1</span><span class="t">型（作る側）</span></a></li>
+      <li><a href="#s1.2" data-go="1" data-step="1"><span class="n">2</span><span class="t"><b>証明（作る側）</b></span></a></li>
+      <li><a href="#s1.3" data-go="1" data-step="2"><span class="n">3</span><span class="t">別の形へ下ろす（作る側）</span></a></li>
+      <li><a href="#s1.4" data-go="1" data-step="3"><span class="n">4</span><span class="t">成果物</span></a></li>
+      <li><a href="#s1.5" data-go="1" data-step="4"><span class="n">5</span><span class="t"><b>機械の整数（動かす側）</b></span></a></li>
+      <li><a href="#s1.6" data-go="1" data-step="5"><span class="n">6</span><span class="t">浮動小数点（動かす側）</span></a></li>
+      <li><a href="#s1.7" data-go="1" data-step="6"><span class="n">7</span><span class="t">配列の範囲（動かす側）</span></a></li>
+      <li><a href="#s1.8" data-go="1" data-step="7"><span class="n">8</span><span class="t">アルゴリズム（題材）</span></a></li>
+    </ol>
+    <div class="narr-slot a-panel"></div>
   </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を列に並べ、このノートの表の行が触れる層を行の順に線でたどる図"></svg></div>
+    <figcaption>図1　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
+  </figure>
+  <div class="nw-wtbl a-tbl"><div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>この記事で起きること</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="層">型（作る側）</td><td data-label="この記事で起きること"><code>FixedArray[Int]</code> が言うのは「整数の配列」まで。-1 を <code>Option</code> で締め出す形と、補完の関数だけが作れる抽象型も検討している。型が言えるのは「その関数を通った」までで、関数が全部を埋めたかは言えない</td><td data-label="章・場面"><a href="../chapters/29-imi.html#s2" class="nw-ch" data-to="29-imi.html#s2.3">29章 場面2</a> の段階3・5、<a href="../chapters/29-imi.html#s3" class="nw-ch" data-to="29-imi.html#s3.2">29章 場面3</a> の段階2・5</td></tr>
+<tr><td data-label="層"><b>証明（作る側）</b></td><td data-label="この記事で起きること">関数の <code>where</code> 節に事前条件・事後条件・ループ不変条件を書く。<code>moon prove</code> は、事前条件を満たすすべての入力で事後条件が成り立つことを、実行せずに確かめる。<code>moon build</code>・<code>moon test</code> と並ぶ別の命令である</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s2" class="nw-ch" data-to="28-compiler.html#s2.2">28章 場面2</a> の段階2、<a href="../chapters/29-imi.html#s3" class="nw-ch" data-to="29-imi.html#s3.6">29章 場面3</a> の段階6、<a href="../chapters/29-imi.html#s6" class="nw-ch" data-to="29-imi.html#s6.3">29章 場面6</a> の段階3</td></tr>
+<tr><td data-label="層">別の形へ下ろす（作る側）</td><td data-label="この記事で起きること">契約付きの関数は Why3 の言語に訳され、Why3 が証明義務を作って Z3・cvc5 に渡す。機械語へ下ろす道とは別の、2 本目の下ろし先である</td><td data-label="章・場面"><a href="../chapters/28-compiler.html#s3" class="nw-ch" data-to="28-compiler.html#s3">28章 場面3</a>。Why3 と SMT ソルバは教材に無い</td></tr>
+<tr><td data-label="層">成果物</td><td data-label="この記事で起きること">契約は検証にだけ使われ、wasm にも JavaScript にも残らない。wasm は約 37 KiB で、import が 1 つも無い</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s4" class="nw-ch" data-to="26-kata.html#s4.6">26章 場面4</a> の段階6、<a href="../chapters/26-kata.html#s5" class="nw-ch" data-to="26-kata.html#s5.1">26章 場面5</a> の段階1。WebAssembly は教材に無い</td></tr>
+<tr><td data-label="層"><b>機械の整数（動かす側）</b></td><td data-label="この記事で起きること">既定の証明は <code>Int</code> を数学の整数として扱い、あふれが無い。実行時の <code>Int</code> は 32 ビットで折り返す。<code>0 &lt;= result</code> が証明された引き算が、動かすと -2 を返す</td><td data-label="章・場面"><a href="../chapters/04-ronri.html#s4" class="nw-ch" data-to="04-ronri.html#s4.3">4章 場面4</a> の段階3、<a href="../chapters/26-kata.html#s1" class="nw-ch" data-to="26-kata.html#s1.3">26章 場面1</a> の段階3、<a href="../chapters/28-compiler.html#s3" class="nw-ch" data-to="28-compiler.html#s3.2">28章 場面3</a> の段階2</td></tr>
+<tr><td data-label="層">浮動小数点（動かす側）</td><td data-label="この記事で起きること">距離の計算は <code>Double</code> で、契約付きの関数の本体には書けない。足す順が変わると丸めが変わり、同点の候補の順位が入れ替わる。移植の互換性の不具合は全部これで、差分テストが見つけた</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s1" class="nw-ch" data-to="26-kata.html#s1.4">26章 場面1</a> の段階4、<a href="../chapters/26-kata.html#s3" class="nw-ch" data-to="26-kata.html#s3.2">26章 場面3</a> の段階2</td></tr>
+<tr><td data-label="層">配列の範囲（動かす側）</td><td data-label="この記事で起きること">残った -1 を添字に使うと範囲外になる。wasm の版は trap で止まり、元の JavaScript の版は undefined を読む</td><td data-label="章・場面"><a href="../chapters/27-algorithm.html#s1" class="nw-ch" data-to="27-algorithm.html#s1.1">27章 場面1</a> の段階1、<a href="../chapters/26-kata.html#s6" class="nw-ch" data-to="26-kata.html#s6.4">26章 場面6</a> の段階4</td></tr>
+<tr><td data-label="層">アルゴリズム（題材）</td><td data-label="この記事で起きること">貪欲法と局所改善で対応を探し、残った -1 を補完で埋める。証明したのは添字の計算で、選んだ対応が距離を最小にするかは証明していない</td><td data-label="章・場面"><a href="../chapters/27-algorithm.html#s6" class="nw-ch" data-to="27-algorithm.html#s6.6">27章 場面6</a> の段階6。貪欲法と局所探索は教材に無い</td></tr>
+</tbody></table></div></div>
 </section>
 
 <!-- ================= 2 何を解決するか ================= -->
@@ -286,7 +327,7 @@
 </div>
 
 <script>
-YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2026-09-14","title":"MoonBit の形式検証をアルゴリズムの実装に使った報告","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]} });
+YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2026-09-14","title":"MoonBit の形式検証をアルゴリズムの実装に使った報告","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]}, scenes: { s1: YT_NEWS_GRAPH.walk(document.getElementById('s1'), {"layers":["compiler","type","algo","ronri","runtime"],"missing":["契約","SMT ソルバ","WebAssembly","浮動小数点数と丸め","差分テスト","貪欲法と局所探索"],"rows":[{"l":[{"to":"29-imi.html#s2.3","ids":["type"],"n":0},{"to":"29-imi.html#s3.2","ids":["type"],"n":0}],"m":[]},{"l":[{"to":"28-compiler.html#s2.2","ids":["compiler"],"n":0},{"to":"29-imi.html#s3.6","ids":["type"],"n":0},{"to":"29-imi.html#s6.3","ids":["type"],"n":0}],"m":[]},{"l":[{"to":"28-compiler.html#s3","ids":["compiler"],"n":0}],"m":[0,1]},{"l":[{"to":"26-kata.html#s4.6","ids":["type"],"n":0},{"to":"26-kata.html#s5.1","ids":["type"],"n":0}],"m":[0,2]},{"l":[{"to":"04-ronri.html#s4.3","ids":["ronri"],"n":0},{"to":"26-kata.html#s1.3","ids":["type"],"n":0},{"to":"28-compiler.html#s3.2","ids":["compiler"],"n":0}],"m":[]},{"l":[{"to":"26-kata.html#s1.4","ids":["type"],"n":0},{"to":"26-kata.html#s3.2","ids":["type"],"n":0}],"m":[]},{"l":[{"to":"27-algorithm.html#s1.1","ids":["algo"],"n":0},{"to":"26-kata.html#s6.4","ids":["type"],"n":0}],"m":[]},{"l":[{"to":"27-algorithm.html#s6.6","ids":["algo"],"n":0}],"m":[5]}]}) } });
 </script>
 </body>
 </html>

@@ -63,17 +63,29 @@ function href(url) {
   return url;
 }
 
-function inline(s, refs) {
+/* 章の場面へのリンク h（../chapters/28-compiler.html#s2）を、掘り下げの板の行き先（28-compiler.html#s2.4）にする。
+   段階は、リンクが #s2.4 と指していればそれ、無ければリンクの直後の「の段階4」（「の段階4・5」「の段階2〜4」は最初の数） */
+function drillTo(h, after) {
+  const m = /(?:^|\/)chapters\/(\d\d-[a-z0-9-]+\.html)(?:#s(\d+)(?:\.(\d+))?)?$/.exec(h);
+  if (!m) return '';
+  const st = m[3] || (/^\s*の段階\s*(\d+)/.exec(after || '') || [])[1];
+  return m[1] + (m[2] ? '#s' + m[2] + (st ? '.' + st : '') : '');
+}
+
+/* opt.drill なら、章の場面へのリンクに data-to（drillTo）を付ける（層の歩きの表。押すと板を開く） */
+function inline(s, refs, opt) {
   const keep = [];
   const hold = (h) => '\u0000' + (keep.push(h) - 1) + '\u0000';
   const fmt = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
   s = s.replace(/`([^`]+)`/g, (_, c) => hold('<code>' + esc(c) + '</code>'));
-  s = s.replace(/\[([^\]]+)\](?:\(([^)\s]+)\)|\[([^\]]*)\])/g, (m, text, url, ref) => {
+  s = s.replace(/\[([^\]]+)\](?:\(([^)\s]+)\)|\[([^\]]*)\])/g, (m, text, url, ref, off, str) => {
     const u = url !== undefined ? url : refs.get((ref || text).toLowerCase());
     if (u === undefined) return m;
     const h = href(u);
-    const attr = /^https?:/.test(h) ? ' target="_blank" rel="noopener"' : /(^|\/)chapters\/\d\d-/.test(h) ? ' class="nw-ch"' : '';
-    return hold(`<a href="${esc(h)}"${attr}>${fmt(text)}</a>`);
+    const ch = /(^|\/)chapters\/\d\d-/.test(h);
+    const attr = /^https?:/.test(h) ? ' target="_blank" rel="noopener"' : ch ? ' class="nw-ch"' : '';
+    const to = opt && opt.drill && ch ? drillTo(h, str.slice(off + m.length)) : '';
+    return hold(`<a href="${esc(h)}"${attr}${to ? ` data-to="${esc(to)}"` : ''}>${fmt(text)}</a>`);
   });
   s = fmt(s);
   while (/\u0000\d+\u0000/.test(s)) s = s.replace(/\u0000(\d+)\u0000/g, (_, i) => keep[Number(i)]);
@@ -154,7 +166,7 @@ function parse(src) {
   return { blocks, refs };
 }
 
-function render(bs, refs) {
+function render(bs, refs, opt) {
   return bs.map((b) => {
     if (b.t === 'p') return `<p>${inline(b.text, refs)}</p>`;
     if (b.t === 'ul' || b.t === 'ol') {
@@ -162,7 +174,7 @@ function render(bs, refs) {
     }
     if (b.t === 'table') {
       const head = b.head.map((h) => `<th>${inline(h, refs)}</th>`).join('');
-      const rows = b.rows.map((r) => `<tr>${r.map((c, k) => `<td data-label="${esc(plain(b.head[k] || ''))}">${inline(c, refs)}</td>`).join('')}</tr>`).join('\n');
+      const rows = b.rows.map((r) => `<tr>${r.map((c, k) => `<td data-label="${esc(plain(b.head[k] || ''))}">${inline(c, refs, opt)}</td>`).join('')}</tr>`).join('\n');
       return `<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr>${head}</tr></thead><tbody>\n${rows}\n</tbody></table></div>`;
     }
     if (b.t === 'quote') return `<blockquote>${inline(b.text, refs)}</blockquote>`;
@@ -274,7 +286,43 @@ function readNote(file) {
   });
   put(n.head); put(n.lead); n.scenes.forEach((s) => s.groups.forEach((g) => put(g.blocks)));
   n.missing = (RE_MISSING.exec(src) || [, ''])[1].split('、').map((s) => s.trim()).filter(Boolean).map((name) => ({ name, near: nearScenes(name, units, refs) }));
+  n.walk = walkOf(n, layerScene, refs);
   return n;
+}
+
+/* 文の中の、章へのリンク（{ ch, sc, to }。to は掘り下げの板の行き先） */
+function chLinks(text, refs) {
+  const out = [];
+  for (const m of text.matchAll(RE_LINK)) {
+    const u = m[2] !== undefined ? m[2] : refs.get((m[3] || m[1]).toLowerCase());
+    const h = u && href(u), p = h && L.parse(h), to = p && drillTo(h, text.slice(m.index + m[0].length));
+    if (to) out.push({ ...p, to });
+  }
+  return out;
+}
+/* 層の歩き: 「層」の場面の表（層 | 起きること | 章・場面 の 3 列）の行を段階にする。場面が列（###）に分かれている、
+   表が無いか 2 つ以上ある、列の形が違う、行が 2 つより少ないときは null（表のまま出す）。
+   行ごとに、章の場面へのリンク（l: 行き先・層・「教材に無い」で始まる欄なら近い場面）と、
+   その行が挙げる教材に無い概念（m: n.missing の番号。名前（「（」より前）と「教材に無い」を含む行）を持つ */
+function walkOf(n, sc, refs) {
+  if (!sc || sc.groups.length !== 1 || sc.groups[0].title) return null;
+  const bs = sc.groups[0].blocks, tables = bs.filter((b) => b.t === 'table');
+  if (tables.length !== 1) return null;
+  const tb = tables[0], ti = bs.indexOf(tb), head = tb.head.map((h) => plain(h).trim());
+  if (head.length !== 3 || head[0] !== '層' || !head[2].includes('章') || tb.rows.length < 2 || tb.rows.some((r) => r.length !== 3)) return null;
+  const keys = n.missing.map((m) => m.name.split('（')[0].trim().toLowerCase());
+  const rows = tb.rows.map((r) => {
+    const near = plain(r[2]).trim().startsWith('教材に無い'), seen = new Set(), l = [];
+    for (const x of chLinks(r[2], refs)) {
+      if (seen.has(x.to)) continue;
+      seen.add(x.to);
+      l.push({ to: x.to, ids: L.of(x.ch, x.sc), n: near ? 1 : 0 });
+    }
+    const all = plain(r.join(' | ')).toLowerCase();
+    const m = r.join(' ').includes('教材に無い') ? keys.map((k, i) => (k && all.includes(k) ? i : -1)).filter((i) => i >= 0) : [];
+    return { l, m };
+  });
+  return { k: n.scenes.indexOf(sc) + 1, before: bs.slice(0, ti), table: tb, after: bs.slice(ti + 1), rows };
 }
 
 /* 全章の帯。リンクしている章に印を付け、その章へのリンクにする */
@@ -386,6 +434,30 @@ const STYLE = `<style>
   .nwg-box:focus-visible { outline: none; }
   .nwg-box:focus-visible rect { stroke: var(--fg); stroke-width: 2.5; }
 
+  /* 層の歩き（assets/news-graph.js の walk）。1画面版は表を段階（説明欄と行の一覧）に置き換え、縦読み版は表を縦に並べる */
+  .sc-nwwalk { grid-template-areas: "sh" "lead" "fig" "tbl" "after"; }
+  .sc-nwwalk .a-panel, .sc-nwwalk .a-mbar, .fit .sc-nwwalk .a-tbl { display: none; }
+  .fit .sc-nwwalk .a-panel { display: block; }
+  .sc-nwwalk .drill-list { display: none; }   /* 板の行き先は、説明欄の「章・場面」の欄のリンクと図の ↓ の札 */
+  html:not(.fit) .sc-nwwalk .drill-badges { display: none; }   /* 縦読み版は、表の章と場面のリンクで板を開く */
+  .nw-fit { display: none; }
+  .fit .nw-fit { display: inline; }
+  .fit .nw-phone { display: none; }
+  .nw-route { list-style: none; padding: 0; }
+  .nw-route li + li { margin-top: 1px; }
+  .nw-route a { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); align-items: baseline; padding: 0.1rem 0.6rem 0.12rem 0.45rem; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; color: var(--fg-mid); text-decoration: none; font-size: 0.86rem; line-height: 1.6; }
+  .nw-route a:hover { color: var(--fg); background: var(--hl); }
+  .nw-route .n { font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); }
+  .nw-route .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nw-route b { color: var(--fg); }
+  .nw-route li.on a { border-left-color: var(--c-x); background: var(--inset); color: var(--fg); }
+  .nw-route li.on .n { color: var(--c-x); font-weight: 600; }
+  .nw-ref { margin-top: 0.55rem; font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-ref-l { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); border: 1px solid var(--rule); border-radius: 3px; padding: 0 0.35rem; margin-right: 0.5rem; white-space: nowrap; }
+  .nw-wtbl tbody { counter-reset: nw-row; }
+  .nw-wtbl tbody tr { counter-increment: nw-row; }
+  .nw-wtbl table.stack td[data-label]:first-child::before { content: counter(nw-row); font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); min-width: 1.4rem; margin-right: 0.2rem; }
+
   /* 教材に無い */
   .nw-miss { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.55rem 1.4rem; align-content: start; }
   .fit .nw-miss { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; }
@@ -397,8 +469,12 @@ const STYLE = `<style>
   .nw-miss small { font-size: 0.8rem; line-height: 1.6; color: var(--fg-mid); }
 </style>`;
 
-/* graph があるページは、層の地図（assets/news-graph.js）を場面 graph.k に描く。graph.opts はその場面の絞り込み */
-function page({ title, description, body, meta, graph }) {
+/* graph があるページは、層の地図（assets/news-graph.js）を場面 graph.k に描く。graph.opts はその場面の絞り込み。
+   walk があるページは、場面 walk.k を層の歩き（同じファイルの YT_NEWS_GRAPH.walk）にする。walk.data はその値 */
+function page({ title, description, body, meta, graph, walk }) {
+  const scripts = graph ? ['../assets/layers.js', 'news-data.js', '../assets/news-graph.js'] : walk ? ['../assets/layers.js', '../assets/news-graph.js'] : [];
+  const json = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
+  const scenes = walk ? `, scenes: { s${walk.k}: YT_NEWS_GRAPH.walk(document.getElementById('s${walk.k}'), ${json(walk.data)}) }` : '';
   return `<!doctype html>
 <html lang="ja">
 <head>
@@ -418,7 +494,7 @@ function page({ title, description, body, meta, graph }) {
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
 <link rel="stylesheet" href="../assets/base.css">
 <script src="../assets/engine.js"></script>
-${graph ? '<script src="../assets/layers.js"></script>\n<script src="news-data.js"></script>\n<script src="../assets/news-graph.js"></script>\n' : ''}${STYLE}
+${scripts.map((s) => `<script src="${s}"></script>\n`).join('')}${STYLE}
 </head>
 <body>
 <div class="app">
@@ -430,7 +506,7 @@ ${body}
 </div>
 
 <script>
-${graph ? `YT_NEWS_GRAPH.mount(document.getElementById('s${graph.k}'), ${JSON.stringify(graph.opts)});\n` : ''}YT.chapter({ meta: ${JSON.stringify(meta).replace(/</g, '\\u003c')} });
+${graph ? `YT_NEWS_GRAPH.mount(document.getElementById('s${graph.k}'), ${JSON.stringify(graph.opts)});\n` : ''}YT.chapter({ meta: ${json(meta)}${scenes} });
 </script>
 </body>
 </html>
@@ -445,6 +521,7 @@ function notePage(n) {
   const toc = n.scenes.map((s, i) => `<li><a href="#s${i + 1}" data-go="${i + 1}"><span class="n">${i + 1}</span>${inline(s.title, n.refs)}</a></li>`).join('\n      ');
   const scenes = n.scenes.map((s, i) => {
     const k = i + 1;
+    if (n.walk && n.walk.k === k) return walkScene(n, s, k);
     // 列の幅は、表のある列を 3、ない列を 2 の割合にする。表の無い 1 列だけの場面は、行が長くなりすぎないよう幅を絞る
     const hasTable = s.groups.map((g) => g.blocks.some((b) => b.t === 'table'));
     const cols = s.groups.length > 1 ? hasTable.map((t) => (t ? '3fr' : '2fr')).join(' ') : '';
@@ -488,8 +565,36 @@ ${scenes}`;
     title: `${n.title} — ニュースから層へ`,
     description: plain(n.leadFirst),
     body,
-    meta: { eyebrow, title: n.title, home: 'index.html', actions: [{ href: 'index.html', label: 'ニュースの一覧' }] }
+    meta: { eyebrow, title: n.title, home: 'index.html', actions: [{ href: 'index.html', label: 'ニュースの一覧' }] },
+    walk: n.walk ? { k: n.walk.k, data: { layers: n.layers, missing: n.missing.map((m) => m.name), rows: n.walk.rows } } : null
   });
+}
+
+/* 層の歩きの場面（assets/news-graph.js の walk が動かす）。左に表の前の文・行の一覧（1画面版）・説明欄、右に層の図。
+   表は縦読み版にだけ出し（1画面版は段階に置き換える）、1画面版の説明欄の文と「章・場面」もこの表から写す */
+function walkScene(n, s, k) {
+  const w = n.walk;
+  // 行の一覧の項目はそれ自体がリンクなので、1 列目の中のリンクは文字だけにする
+  const route = w.table.rows.map((r, j) => `<li><a href="#s${k}.${j + 1}" data-go="${k}" data-step="${j}"><span class="n">${j + 1}</span><span class="t">${inline(r[0].replace(RE_LINK, '$1'), n.refs)}</span></a></li>`).join('\n      ');
+  const after = w.after.length ? `\n    <div class="prose a-after nw-wtext">${render(w.after, n.refs)}</div>` : '';
+  return `<!-- ================= ${k} ${esc(s.title)}（層の歩き） ================= -->
+<section class="scene sc-anim sc-nwwalk" id="s${k}" data-tab="${esc(s.tab)}" aria-labelledby="h-s${k}">
+  <header class="sh a-sh">
+    <h2 id="h-s${k}"><span class="n">${k}</span>${inline(s.title, n.refs)}</h2>
+  </header>
+  <div class="col a-left">
+    <div class="prose a-lead nw-wtext">${render(w.before, n.refs)}</div>
+    <ol class="nw-route fit-only" aria-label="表の行（1 行が 1 段階）">
+      ${route}
+    </ol>
+    <div class="narr-slot a-panel"></div>${after}
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を列に並べ、このノートの表の行が触れる層を行の順に線でたどる図"></svg></div>
+    <figcaption>図1　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
+  </figure>
+  <div class="nw-wtbl a-tbl">${render([w.table], n.refs, { drill: true })}</div>
+</section>`;
 }
 
 /* ---------- 一覧のカードと、カードを並べた場面 ---------- */
@@ -730,7 +835,8 @@ for (const f of fs.readdirSync(NEWS)) {
 for (const n of notes) {
   fs.writeFileSync(path.join(NEWS, n.slug + '.html'), notePage(n));
   console.log(`news/${n.slug}.html: ${n.title} — ${n.daily ? '日刊、' : ''}場面 ${n.scenes.length}、章 ${n.chapters.join('・') || 'なし'}、`
-    + `中心の層 ${n.center || 'なし'}${n.tags.length ? '（tags）' : ''}、層 ${n.layers.join('・') || 'なし'}、教材に無い ${n.missing.length}`);
+    + `中心の層 ${n.center || 'なし'}${n.tags.length ? '（tags）' : ''}、層 ${n.layers.join('・') || 'なし'}、教材に無い ${n.missing.length}、`
+    + (n.walk ? `層の歩き ${n.walk.rows.length} 段（場面 ${n.walk.k}: ${n.walk.rows.map((r) => [...new Set(r.l.flatMap((x) => x.ids))].join('+') + (r.l.some((x) => x.n) ? '（近い）' : '') + (r.m.length ? '［無い ' + r.m.length + '］' : '') || '—').join(' → ')}）` : '層の歩き なし（表のまま）'));
 }
 fs.writeFileSync(path.join(NEWS, 'news-data.js'), dataFile(notes));
 ms.forEach((x, i) => {   // ms は新しい月から並ぶ。前の月は i + 1、次の月は i - 1

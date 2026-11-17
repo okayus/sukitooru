@@ -144,7 +144,7 @@ git push -u origin "claude/news-<実行した日>"
 
 `claude/news-*` から持ち主の名前で出たプルリクエストだけを扱う。main の側の道具で次を確かめ、通ればスカッシュでマージして、GitHub Pages を作り直させる。
 
-1. 変わるのは `news/` の直下だけ。足す `.md` は日刊のノート 1 つ。既にあるノートを変えていない（`tools/news-pr-check.mjs`）。
+1. 変わるのは `news/` の直下だけ。足す `.md` は日刊のノート 1 つ。既にあるノートを変えていない。ノートの中身（場面の数、リンク、`tags`・`missing`、「層」の場面の表が 3 列で 2〜6 行）が型どおり（`tools/news-pr-check.mjs`）。
 2. `tools/build-news.mjs` で作り直したページと表が、プルリクエストの中身と一致する。
 3. `tools/verify.mjs --sizes all` が、一覧・月のページ・ノートのページで通る。
 
