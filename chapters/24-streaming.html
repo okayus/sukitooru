@@ -265,7 +265,7 @@
       const svg = ctx.svg, st = ctx.state;
       /* ---- 左: 形式の一覧 ---- */
       const gt = st.gt = S.g({}, svg);
-      S.text(24, 34, 'dQw4w9WgXcQ の形式の一覧（2026-10-12）', { cls: 't-b t-md' }, gt);
+      st.gtTitle = S.text(24, 34, 'dQw4w9WgXcQ の形式の一覧（2026-10-12）', { cls: 't-b t-md' }, gt);
       const COLX = [152, 252, 352], CW = 92;
       S.text(56, 60, '解像度', { cls: 't-c t-xs t-dim' }, gt);
       ['AV1', 'VP9', 'H.264'].forEach((c, k) => S.text(COLX[k], 60, c, { cls: 't-c t-sm t-b' }, gt));
@@ -310,7 +310,7 @@
       ], 16.5);
       const gj = st.gj = S.g({ cls: 'fade hide' }, svg);
       S.rect(470, 18, 470, 252, { rx: 6, cls: 'f-sf s-rule w1' }, gj);
-      S.text(486, 40, 'YouTube の再生情報（JSON の一部）', { cls: 't-b t-sm' }, gj);
+      st.gjTitle = S.text(486, 40, 'YouTube の再生情報（JSON の一部）', { cls: 't-b t-sm' }, gj);
       st.jsHl = [S.rect(480, 0, 450, 32, { rx: 3, cls: 'f-x-soft' }, gj), S.rect(480, 0, 450, 16, { rx: 3, cls: 'f-x-soft' }, gj)];
       codeBlock(gj, 486, 62, [
         '"streamingData": {',
@@ -332,7 +332,7 @@
       /* ---- 右下: 1 つの形式のファイルと、時間で切った断片 ---- */
       const gb = st.gb = S.g({ cls: 'fade hide' }, svg);
       S.rect(470, 286, 470, 256, { rx: 6, cls: 'f-sf s-rule w1' }, gb);
-      S.text(486, 308, '720p の AV1（itag 398）のファイル 17,593,076 バイトの先頭', { cls: 't-b t-sm' }, gb);
+      st.gbTitle = S.text(486, 308, '720p の AV1（itag 398）のファイル 17,593,076 バイトの先頭', { cls: 't-b t-sm' }, gb);
       // バイトの並び（初期化部分と索引は幅を誇張）
       const gy = st.gBytes = S.g({}, gb);
       const BX0 = 486, BY = 320, BH = 26;
@@ -382,6 +382,12 @@
       VSEG.filter((s) => s > 0 && s < 60).forEach((s) => S.line(st.tx(s), 376, st.tx(s), 470, { cls: 's-x w1 dash' }, st.align));
       st.head = S.line(TX0, 374, TX0, 500, { cls: 's-x w2' }, gb);
       st.headTxt = S.text(TX1, 374, '', { cls: 't-xs t-mono t-x t-end' }, gb);
+      // 掘り下げ（下の層へ）: 形式を作る変換（第22章）、キーフレーム・box（第23章）、索引の引き方（第27章）、配信元の URL（第22章 場面5）
+      YT.drill.mark(st.gtTitle, { to: '22-server.html#s1.3', label: '形式の一覧（26 通り）', at: [310, 30], steps: [1], bridge: '26 通りの形式は、アップロードの後に塊ごとに 1 回だけ復号し、縮小と符号化を重ねて作る' });
+      YT.drill.mark(st.align, { to: '23-codec.html#s4.5', label: '断片の先頭のキーフレーム', at: [594, 364], steps: [3], bridge: 'どの断片からでも復号を始められるのは、先頭のキーフレーム（I）が前のフレームを使わないから' });
+      YT.drill.mark(st.gbTitle, { to: '23-codec.html#s6.4', label: 'ファイルの先頭の並び', at: [824, 304], steps: [4], bridge: '初期化部分・索引・断片の並びは MP4 の box の列。索引は 700 バイト目からの sidx' });
+      YT.drill.mark(st.byteTxt, { to: '27-algorithm.html#s2.2', label: '索引を引く', at: [905, 362], steps: [4], bridge: '索引の項目は時刻の順に並ぶので、何秒目の断片かは真ん中と比べて半分に絞る二分探索で引ける' });
+      YT.drill.mark(st.gjTitle, { to: '22-server.html#s5.2', label: '配信元の URL', at: [690, 36], steps: [5], bridge: 'この 1 つの URL の名前・期限・署名は、YouTube のサーバーが利用者に合わせて書いて渡す' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -491,7 +497,7 @@
       const MX = st.MX = (m) => 80 + m * 6;      // メディアの時刻 0〜140 秒
       const GY = st.GY = (s) => 520 - s * 2.75;  // 残り 0〜80 秒
       /* ---- 上: 要求 ---- */
-      S.text(24, 26, '要求（POST /videoplayback）を出してから受け取り終えるまで', { cls: 't-b t-sm' }, svg);
+      st.reqTitle = S.text(24, 26, '要求（POST /videoplayback）を出してから受け取り終えるまで', { cls: 't-b t-sm' }, svg);
       st.note = S.text(936, 26, '', { cls: 't-xs t-x t-b t-end' }, svg);
       const mkReqs = (reqs) => {
         const g = S.g({ cls: 'fade' }, svg);
@@ -509,7 +515,7 @@
       for (let s = 0; s <= 60; s += 10) { S.line(WX(s), 74, WX(s), 79, { cls: 's-dim w1' }, svg); S.text(WX(s), 91, s + ' s', { cls: 't-c t-xs t-mono t-dim' }, svg); }
       st.cur1 = S.line(80, 48, 80, 74, { cls: 's-x w15' }, svg);   // 上端は「1.65 MB」「0.4 Mbps に制限」の札より下
       /* ---- 中: SourceBuffer ---- */
-      S.text(24, 122, 'SourceBuffer に溜まった区間（メディアの時刻）', { cls: 't-b t-sm' }, svg);
+      st.sbTitle = S.text(24, 122, 'SourceBuffer に溜まった区間（メディアの時刻）', { cls: 't-b t-sm' }, svg);
       st.gSB = S.g({}, svg);
       const lane = (y, label, mime, bounds) => {
         S.text(80, y - 6, label, { cls: 't-xs t-b' }, st.gSB);
@@ -529,7 +535,7 @@
       st.status = S.text(80, 266, '', { cls: 't-sm t-mono' }, svg);
       st.stallTxt = S.text(920, 266, '', { cls: 't-sm t-b t-x t-end' }, svg);
       /* ---- 下: 残りの秒数 ---- */
-      S.text(24, 284, '残りの秒数（溜めた区間の端 − 再生位置）', { cls: 't-b t-sm' }, svg);
+      st.remTitle = S.text(24, 284, '残りの秒数（溜めた区間の端 − 再生位置）', { cls: 't-b t-sm' }, svg);
       for (let s = 0; s <= 80; s += 20) {
         S.line(80, GY(s), 920, GY(s), { cls: (s ? 's-soft' : 's-rule') + ' w1' }, svg);
         S.text(72, GY(s) + 4, s + ' s', { cls: 't-xs t-mono t-dim t-end' }, svg);
@@ -556,6 +562,10 @@
       S.label(st.gS, WX(SLOW.videoOut) - 4, GY(46), '映像が尽きた', { cls: 't-xs t-x', box: 'f-sf s-x w1', w: 84 });
       st.cur2 = S.line(80, GY(80), 80, GY(0), { cls: 's-x w15' }, svg);
       st.dot = S.circle(80, GY(0), 4.5, { cls: 'f-x' }, svg);
+      // 掘り下げ（下の層へ）: 断片の POST（第21章）、MSE の受け口（第10章）、遅れの揺らぎ（第11章）
+      YT.drill.mark(st.reqTitle, { to: '21-http.html#s2.5', label: 'POST /videoplayback', at: [370, 22], steps: [1], bridge: '断片は、範囲を指定した GET ではなく、再生位置と溜めた区間を本文に入れた POST で頼む' });
+      YT.drill.mark(st.sbTitle, { to: '10-browser.html#s6.2', label: 'SourceBuffer', at: [290, 115], steps: [2], bridge: 'SourceBuffer は、JS が MediaSource に作る映像用と音声用の受け口' });
+      YT.drill.mark(st.remTitle, { to: '11-sou.html#s5.5', label: '残りの秒数', at: [104, 316], steps: [5], bridge: 'パケット交換では届くまでの遅れが揺らぐので、溜めた残りでその揺らぎを吸収する' });
     },
     onStep(ctx, i) {
       const st = ctx.state, slow = i === 4;
@@ -695,7 +705,7 @@
       const head = (g, s) => S.text(640, 40, 'D　' + s, { cls: 't-b t-sm' }, g);
       // 段階1: 見本と見積もり
       head(P[0], '見本と見積もり');
-      S.text(640, 70, '見本 ＝ 応答の大きさ ÷ 受け取りにかかった時間', { cls: 't-sm' }, P[0]);
+      st.sampleTxt = S.text(640, 70, '見本 ＝ 応答の大きさ ÷ 受け取りにかかった時間', { cls: 't-sm' }, P[0]);
       st.sampleRows = [[4.67, 6.39, 1647026], [10.46, 15.09, 1200842], [30.81, 44.64, 512303]].map(([a, b, n], k) => {
         const y = 98 + k * 22;
         S.text(640, y, `${a.toFixed(2)} 秒の応答`, { cls: 't-xs' }, P[0]);
@@ -769,7 +779,7 @@
       S.text(ZX(28) - 4, ZY(75) - 6, 'メディアの時刻（秒）', { cls: 't-xs t-dim' }, P[3]);
       S.lines(640, 410, ['音だけ進んだ 36.16〜38.98 秒の映像は、', '届いた時にはもう遅く、表示されずに捨てられた', '（落としたフレームの数が 5 から 83 に増えた）。'], { cls: 't-xs t-mid' }, P[3], 16);
       // 段階5: 溜まった映像の画質
-      head(P[4], '溜まった映像の画質（メディアの時刻）');
+      st.dHead5 = head(P[4], '溜まった映像の画質（メディアの時刻）');
       const MX = (m) => 652 + m * 1.3;   // 0〜213 秒
       const strip = (y, ranges) => {
         ranges.forEach(([a, b, q]) => {
@@ -794,7 +804,7 @@
       ], 18, 't-mono t-xs t-mid');
       S.lines(640, 380, ['初期化部分（形式ごとの復号の設定）を入れ替えると、', '同じ SourceBuffer に別の画質の断片を続けられる。', 'コーデックまで変えるときは changeType() を使う。'], { cls: 't-xs t-mid' }, P[4], 16);
       // 段階6: POST の本文
-      head(P[5], '回 D の POST の本文（44.64 秒）');
+      st.dHead6 = head(P[5], '回 D の POST の本文（44.64 秒）');
       codeBlock(P[5], 640, 68, [
         'POST /videoplayback?…&sabr=1',
         '本文 1,655 バイト（protobuf）',
@@ -815,6 +825,10 @@
       S.text(640, 312, '応答 153,264 バイト（application/vnd.yt-ump）', { cls: 't-xs t-b' }, P[5]);
       S.text(640, 330, '394（144p）の初期化部分と断片 8〜11（36.16〜61.88 秒）', { cls: 't-xs t-mono' }, P[5]);
       S.lines(640, 366, ['23 の値 18,695 B/s は 0.15 Mbps で、詳細統計情報の', 'Connection Speed（146 Kbps）と同じ値だった。', '28 は映像の端の 36,160 ms。このとき currentTime は', '音だけ進んで 38.7 秒だった（段階4）。', '欄の名前は第三者の解析（googlevideo など）による。'], { cls: 't-xs t-mid' }, P[5], 16);
+      // 掘り下げ（下の層へ）: 届く速さ（第19章）、境目のキーフレーム（第23章）、本文の protobuf（第26章）
+      YT.drill.mark(st.sampleTxt, { to: '19-tcp.html#s4.1', label: '見本の速さ', at: [902, 66], steps: [1], bridge: '見本の速さは回線の帯域だけでなく、送り手が 1 往復に送れる量（ウィンドウ）と往復時間でも決まる' });
+      YT.drill.mark(st.dHead5, { to: '23-codec.html#s4.5', label: '画質が変わる境目', at: [880, 36], steps: [5], bridge: '画質を断片の境目で替えられるのは、どの画質の断片もキーフレームから始まるから' });
+      YT.drill.mark(st.dHead6, { to: '26-kata.html#s5.6', label: 'POST の本文', at: [864, 36], steps: [6], bridge: '本文は protobuf。バイトにあるのは欄の番号と値だけで、23 が帯域という意味は両端の定義にある' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -986,7 +1000,7 @@
       S.rect(330, 492, 128, 18, { cls: 'f-d-soft s-d w1' }, P[3]);
       S.text(394, 505, 'Cb Cr Cb Cr …', { cls: 't-c t-xs t-mono' }, P[3]);
       S.text(330, 526, 'NV12（2 面）：回路の出力に多い', { cls: 't-xs t-b' }, P[3]);
-      S.lines(560, 432, ["Y' 921,600 ＋ Cb 230,400 ＋ Cr 230,400", '＝ 1 枚 1,382,400 バイト', '× 25 fps ＝ 毎秒 34.6 MB（276 Mbps）', '届いたのは平均 0.66 Mbps'], { cls: 't-xs t-mono' }, P[3], 20);
+      st.yuvLines = S.lines(560, 432, ["Y' 921,600 ＋ Cb 230,400 ＋ Cr 230,400", '＝ 1 枚 1,382,400 バイト', '× 25 fps ＝ 毎秒 34.6 MB（276 Mbps）', '届いたのは平均 0.66 Mbps'], { cls: 't-xs t-mono' }, P[3], 20);
       // 段階5: Chrome の記録
       head(P[4], 'Chrome の記録（DevTools の Media、2026-10-17）');
       [['DecryptingVideoDecoder', '使わない（暗号化されていない）'], ['VpxVideoDecoder', '断った（VP8・VP9 用）'], ['Dav1dVideoDecoder', '選ばれた（AV1 用、ソフトウェア）'], ['kIsPlatformVideoDecoder', 'false（OS・GPU の復号器ではない）']].forEach(([a, b], k) => {
@@ -1007,6 +1021,12 @@
         S.text(580, y, 'false', { cls: 't-xs t-mono t-x t-b' }, P[5]);
       });
       S.lines(700, 436, ['ほかに isTypeSupported を 44 回。', 'av99 や eotf=catavision のような', '存在しない値も混ぜて尋ねていた。'], { cls: 't-xs t-mid' }, P[5], 20);
+      // 掘り下げ（下の層へ）: 断片の中の並び・参照・4:2:0（第23章）、場所を装置に教える（第7章 場面4）、発熱（第3章 場面5）
+      YT.drill.mark(st.bDx, { to: '23-codec.html#s6.5', label: 'デマルチプレクサ', at: [286, 239], steps: [1], bridge: 'フレームの区切りは、断片の先頭の moof の trun に並ぶフレームごとの大きさで分かる' });
+      YT.drill.mark(st.five, { to: '23-codec.html#s4.4', label: '5 バイトのフレーム', at: [794, 80], steps: [2], bridge: 'あとで出す画を先に解くのは、B フレームと同じく、後ろの画からも予測するため' });
+      YT.drill.mark(st.bHW, { to: '07-shuuhen.html#s4.2', label: 'GPU の専用回路', at: [512, 234], steps: [3], bridge: 'CPU が渡す圧縮データの場所は、NIC のディスクリプタと同じく番地と長さ。回路はそこを自分で読む' });
+      YT.drill.mark(st.yuvLines, { to: '23-codec.html#s1.4', label: '1 枚 1,382,400 バイト', at: [804, 428], steps: [4], bridge: '1 枚が 1,382,400 バイトなのは、4:2:0 で Cb・Cr を 2×2 画素に 1 個ずつに間引いたから' });
+      YT.drill.mark(st.bSW, { to: '03-transistor.html#s5.2', label: 'CPU のソフトウェア', at: [446, 328], steps: [5], bridge: 'ソフトウェアで解くと CPU の多くの回路が毎拍切り替わる。切り替えの回数に比例して電力が熱になる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1083,7 +1103,7 @@
       const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
       /* ---- A YUV → RGB ---- */
       const gA = st.gA = S.g({ cls: 'fade' }, svg);
-      S.text(20, 30, "A　YUV → RGB（BT.709、Y' は 16〜235 の範囲）", { cls: 't-b t-sm' }, gA);
+      st.aTitle = S.text(20, 30, "A　YUV → RGB（BT.709、Y' は 16〜235 の範囲）", { cls: 't-b t-sm' }, gA);
       S.text(20, 52, `39.92 秒のフレームの (${PIX.at.join(', ')}) の画素`, { cls: 't-xs t-dim' }, gA);
       [["Y'", 0], ['Cb', 1], ['Cr', 2]].forEach(([n, k]) => {
         const x = 20 + k * 84;
@@ -1098,7 +1118,7 @@
       S.text(377, 77, 'Cb', { cls: 't-c t-xs' }, gA);
       S.rect(362, 86, 30, 22, { cls: 'f-in s-d w1' }, gA);
       S.text(377, 101, 'Cr', { cls: 't-c t-xs' }, gA);
-      S.text(400, 128, 'Cb・Cr は 1 組', { cls: 't-c t-xs t-dim' }, gA);
+      st.cbcrTxt = S.text(400, 128, 'Cb・Cr は 1 組', { cls: 't-c t-xs t-dim' }, gA);
       const [Y, Cb, Cr] = PIX.yuv, y = B709.y * (Y - 16), u = Cb - 128, v = Cr - 128;
       const R = y + B709.rv * v, G = y - B709.gu * u - B709.gv * v, B = y + B709.bu * u;
       st.rgb = [R, G, B].map((c) => Math.round(U.clamp(c, 0, 255)));
@@ -1150,7 +1170,7 @@
       S.rect(16, 300, 928, 246, { rx: 6, cls: 'f-sf s-rule w1' }, gC);
       S.text(32, 322, 'C　音声の時計・映像の画・画面の書き換え（200 ms を 20 倍に遅くして描いた）', { cls: 't-b t-sm' }, gC);
       const TX = st.TX = (ms) => 132 + ms * 4;    // 0〜200 ms
-      S.text(124, 358, '音声の時計', { cls: 't-xs t-b t-end' }, gC);
+      st.acLbl = S.text(124, 358, '音声の時計', { cls: 't-xs t-b t-end' }, gC);
       S.line(TX(0), 354, TX(200), 354, { cls: 's-mid w2' }, gC);
       // 最後の「200 ms」は板の右の縁を越えないように右寄せ
       for (let ms = 0; ms <= 200; ms += 40) { S.line(TX(ms), 349, TX(ms), 359, { cls: 's-mid w1' }, gC); S.text(ms === 200 ? TX(ms) + 6 : TX(ms), 343, ms + ' ms', { cls: (ms === 200 ? 't-end' : 't-c') + ' t-xs t-mono t-dim' }, gC); }
@@ -1166,7 +1186,7 @@
       S.line(TX(80) + 6, 386, TX(120) - 6, 418, { cls: 's-x w2' }, st.dropMark);
       S.line(TX(120) - 6, 386, TX(80) + 6, 418, { cls: 's-x w2' }, st.dropMark);
       S.label(st.dropMark, TX(100), 372, '解くのが間に合わず捨てた', { cls: 't-xs t-x t-b', box: 'f-sf s-x w1', w: 140 });
-      S.text(124, 462, '画面の書き換え', { cls: 't-xs t-b t-end' }, gC);
+      st.vsLbl = S.text(124, 462, '画面の書き換え', { cls: 't-xs t-b t-end' }, gC);
       S.text(124, 476, '（16.7 ms ごと）', { cls: 't-xs t-dim t-end' }, gC);
       st.slots = Array.from({ length: 12 }, (_, n) => {
         const g = S.g({}, gC);
@@ -1178,6 +1198,12 @@
       st.needle = S.line(TX(0), 349, TX(0), 486, { cls: 's-x w2' }, gC);
       st.note = S.text(132, 510, '', { cls: 't-xs t-mid' }, gC);
       st.note2 = S.text(132, 528, '', { cls: 't-xs t-mid' }, gC);
+      // 掘り下げ（下の層へ）: 色の式と 4:2:0（第23章 場面1）、層の重ね方・vsync・音声の出口（第8章）
+      YT.drill.mark(st.aTitle, { to: '23-codec.html#s1.2', label: 'YUV → RGB の式', at: [292, 30], steps: [1], bridge: "RGB に戻す式は、R・G・B から Y'・Cb・Cr を作った BT.709 の式を逆に解いたもの" });
+      YT.drill.mark(st.cbcrTxt, { to: '23-codec.html#s1.4', label: 'Cb・Cr は 1 組', at: [452, 124], steps: [2], bridge: 'Cb・Cr が 2×2 画素に 1 組しかないのは、4:2:0 で色差を間引いたから。拡大と同じく周りから補う' });
+      YT.drill.mark(st.gL, { to: '08-display.html#s2.2', label: '合成した 1 枚', at: [544, 233], steps: [3], bridge: '半透明の再生ボタンの層は、画素ごとに α×前景 ＋ (1−α)×背景 で動画の層に重なる' });
+      YT.drill.mark(st.vsLbl, { to: '08-display.html#s3.4', label: '画面の書き換え', at: [34, 458], steps: [4], bridge: '画面は 16.7 ms ごとに上から走査して書き換わる。画の入れ替えは走査の切れ目（vsync）を待つ' });
+      YT.drill.mark(st.acLbl, { to: '08-display.html#s6.2', label: '音声の時計', at: [56, 354], steps: [5], bridge: '音声の時計が狂わずに進むのは、音声チップが PCM を 48 kHz の決まった速さで DAC へ送るから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1279,7 +1305,7 @@
       const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
       const head = (g, s) => S.text(32, 298, 'C　' + s, { cls: 't-b t-sm' }, g);
       // 段階1: シークの前後の記録
-      head(P[0], '120 秒へ飛んだ前後の記録（回 B）');
+      st.cHead1 = head(P[0], '120 秒へ飛んだ前後の記録（回 B）');
       codeBlock(P[0], 32, 326, [
         '20.48 秒  POST を送る（応答の途中）',
         '25.11 秒  120 秒へシーク。この POST を打ち切り、次の POST を送る',
@@ -1303,7 +1329,7 @@
       S.line(FX(k120) + 1.7, 318, FX(k120) + 1.7, 448, { cls: 's-x w2' }, P[1]);
       S.label(P[1], FX(k120) + 64, 324, '120.00 秒から表示', { cls: 't-xs t-x t-b', box: 'f-sf s-x w1', w: 104 });
       S.path(`M${FX(127)},476 V482 H${FX(131) + 3.4} V476`, { cls: 'f-none s-x w15' }, P[1]);
-      S.text(FX(127) - 6, 498, '119.80 秒のキーフレームから 5 フレームを解き、表示しない', { cls: 't-xs t-x t-end' }, P[1]);
+      st.kfTxt = S.text(FX(127) - 6, 498, '119.80 秒のキーフレームから 5 フレームを解き、表示しない', { cls: 't-xs t-x t-end' }, P[1]);
       S.path(`M${FX(0) + 1},474 l6,0 l-3,6 z`, { cls: 'f-x' }, P[1]);
       S.text(FX(0) + 12, 480, 'キーフレーム', { cls: 't-xs t-dim' }, P[1]);
       S.text(32, 528, '断片の先頭（114.72 秒）から解けば 132 フレームかかる所を、直前のキーフレームからなら 5 フレームで済む。', { cls: 't-xs t-mid' }, P[1]);
@@ -1369,6 +1395,10 @@
       });
       [40, 80, 120].forEach((w) => S.text(EX(w), 514, String(w), { cls: 't-c t-xs t-mono t-dim' }, P[5]));
       S.lines(640, 330, ['手動の 1080p は、0.8 Mbps でも', '下げずに残りを減らした（26.5 → 8.7 秒）。', '', '自動に戻すと、溜めた 1080p は捨てず、', '次の断片（96.32 秒）から 360p。', 'MediaSource は作り直さなかった。'], { cls: 't-xs t-mid' }, P[5], 20);
+      // 掘り下げ（下の層へ）: 索引を引く（第27章）、キーフレームから解く（第23章）、状態の持ち方（第29章）
+      YT.drill.mark(st.cHead1, { to: '27-algorithm.html#s2.2', label: '120 秒を含む断片', at: [240, 294], steps: [1], bridge: '120 秒を含む断片（114.72 秒から）は、時刻の順に並んだ索引から二分探索で引ける' });
+      YT.drill.mark(st.kfTxt, { to: '23-codec.html#s4.4', label: '直前のキーフレーム', at: [706, 502], steps: [2], bridge: '途中の P や B は前の画から予測しているので、参照の要らない I（キーフレーム）から解き始める' });
+      YT.drill.mark(st.gA, { to: '29-imi.html#s4.3', label: '一時停止', at: [382, 44], steps: [4], bridge: '再生と一時停止の切り替えは、今の状態から次の状態を作る遷移として 1 か所に書ける' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

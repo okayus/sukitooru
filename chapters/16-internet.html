@@ -367,6 +367,8 @@
       // 止まる位置で札がエッジの箱の題や図の端にかからないよう、道の終わりは箱と枠の手前にする
       st.rG = road(svg, via([R.A, R.C1, R.B1, R.G1, [686, 300]]));
       st.rX = road(svg, via([R.A, R.C1, R.B2, R.T1, [470, 72], R.T2, R.U1, [780, 72], [880, 72]]));
+      // 掘り下げ（下の層へ）: 家から ISP の AS までの道（第15章 場面5）
+      YT.drill.mark(st.home, { to: '15-hikari.html#s5.1', label: '家から ISP へ', at: [64, 258], steps: [1], bridge: '家から ISP の AS に入るまでは、光回線で局舎へ、NTT 東西の網を通って ISP の出口へ' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -480,7 +482,7 @@
         S.text(64, 380 + r * 30, k, { cls: 't-sm t-b t-dim' }, p0);
         S.text(200, 380 + r * 30, v, { cls: 't-sm' + (r < 2 ? ' t-mono t-b' : '') }, p0);
       });
-      S.text(916, 380, 'TCP 179 番の接続の上で送る', { cls: 't-sm t-dim', 'text-anchor': 'end' }, p0);
+      st.tcpTxt = S.text(916, 380, 'TCP 179 番の接続の上で送る', { cls: 't-sm t-dim', 'text-anchor': 'end' }, p0);
       S.text(916, 404, '接続の初めに OPEN、以後は UPDATE と KEEPALIVE', { cls: 't-sm t-dim', 'text-anchor': 'end' }, p0);
       st.panels.push(p0);
       // 段階2: AS_PATH の伸び方
@@ -529,6 +531,9 @@
         ['…', '…', '…　IPv4 で約 100 万行、IPv6 で約 22 万行（2025 年）']
       ], { rh: 26, mono: [true, true], nobox: true });
       st.panels.push(p5);
+      // 掘り下げ（下の層へ）: BGP を運ぶ TCP（第19章 場面2）、NEXT_HOP の MAC を引く ARP（第13章 場面5）
+      YT.drill.mark(st.tcpTxt, { to: '19-tcp.html#s2.1', label: 'TCP 179 番の接続', at: [746, 376], steps: [1], bridge: 'BGP の UPDATE は TCP で運ぶ。3-way ハンドシェイクで接続し、失われた分は TCP が送り直す' });
+      YT.drill.mark(st.panels[0], { to: '13-ethernet.html#s5.5', label: 'NEXT_HOP', at: [428, 436], steps: [1], bridge: 'NEXT_HOP 宛てのパケットは、IX の上で ARP で調べた相手のルーターの MAC を宛先にして送る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -686,6 +691,8 @@
       st.ads = [st.pk, st.pk2, st.adI, st.adG, st.adB, st.adB2];
       // 上流の箱をいちばん上に重ね、パケットが上流の網の中を通り抜けるように見せる
       svg.appendChild(st.up);
+      // 掘り下げ（下の層へ）: IX の中のスイッチ（第13章 場面4）
+      YT.drill.mark(st.ix, { to: '13-ethernet.html#s4.3', label: 'IX のスイッチ', at: [676, 234], steps: [2], bridge: 'IX のスイッチも、届いたフレームの宛先 MAC で表を引き、相手のルーターのポートだけに送る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -887,6 +894,9 @@
       st.cap = S.g({ cls: 'fade hide' }, svg);
       S.label(st.cap, 404, 455, '1 波：数百 Gbps', { cls: 't-sm t-b t-x', box: 'f-sf s-x w1' });
       S.label(st.cap, 643, 318, '× 約 90 波 ＝ 1 対で 10〜20 Tbps 前後', { cls: 't-sm t-b t-x', box: 'f-sf s-x w1' });
+      // 掘り下げ（下の層へ）: 光のまま増やす誘導放出と、波長ごとの受光器（第2章 場面6）
+      YT.drill.mark(st.dwdm, { to: '02-handoutai.html#s6.5', label: '増幅（EDFA）', at: [700, 398], steps: [3], bridge: 'EDFA が光のまま増幅するのは、励起したエルビウムが通る光と同じ光を出す誘導放出による' });
+      YT.drill.mark(st.dwdm, { to: '02-handoutai.html#s6.3', label: '波長ごとの受光器', at: [897, 452], steps: [4], bridge: '波長ごとの受光器も、光子が作る電子正孔対を電流として読むフォトダイオード' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1055,6 +1065,11 @@
         { dst: '203.0.113.5' }
       ];
       st.shown = null;
+      // 掘り下げ（下の層へ）: 区間ごとのフレーム（第13章 場面3）、2 進数（第4章 場面4）、ビットの木と TCAM（第27章 場面4）
+      YT.drill.mark(st.pipe, { to: '13-ethernet.html#s3.1', label: 'Ethernet の付け替え', at: [310, 76], steps: [1], bridge: 'はがして付け直す Ethernet のヘッダは、宛先 MAC・送信元 MAC・タイプの 14 バイトと末尾の FCS' });
+      YT.drill.mark(st.bits, { to: '04-ronri.html#s4.1', label: '宛先の 32 ビット', at: [150, 364], steps: [3], bridge: '142 を 2 進で 10001110 と書けるのは、右端の重みが 1 で左へ 2 倍ずつの位取りだから' });
+      YT.drill.mark(st.tbl, { to: '27-algorithm.html#s4.3', label: 'いちばん長い一致', at: [566, 104], steps: [4], bridge: 'いちばん長い一致は、宛先のビットを先頭からたどる木で、最後に通った /n の行として求まる' });
+      YT.drill.mark(st.fwd, { to: '27-algorithm.html#s4.5', label: '転送部（ASIC）', at: [750, 282], steps: [6], bridge: 'ASIC のロンゲストマッチは、全部の行と同時に比べる TCAM か、回路の中の木で引く' });
     },
     /* 宛先 dst について、表と出口とビットの比較を描く。pick が真なら選ばれた行と出口を強調 */
     show(st, dst, pick) {
@@ -1218,6 +1233,11 @@
       st.pBB = pkt(svg, '要求');
       st.pRet = pkt(svg, '応答');
       st.all = [st.pReq, st.pFill, st.pCopy, st.pBB, st.pRet].concat(st.pSeg);
+      // 掘り下げ（下の層へ）: GGC の番号を返す DNS（第17章 場面5）、境目と ISP の中の経路表（場面5）、家の NAT（第14章 場面4）
+      YT.drill.mark(st.ggc, { to: '17-dns.html#s5.4', label: 'GGC の番号', at: [468, 366], steps: [1], bridge: '198.51.100.80 は、動画の断片の名前を DNS が引いたときに返す、ISP の中の GGC の番号' });
+      YT.drill.mark(st.rts, { to: '16-internet.html#s5.4', label: '境目のルーター', at: [520, 232], steps: [2], bridge: '境目のルーターが Google へ渡すのは、142.250.196.110 が /15 の行と最も長く一致するから' });
+      YT.drill.mark(st.ggc, { to: '16-internet.html#s5.2', label: 'GGC への道', at: [468, 366], steps: [3], bridge: 'GGC 宛ての 198.51.100.80 は、ISP のルーターの経路表で 198.51.100.0/24 の行に合う' });
+      YT.drill.mark(st.home, { to: '14-router.html#s4.3', label: 'NAT で PC へ', at: [61, 356], steps: [6], bridge: '応答の宛先 203.0.113.5 は家のルーターの WAN 側。NAT の表を逆引きして PC の番号に戻す' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

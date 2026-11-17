@@ -325,7 +325,10 @@
       st.dot = S.circle(139, 88, 8, { cls: 'f-x glow' }, svg);
       // 掘り下げ（下の層へ）: モードの正体は CPU の中の 1 ビット（部品 cpu-mode）
       YT.drill.mark(gm, { part: 'cpu-mode', step: 1, label: 'CPU のモード', at: [926, 36], steps: [2], bridge: 'モードは CPU の中のレジスタのビット（x86 は 2 ビットの CPL）。命令ごとに、してよいことを決める' });
-      YT.drill.mark(st.entTxt[0], { part: 'cpu-mode', step: 3, label: 'システムコールの入口', steps: [3], bridge: 'syscall 命令の実行の拍で、PC・戻り先・M の 3 つが同時に書き換わる' });
+      YT.drill.mark(st.entTxt[0], { part: 'cpu-mode', step: 3, label: 'システムコールの入口', at: [266, 250], steps: [3], bridge: 'syscall 命令の実行の拍で、PC・戻り先・M の 3 つが同時に書き換わる' });
+      // 装置のレジスタ（第7章 場面2 の MMIO）と、割り込みの入口（第7章 場面3）
+      YT.drill.mark(st.capMarks[1], { to: '07-shuuhen.html#s2.2', label: '装置のレジスタの読み書き', at: [924, 268], steps: [2], bridge: '装置のレジスタには物理アドレスが付いていて、メモリと同じ load・store で読み書きする（MMIO）' });
+      YT.drill.mark(st.entTxt[1], { to: '07-shuuhen.html#s3.4', label: '割り込みハンドラ', at: [438, 250], steps: [3], bridge: '割り込みでも、CPU は命令の切れ目で PC とフラグを保存し、ベクタ表の入口へ飛ぶ' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -448,7 +451,7 @@
       });
       st.event = S.g({ cls: 'fade hide' }, svg);
       S.rect(28, 548, 540, 10, { cls: 'f-none' }, st.event);
-      st.evTxt = S.text(300, 534, '', { cls: 't-c t-xs t-b' }, st.event);
+      st.evTxt = S.text(300, 553, '', { cls: 't-c t-xs t-b' }, st.event);   // プロセス表の枠（下端 540）の外に置く。中だと表の 1 行に見える
       // コア
       const gcpu = panel(svg, 600, 280, 332, 260, 'CPU のコア（いま走っているスレッド）');
       st.cores = [0, 1, 2, 3].map((k) => {
@@ -466,6 +469,9 @@
         ['合成スレッド', 'PID 4188', 'アイドル', '省電力', '音声 出力', 'PID 4201', 'アイドル', '省電力'],
         ['アイドル', '省電力', 'レンダラ Worker', 'PID 4188', 'kworker', 'カーネル', 'アイドル', '省電力']
       ];
+      // 掘り下げ（下の層へ）: スレッドが別に持つレジスタ（第6章）、待ちから起こすきっかけの NIC の割り込み（第7章）
+      YT.drill.mark(gcpu, { to: '06-cpu.html#s1.2', label: 'スレッドのレジスタ', at: [838, 296], steps: [2], bridge: 'スレッドごとのレジスタの組は、PC や A のような CPU のレジスタの値。PC が次の命令を指す' });
+      YT.drill.mark(st.rows[2].chip, { to: '07-shuuhen.html#s4.4', label: 'パケットの到着', at: [546, 397], steps: [4], bridge: '待ち（S）のネットワークサービスを起こすきっかけは、NIC が受信を書き終えて送る 1 回の割り込み' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -805,7 +811,7 @@
       // 状態の文
       st.info = [0, 1, 2, 3].map((k) => S.text(250, 446 + k * 20, '', { cls: 't-xs' }, svg));
       // 右: 物理メモリ
-      S.text(780, 30, '物理メモリ（DRAM）1 マス = 4 KiB のフレーム', { cls: 't-c t-xs t-b' }, svg);
+      st.dramTitle = S.text(780, 30, '物理メモリ（DRAM）1 マス = 4 KiB のフレーム', { cls: 't-c t-xs t-b' }, svg);
       const kinds = 'rrrkkkpprrrrkkppggrrhhhhkkppffrrrhhhffppggrrkkrrffrrhhppffffrrrrkkhhffpprrrrffffggrrhh'.split('');
       st.frames = [];
       for (let r = 0; r < 10; r++) for (let c = 0; c < 8; c++) {
@@ -835,6 +841,15 @@
       st.frShared.rect.setAttribute('class', 'f-d-soft s-rule w1'); st.frShared.cls = 'f-d-soft';
       st.frShared2.rect.setAttribute('class', 'f-d-soft s-rule w1'); st.frShared2.cls = 'f-d-soft';
       st.frFree.rect.setAttribute('class', 'f-sf s-rule w1'); st.frFree.cls = 'f-sf'; st.frFree.kind = 'f';
+      // 掘り下げ（下の層へ）: 物理メモリの中身（第5章 DRAM）、表を歩く読み出しと TLB（第6章 キャッシュ）、
+      // ページの印の照らし合わせ（部品 cpu-mode）、#PF の入口（第7章 割り込み）、SSD（第5章 NAND フラッシュ）
+      YT.drill.mark(st.dramTitle, { to: '05-kioku.html#s5.5', label: '物理メモリ（DRAM）', at: [912, 30], steps: [1, 2], bridge: '物理ページの中身は DRAM のセル。物理アドレスで行を開き、列を選んで読み書きする' });
+      YT.drill.mark(st.tables[3].g, { to: '06-cpu.html#s6.3', label: 'ページウォーク', at: [622, 268], steps: [3], bridge: '表を歩く 4 回の読み出しもキャッシュを通る。キャッシュに無ければ DRAM まで降りて待つ' });
+      YT.drill.mark(gt, { to: '06-cpu.html#s6.2', label: 'TLB', at: [600, 330], steps: [3], bridge: 'TLB は変換の結果の写し。L1〜L3 と同じく、CPU の中の小さく速いメモリに置く' });
+      YT.drill.mark(st.tables[3].rows[5].rr, { part: 'cpu-mode', step: 4, label: 'ページの印', at: [622, 226], steps: [4], bridge: '「無し」や書き込み禁止の検出も、ページの印のビットを論理ゲートで照らし合わせる仕組み' });
+      YT.drill.mark(st.info[1], { part: 'cpu-mode', step: 4, label: '表の属性（R・W・X）', at: [478, 462], steps: [5], bridge: '読み・書き・実行の許可もページの印のビット。触れるたびに論理ゲートで照らし合わせる' });
+      YT.drill.mark(st.info[0], { to: '07-shuuhen.html#s3.4', label: '例外 #PF', at: [560, 446], steps: [4], bridge: '#PF も PC とフラグを保存し、ベクタ表のハンドラへ飛ぶ。保存する PC は、やり直す命令の番地' });
+      YT.drill.mark(st.ssd, { to: '05-kioku.html#s6.6', label: 'SSD', at: [914, 454], steps: [6], bridge: 'ファイルとスワップの置き場の SSD は、電源を切っても電子を閉じ込めておく NAND フラッシュ' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1001,7 +1016,7 @@
       st.swTxt2 = S.text(14, 270, '', { cls: 't-xs' }, st.gsw);
       st.swTxt3 = S.text(14, 290, '', { cls: 't-xs' }, st.gsw);
       st.swTxt4 = S.text(14, 310, '', { cls: 't-xs' }, st.gsw);
-      st.swCount = S.text(306, 330, '', { cls: 'code-sm t-dim', 'text-anchor': 'end' }, st.gsw);
+      st.swCount = S.text(306, 20, '', { cls: 'code-sm t-dim', 'text-anchor': 'end' }, st.gsw);   // 枠の題の行の右。下の端だと段階5 の起床の枠に重なる
       // 起床の図（段階5）
       st.gw = S.g({ cls: 'fade hide' }, svg);
       S.rect(334, 440, 292, 90, { rx: 6, cls: 'f-d-soft s-d w1' }, st.gw);
@@ -1030,6 +1045,13 @@
       st.stRows[4].sub.textContent = 'カーネルの後回し仕事';
       st.stRows[5].sub.textContent = '走るものが無いとき。C ステートへ';
       st.idleTxt = S.text(14, 334, '', { cls: 't-xs t-b' }, st.gs);
+      // 掘り下げ（下の層へ）: タイマ割り込み（第7章）、入れ替えるレジスタ（第6章）、赤黒木（第27章）、起床の割り込み（第7章 DMA の後）、
+      // C ステート（第3章 漏れ電流）。レジスタの退避と復元そのものは教材に無い（P5 の部品 ctx-switch の候補）
+      YT.drill.mark(st.bolt, { to: '07-shuuhen.html#s3.4', label: 'タイマ割り込み', at: [942, 168], steps: [2], bridge: 'タイマの割り込みでも、CPU は命令の切れ目で PC とフラグを保存し、ベクタ表の入口へ飛ぶ' });
+      YT.drill.mark(regs, { to: '06-cpu.html#s1.2', label: 'CPU のレジスタ', at: [560, 378], steps: [3], bridge: '入れ替える rip・rsp・rax は、YT-8 の PC や A と同じ CPU の中のレジスタ' });
+      YT.drill.mark(st.gq, { to: '27-algorithm.html#s4.1', label: '赤黒木', at: [246, 229], steps: [4], bridge: '赤黒木は釣り合いを保つ二分木。vruntime の順を保ったまま、入れる・外すが O(log n) で済む' });
+      YT.drill.mark(st.gw, { to: '07-shuuhen.html#s4.4', label: 'NIC の割り込み', at: [628, 458], steps: [5], bridge: '起床の始まりは NIC の割り込み。NIC は受信リングに書き終えてから 1 回だけ知らせる' });
+      YT.drill.mark(st.stRows[5].sub, { to: '03-transistor.html#s5.4', label: 'C ステート', at: [884, 492], steps: [6], bridge: 'C ステートの深い段ではコアの電源も切る。オフのトランジスタからも電流が漏れるから' });
     },
     /* 図の時刻 u（ms）までに、タスク key が 2 つのコアで走った時間の合計。vruntime は時刻だけから決める（段階を飛んでも同じ表示） */
     ranUntil(st, key, u) {
@@ -1226,7 +1248,7 @@
       st.irqDot.style.opacity = 0;
       // パケット（4 つの部品）
       st.pk = S.g({}, svg);
-      const segs = [['eth', 'f-dim', 14, 'E'], ['ip', 'f-mid', 16, 'IP'], ['udp', 'f-rule', 14, 'U'], ['pay', 'f-d', 96, '動画の断片 1,350 B']];
+      const segs = [['eth', 'f-dim', 14, 'E'], ['ip', 'f-mid', 16, 'IP'], ['udp', 'f-rule', 14, 'U'], ['pay', 'f-d', 96, '動画の断片 1,452 B']];
       let px = -70;
       st.pkSeg = {};
       segs.forEach(([k, c, w, l]) => {
@@ -1253,6 +1275,17 @@
       // 送信の波
       st.wave = S.g({ cls: 'fade hide' }, svg);
       for (let k = 1; k <= 3; k++) S.path(`M${40 - k * 6},${496 - k * 10} a${k * 12},${k * 12} 0 0 0 0,${k * 20}`, { cls: 'f-none s-r w2' }, st.wave);
+      // 掘り下げ（下の層へ）: ドライバが読み書きする装置のレジスタ（第7章 MMIO）、受信リング・DMA・割り込み（第7章 場面4）、
+      // Ethernet のタイプ（第13章）、IP のプロトコル欄（第18章）、経路表（第14章）、NIC の送信（第7章 場面6）。
+      // NIC から層を上がるまでを同じフレームで通す流れは教材に無い（P5 の部品 nic-rx の候補）
+      YT.drill.mark(st.layers.drv.r, { to: '07-shuuhen.html#s2.3', label: 'ドライバ', at: [640, 398], steps: [1], bridge: 'ドライバが話す「装置の言葉」は、決まった番地への読み書き（メモリマップド I/O）' });
+      YT.drill.mark(gr, { to: '07-shuuhen.html#s4.2', label: '受信リング', at: [448, 468], steps: [2], bridge: '受信リングの各ディスクリプタは、空きバッファの番地と長さ。末尾の位置を NIC のレジスタに知らせる' });
+      YT.drill.mark(st.dmaArrow, { to: '07-shuuhen.html#s4.3', label: 'DMA', at: [205, 464], steps: [2], bridge: 'NIC はフレームを DMA で書く。CPU を通さず、PCIe の書き込みでバッファへ直接' });
+      YT.drill.mark(st.irqPath, { to: '07-shuuhen.html#s4.4', label: '割り込み線（IRQ）', at: [422, 437], steps: [2], bridge: '割り込みは書き終えた後に 1 回。NIC はディスクリプタに「完了」を立ててから知らせる' });
+      YT.drill.mark(st.layers.drv.r, { to: '13-ethernet.html#s3.4', label: 'Ethernet ヘッダ', at: [640, 398], steps: [3], bridge: 'Ethernet ヘッダ 14 B の最後の 2 バイトがタイプ。0x0800 なら中身を IP の処理へ渡す' });
+      YT.drill.mark(st.layers.ip.r, { to: '18-ip.html#s1.4', label: 'IP のプロトコル番号', at: [640, 348], steps: [3], bridge: '「プロトコル 17」は IP ヘッダの決まった位置の欄。OS はこの値で中身を UDP の処理に渡す' });
+      YT.drill.mark(st.layers.ip.r, { to: '14-router.html#s3.5', label: 'IP の経路表', at: [640, 348], steps: [5], bridge: '次の送り先 192.168.1.1 は、経路表のデフォルトルート（0.0.0.0/0）の行から決まる' });
+      YT.drill.mark(st.nic, { to: '07-shuuhen.html#s6.2', label: 'NIC の送信', at: [178, 470], steps: [5], bridge: '送信リングに載ったフレームは、NIC が DMA で読み、FCS とプリアンブルを足して信号にする' });
     },
     side(st, title, lines) {
       st.sideTitle.textContent = title;
@@ -1276,7 +1309,7 @@
         ['ドライバの共通の形 net_device', ['■ カーネルが呼ぶ入口（ops と NAPI）', 'ndo_open   装置を使い始める', 'ndo_start_xmit  1 フレーム送る', 'napi poll  届いた分を取り出す', 'ndo_set_rx_mode  受信の条件', '', '■ 装置ごとの違いはドライバの中', 'iwlwifi（Intel の Wi-Fi）', 'r8169 / igc（有線 NIC）', 'rndis_host（USB テザリング）', '', '■ 上の層が見るもの', 'wlan0 / eth0 という名前', 'MTU 1500、MAC アドレス', '統計（ip -s link）']],
         ['受信リングと NAPI', ['■ 受信リング', 'ディスクリプタ = 番地 + 長さ + 状態', '環状。NIC が書く位置と', 'ドライバが読む位置が追いかける', '典型は 256〜4096 個', '', '■ DMA', 'NIC が DRAM に直接書く。CPU は使わない', '書き終えたらディスクリプタに「済」を立てる', '', '■ 割り込みと NAPI', '最初の 1 個で割り込み →', '割り込みを止めて poll で取り出す', '（予算 64 個）→ 空になったら再び許可', '毎パケット割り込むより CPU が空く']],
         ['sk_buff：1 つの入れ物で層を通る', ['■ ヘッダを外す = ポインタを進める', 'head / data / tail / end の 4 つ', 'data を 14 進めると Ethernet を外した', 'さらに 20 で IP、8 で UDP', 'コピーは起きない', '', '■ 各層で見る所', 'Ethernet: 宛先 MAC は自分か', 'IP: 宛先 IP、プロトコル番号、', '   チェックサム（NIC が計算済み）', 'UDP: 宛先ポート → ソケットを探す', '', '（下の図：data ポインタの位置）']],
-        ['起床と copy', ['■ 受信キューに入ったとき', 'sock_def_readable() →', '待ち行列のタスクを wake_up', 'epoll なら準備完了リストに追加', '', '■ プロセス側', 'epoll_wait が戻る（fd 23 が読める）', 'recvfrom(23, buf, 65536) →', 'skb から copy_to_user', '戻り値 1,350 バイト', '', '■ QUIC の場合（YouTube）', 'UDP の中身は暗号文のまま届く', '復号・順序づけ・再送はブラウザ', 'カーネルは UDP までしか見ない']],
+        ['起床と copy', ['■ 受信キューに入ったとき', 'sock_def_readable() →', '待ち行列のタスクを wake_up', 'epoll なら準備完了リストに追加', '', '■ プロセス側', 'epoll_wait が戻る（fd 23 が読める）', 'recvfrom(23, buf, 65536) →', 'skb から copy_to_user', '戻り値 1,452 バイト', '', '■ QUIC の場合（YouTube）', 'UDP の中身は暗号文のまま届く', '復号・順序づけ・再送はブラウザ', 'カーネルは UDP までしか見ない']],
         ['送信の道', ['① sendto(23, buf, 1250)', '   ユーザーのバッファ → skb に copy', '② UDP: 送信元/宛先ポート + 長さ', '③ IP: 経路表（ip route）を引く', '   → 次の送り先 192.168.1.1', '   → 出口 wlan0、宛先 MAC は ARP 表', '④ qdisc（fq_codel など）に並ぶ', '   順番・公平さ・速度の調整', '⑤ ドライバ ndo_start_xmit', '   送信リングのディスクリプタに載せる', '⑥ NIC が DMA で読み、電波へ', '⑦ 送信完了の割り込み → skb を回収']],
         ['つなぎ目の API と量', ['■ ユーザー空間が呼ぶもの', 'socket(AF_INET6, SOCK_DGRAM) = 23', 'connect(23, youtube の IP:443)', 'sendto / recvfrom（または sendmsg）', 'epoll_ctl / epoll_wait', 'setsockopt（バッファ大きさなど）', '', '■ 量の目安', '1080p 約 5 Mbps → 1 秒に', '約 430 パケット（1,452 B）', '4K 約 20 Mbps → 約 1,700', '1 パケットあたりカーネルの処理', '数 µs → CPU の数 %', '', '■ 次の章', '10 ブラウザ：この API を呼ぶ側', '11〜：この下のパケットの道']]
       ][i];
@@ -1340,7 +1373,7 @@
         setCls(L.sock.r, waiting ? 'f-sf s-rule w1' : 'f-sf s-x w15');
         if (q.i <= 2) { showPk(col, ySock, ['pay']); st.pk.style.opacity = waiting ? U.ease.out(q.f) : 1; }
         else if (q.i === 3) { const f = U.ease.inOut(q.f); showPk(U.lerp(col, 480, f), U.lerp(ySock, yUser + 23, f), ['pay']); }
-        else { st.pk.style.opacity = 0; st.ubufFill.setAttribute('width', 80); st.ubufTxt.textContent = '1,350 B を受け取った'; }
+        else { st.pk.style.opacity = 0; st.ubufFill.setAttribute('width', 80); st.ubufTxt.textContent = '1,452 B を受け取った'; }
         if (q.i < 4) { st.ubufFill.setAttribute('width', 0); st.ubufTxt.textContent = 'buf（64 KiB）'; }
       }
       if (i === 4) {

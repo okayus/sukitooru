@@ -317,7 +317,7 @@
       /* 4 段目: PC と DNS サーバーの間のメッセージ */
       const gm = st.gm = S.g({ cls: 'fade' }, svg);
       box(gm, 30, 308, 170, 50, 'PC', '192.168.1.10:51600');
-      box(gm, 760, 308, 170, 50, 'DNS サーバー（ルーター）', '192.168.1.1:53 ／ UDP');
+      st.dnsSrv = box(gm, 760, 308, 170, 50, 'DNS サーバー（ルーター）', '192.168.1.1:53 ／ UDP');
       S.line(200, 333, 760, 333, { cls: 's-rule w2' }, gm);
       st.qRoad = road(gm, 'M312,333 H648');
       st.aRoad = road(gm, 'M648,333 H312');
@@ -367,7 +367,10 @@
         ['HTTPS', '65', '接続のしかた', 'rr1.sn-….googlevideo.com → alpn="h3"']
       ].forEach((r, k) => {
         const y = 422 + k * 21;
-        r.forEach((s, j) => S.text(cols[j], y, s, { cls: 't-xs' + (j === 0 ? ' t-b t-mono t-d' : j === 1 || j === 3 ? ' t-mono' : '') }, gt));
+        r.forEach((s, j) => {
+          const t = S.text(cols[j], y, s, { cls: 't-xs' + (j === 0 ? ' t-b t-mono t-d' : j === 1 || j === 3 ? ' t-mono' : '') }, gt);
+          if (k === 1 && j === 3) st.aaaa = t;   // 掘り下げの印を付ける AAAA の例
+        });
       });
 
       /* 動くメッセージ */
@@ -375,6 +378,11 @@
       st.aPkt = pkt(gm, '答え 142.250.196.110');
       st.pA = pkt(gm, 'A？');
       st.pAAAA = pkt(gm, 'AAAA？');
+
+      // 掘り下げ（下の層へ）: 宛先欄の形（第18章 IPv4 ヘッダ）、問い合わせを運ぶ UDP（第19章）、AAAA の番号（第18章 IPv6）
+      YT.drill.mark(st.dst, { to: '18-ip.html#s1.6', label: '宛先欄', at: [908, 133], steps: [1, 4], bridge: '宛先欄は、20 バイトの IPv4 ヘッダの最後の 32 ビット。その前の 32 ビットが送信元' });
+      YT.drill.mark(st.dnsSrv, { to: '19-tcp.html#s5.1', label: 'UDP 53', at: [917, 296], steps: [3], bridge: '33 バイトの問い合わせに UDP が付けるのは 8 バイトのヘッダだけ。長さは 41' });
+      YT.drill.mark(st.aaaa, { to: '18-ip.html#s3.1', label: 'AAAA の番号', at: [682, 439], steps: [5], bridge: 'AAAA のデータは IPv6 の 16 バイトの番号。16 ビットずつ 8 組に分けて書く' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -511,7 +519,7 @@
         S.rect(636 + k * 23, 74, 20, 20, { rx: 3, cls: 'f-in s-mid w1' }, st.roots);
         S.text(646 + k * 23, 88, c, { cls: 't-c t-xs t-mono t-b' }, st.roots);
       });
-      S.text(636, 114, '12 の組織が運用し、合わせて 2,047 か所で動く', { cls: 't-xs' }, st.cards[0]);
+      st.rootSites = S.text(636, 114, '12 の組織が運用し、合わせて 2,047 か所で動く', { cls: 't-xs' }, st.cards[0]);
       S.text(636, 130, '（root-servers.org、2026 年 10 月）', { cls: 't-xs t-dim' }, st.cards[0]);
       st.aa = S.label(st.cards[2], 894, 364, 'AA=1', { cls: 't-xs t-b t-x', box: 'f-x-soft s-x w1', h: 18, pad: 10 });
 
@@ -525,6 +533,9 @@
         S.text(x + 62, 538, b, { cls: 't-c t-xs t-dim' }, gr);
         if (k < 3) S.line(x + 126, 526, x + 146, 526, { cls: 's-dim w15', 'marker-end': mk('dim') }, gr);
       });
+
+      // 掘り下げ（下の層へ）: 各地の機械が同じ番号で受け持つ（Anycast）のは、BGP で届いた候補から経路を選ぶから（第16章）
+      YT.drill.mark(st.rootSites, { to: '16-internet.html#s2.3', label: 'ルートサーバー 2,047 か所', at: [884, 110], steps: [3], bridge: '同じ番号を各地の機械が広告すると、各 AS は届いた候補から AS_PATH の短い方などを選ぶ' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -622,6 +633,10 @@
         [['⑨ フルリゾルバ → ルーター　⑩ ルーター → PC', 'b'], ['⑨ ヘッダ  ID 0x91C7  QR=1  RA=1（再帰に対応）  AA=0'], ['⑩ ヘッダ  ID 0x5A3C（PC の ID に戻す）  QR=1  RA=1'], ['   答え欄  www.youtube.com.  300  IN  A  142.250.196.110', 'x']]
       ];
       st.active = [[1], [2], [3, 4], [5, 6], [7, 8], [9, 10]];
+
+      // 掘り下げ（下の層へ）: PC が聞く先は DHCP で、ルーターが聞く先は PPPoE で教わる（第14・15章）
+      YT.drill.mark(st.nodes.rt, { to: '14-router.html#s2.2', label: 'DNS サーバーの番号', at: [190, 224], steps: [1], bridge: 'PC が 192.168.1.1 に聞くのは、DHCP の OFFER で DNS サーバーとして教わったから' });
+      YT.drill.mark(st.nodes.rs, { to: '15-hikari.html#s5.2', label: 'フルリゾルバの番号', at: [520, 224], steps: [2], bridge: 'フルリゾルバの番号は、ルーターが PPPoE のセッションを開いたときに ISP から受け取る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -762,13 +777,18 @@
       /* 下段: キャッシュの段 */
       const gk = st.tiers = S.g({ cls: 'fade' }, svg);
       S.text(30, 410, '名前を探す順（見つかった所で終わる）と、そこで見つかったときの待ち時間の目安', { cls: 't-xs t-b' }, gk);
+      st.tierMs = [];   // 待ち時間の目安の文字（掘り下げの印を付ける）
       [['ブラウザ', 'Chrome などは自前の表', 'ほぼ 0 ms'], ['OS', 'DNS Client（Windows）など', '1 ms 未満'], ['ルーター', 'DNS 転送（dnsmasq など）', '数 ms（家の中）'], ['フルリゾルバ', 'ISP の 198.51.100.53', '数 ms〜十数 ms'], ['ルート・TLD・権威', 'どの段にも無いときだけ', '数十〜数百 ms']].forEach(([t, sub, ms], k) => {
         const x = 30 + k * 184;
         box(gk, x, 422, 164, 58, t, sub, { scls: '', cls: k === 4 ? 'f-in s-rule w1' : 'f-sf s-rule w15' });
-        S.text(x + 82, 500, ms, { cls: 't-c t-xs t-mono t-b' }, gk);
+        st.tierMs.push(S.text(x + 82, 500, ms, { cls: 't-c t-xs t-mono t-b' }, gk));
         if (k < 4) S.line(x + 166, 451, x + 180, 451, { cls: 's-dim w15', 'marker-end': mk('dim') }, gk);
       });
       S.text(930, 530, '待ち時間は目安。回線と距離で変わる', { cls: 't-xs t-dim', 'text-anchor': 'end' }, gk);
+
+      // 掘り下げ（下の層へ）: 待ち時間の中身は、光の進む距離と待ち時間（第15・16章）
+      YT.drill.mark(st.tierMs[3], { to: '15-hikari.html#s6.5', label: 'フルリゾルバまでの往復', at: [726, 496], steps: [3, 5], bridge: 'フルリゾルバまでの往復の数 ms〜十数 ms は、主に距離と待ち時間（PON の許可・行列）' });
+      YT.drill.mark(st.tierMs[4], { to: '16-internet.html#s4.1', label: 'ルート・TLD・権威への往復', at: [906, 496], steps: [5], bridge: '数百 ms かかるのは海外のサーバーのとき。日本と米国西海岸の間は光で片道約 45 ms' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -883,7 +903,7 @@
 
       /* 下段: Anycast */
       const gb = st.gb = S.g({ cls: 'fade' }, svg);
-      S.text(30, 342, 'Anycast — 同じ番号を各地に置き、経路が近い 1 か所へ運ぶ', { cls: 't-sm t-b' }, gb);
+      st.anyT = S.text(30, 342, 'Anycast — 同じ番号を各地に置き、経路が近い 1 か所へ運ぶ', { cls: 't-sm t-b' }, gb);
       st.sites = ['日本の拠点', '東南アジアの拠点', '欧州の拠点', '南米の拠点'].map((n, k) => {
         const x = 135 + k * 230;
         const g = S.g({}, gb);
@@ -898,6 +918,11 @@
         return g;
       });
       st.note = S.text(480, 548, '', { cls: 't-c t-xs t-b' }, gb);
+
+      // 掘り下げ（下の層へ）: ECS の /24（第18章）、Anycast を支える BGP の経路選び（第16章）、ISP の中の GGC の番号（第16章）
+      YT.drill.mark(st.ecs, { to: '18-ip.html#s2.2', label: 'ECS 203.0.113.0/24', at: [655, 197], steps: [3], bridge: '203.0.113.0/24 は、203.0.113.5 と先頭 24 ビットが同じ番号すべて（256 個）' });
+      YT.drill.mark(st.anyT, { to: '16-internet.html#s2.3', label: 'Anycast の経路', at: [368, 338], steps: [5, 6], bridge: '各拠点が同じ番号を広告し、各 AS は届いた候補から AS_PATH の短い方などを選ぶ' });
+      YT.drill.mark(st.rows[3], { to: '16-internet.html#s6.3', label: 'GGC 198.51.100.80', at: [918, 204], steps: [4], bridge: 'GGC の番号を答えると、断片の要求と応答は ISP の網の中だけを通る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -965,7 +990,7 @@
 
       /* 下の道: 暗号化 */
       const gb = st.bot = S.g({ cls: 'fade' }, svg);
-      box(gb, 270, 242, 150, 40, 'ルーター', 'NAT するだけ', { cls: 'f-none s-dim w1 dash', tcls: 't-sm', scls: '' });
+      st.natRt = box(gb, 270, 242, 150, 40, 'ルーター', 'NAT するだけ', { cls: 'f-none s-dim w1 dash', tcls: 't-sm', scls: '' });
       box(gb, 510, 242, 150, 40, 'ISP の網', '中身は読めない', { cls: 'f-none s-dim w1 dash', tcls: 't-sm', scls: '' });
       st.pub = box(gb, 730, 234, 200, 56, 'DoT・DoH のリゾルバ', '例 dns.google（8.8.8.8）');
       S.path('M105,124 V262 H266', { cls: 'f-none s-d w2', 'marker-end': mk('d') }, gb);
@@ -994,6 +1019,14 @@
         ['暗号化した DNS でも見えるもの', [['IP ヘッダ  接続先 142.250.196.110:443'], ['TLS の SNI  www.youtube.com（ECH を使わない場合、第20章）'], ['リゾルバ  問い合わせた名前をすべて見る', 'x']]],
         ['HTTPS レコードの例（2026 年 10 月）', [['rr1.sn-xxxxxxxx.googlevideo.com.  21600  HTTPS  1 .  alpn="h3"', 'd'], ['www.google.com.  21600  HTTPS  1 .  alpn="h2,h3"'], ['www.youtube.com.  3600  HTTPS  1 .（alpn なし。h3 は応答のヘッダで知る）']]]
       ];
+
+      // 掘り下げ（下の層へ）: 送信元ポート（第19章）、転送先の番号（第15章 PPPoE）、TLS のレコードと SNI（第20章）、NAT（第14章）、h3 の試し方（第19章）
+      YT.drill.mark(st.pLines[0], { to: '19-tcp.html#s1.3', label: '送信元ポート 51600', at: [404, 399], steps: [1], bridge: '毎回変える送信元ポートは、OS が空いている番号から選ぶ一時ポート' });
+      YT.drill.mark(st.cache, { to: '15-hikari.html#s5.2', label: '転送先 198.51.100.53', at: [464, 140], steps: [2], bridge: 'ルーターの転送先 198.51.100.53 は、PPPoE のセッションを開いたときに ISP から受け取る' });
+      YT.drill.mark(st.pLines[1], { to: '20-tls.html#s6.1', label: 'TLS の暗号文', at: [266, 429], steps: [3], bridge: 'DoT の暗号文は、DNS のメッセージを TLS のレコードに入れ、AEAD で包んだもの' });
+      YT.drill.mark(st.natRt, { to: '14-router.html#s4.2', label: 'ルーターの NAT', at: [406, 262], steps: [3, 4, 5], bridge: 'DoT・DoH のパケットも、ルーターは送信元を書き換え、変換表に記録して外へ出す' });
+      YT.drill.mark(st.pLines[1], { to: '20-tls.html#s6.4', label: 'TLS の SNI', at: [416, 429], steps: [5], bridge: '暗号化した DNS でも、接続の最初の ClientHello には名前（SNI）が平文で書かれる' });
+      YT.drill.mark(st.pLines[0], { to: '19-tcp.html#s6.6', label: 'alpn="h3"', at: [476, 399], steps: [6], bridge: 'alpn="h3" を知った Chrome は、最初の接続から QUIC と TCP＋TLS を並べて試す' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

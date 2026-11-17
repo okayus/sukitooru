@@ -90,6 +90,8 @@ function launchChrome() {
       res();
     }));
     const kill = () => { ps.kill(); setTimeout(() => ps.kill('SIGKILL'), 5000).unref(); return gone; };
+    // timeout などで止められたときも Chrome を止めてプロファイルを消す（親を失った Chrome が残り続けないように）
+    for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.once(sig, () => { kill().then(() => process.exit(128 + os.constants.signals[sig])); });
     let buf = '', done = false;
     const timer = setTimeout(() => { if (!done) { done = true; kill().then(() => reject(new Error('Chrome が起動しない: ' + buf.slice(-400)))); } }, 15000);
     ps.stderr.on('data', (d) => {
@@ -109,6 +111,8 @@ class CDP {
       this.ws = new WebSocket(this.url);
       this.ws.addEventListener('open', () => resolve());
       this.ws.addEventListener('error', (e) => reject(e));
+      // Chrome が落ちて接続が切れたら、待っている呼び出しを失敗させる（道具が待ち続けないように）
+      this.ws.addEventListener('close', () => { for (const p of this.pending.values()) p.rej(new Error('DevTools の接続が切れた')); this.pending.clear(); });
       this.ws.addEventListener('message', (ev) => {
         const msg = JSON.parse(ev.data);
         if (msg.id && this.pending.has(msg.id)) {
@@ -123,6 +127,7 @@ class CDP {
   }
   send(method, params = {}, sessionId) {
     const id = ++this.id;
+    if (this.ws.readyState !== 1) return Promise.reject(new Error('DevTools の接続が切れた'));
     return new Promise((res, rej) => {
       this.pending.set(id, { res, rej });
       this.ws.send(JSON.stringify({ id, method, params, sessionId }));
@@ -330,7 +335,22 @@ const OVERLAP = `(async () => {
           let fr = ctx.svg.getBoundingClientRect();
           const vb = ctx.svg.viewBox && ctx.svg.viewBox.baseVal, m = ctx.svg.getScreenCTM();
           if (vb && vb.width && m) { const p0 = new DOMPoint(vb.x, vb.y).matrixTransform(m), p1 = new DOMPoint(vb.x + vb.width, vb.y + vb.height).matrixTransform(m); fr = { left: Math.min(p0.x, p1.x), top: Math.min(p0.y, p1.y), right: Math.max(p0.x, p1.x), bottom: Math.max(p0.y, p1.y) }; }
-          const bx = [...ctx.svg.querySelectorAll('text')].filter((e) => e.textContent.trim() && !hidden(e, ctx.svg)).map((e) => ({ e, r: e.getBoundingClientRect() })).filter((b) => b.r.width > 0.5 && b.r.height > 0.5);
+          const bx = [...ctx.svg.querySelectorAll('text')].filter((e) => e.textContent.trim() && !hidden(e, ctx.svg) && !e.closest('.drill-badge')).map((e) => ({ e, r: e.getBoundingClientRect() })).filter((b) => b.r.width > 0.5 && b.r.height > 0.5);
+          // 掘り下げの印の札（x の枠と ↓。いつも図の一番上に描く）が、止まっている文字を隠していないか・札どうしが重なっていないか
+          const bd = [...ctx.svg.querySelectorAll('.drill-badge')].filter((g) => g.style.display !== 'none').map((g) => ({ g, r: g.getBoundingClientRect() })).filter((b) => b.r.width > 2);
+          for (let a = 0; a < bd.length; a++) {
+            const R = bd[a].r;
+            for (const T of bx) {
+              if (k > 0 && !same(T.r, prev.get(T.e))) continue;
+              const w = Math.min(T.r.right, R.right) - Math.max(T.r.left, R.left), h = Math.min(T.r.bottom, R.bottom) - Math.max(T.r.top, R.top);
+              // 長い札の端の 1 文字だけを隠すこともあるので、面積の 1 割に届かなくても、幅 4px 以上で文字の高さの 3 割以上を覆えば拾う
+              if (w > 3 && h > 3 && (w * h >= 0.1 * T.r.width * T.r.height || h >= 0.3 * T.r.height)) found.push({ k, a: T.e, badge: true });
+            }
+            for (let b = a + 1; b < bd.length; b++) {
+              const Q = bd[b].r, w = Math.min(Q.right, R.right) - Math.max(Q.left, R.left), h = Math.min(Q.bottom, R.bottom) - Math.max(Q.top, R.top);
+              if (w > 1 && h > 1) found.push({ k, a: bd[a].g, b: bd[b].g, badges: true });
+            }
+          }
           bx.forEach((b) => { const f = first.get(b.e); if (!f) first.set(b.e, b.r); else if (!same(b.r, f)) moved.add(b.e); });
           const still = (b) => k === 0 || same(b.r, prev.get(b.e));
           for (let a = 0; a < bx.length; a++) {
@@ -369,6 +389,9 @@ const OVERLAP = `(async () => {
           const key = ctx.id + s + '|' + f.a.textContent + '|' + (f.b ? f.b.textContent : 'out');   // 動かして見つけたものは、止めたときにもう一度は出さない
           if (seen.has(key)) continue;
           if (f.out) { seen.add(key); out.push(where(f.k) + ': ' + name(f.a) + 'が図の外へ ' + f.out + 'px'); continue; }
+          const lab = (g) => '「' + ((g.getAttribute('aria-label') || '').replace(/^掘り下げ：/, '').slice(0, 24)) + '」';
+          if (f.badge) { const bk = ctx.id + s + '|' + f.a.textContent + '|badge'; if (seen.has(bk)) continue; seen.add(bk); out.push(where(f.k) + ': 掘り下げの印の札が' + name(f.a) + 'を隠す（at で札を空いた所へ）'); continue; }
+          if (f.badges) { const bk = ctx.id + s + '|badges|' + lab(f.a) + lab(f.b); if (seen.has(bk)) continue; seen.add(bk); out.push(where(f.k) + ': 掘り下げの印の札どうしが重なる ' + lab(f.a) + '・' + lab(f.b)); continue; }
           if (f.rect) {
             if (!movedR.has(f.rect)) continue;   // 動かない板が覆うのは図の作り
             const lt = f.rect.parentNode.querySelector('text');

@@ -369,6 +369,10 @@
         return { p, title, sub, cnt, y };
       });
       st.planeNote = S.text(480, 534, 'Cb・Cr の面は Y\' を 128 に固定して、色の向きだけを表示', { cls: 't-xs t-dim fade hide' }, svg);
+      // 掘り下げ（下の層へ）: 画素の数値とビット（第8章・第4章）、GPU で RGB に戻す（第8章 場面2）
+      YT.drill.mark(st.iHead, { to: '08-display.html#s1.2', label: '枠の画素の 3 つの値', at: [200, 340], steps: [1], bridge: '画素の R・G・B の 3 つの値は、画面の 1 画素の赤・緑・青の明るさをそのまま指す' });
+      YT.drill.mark(st.planes[0].sub, { to: '04-ronri.html#s4.4', label: '0〜255 の 8 ビット', at: [838, 96], steps: [1], bridge: '1 色が 0〜255 の範囲なのは 8 ビットだから。n ビットで表せるのは 2ⁿ 通り' });
+      YT.drill.mark(st.viewLbl, { to: '08-display.html#s2.3', label: '4:2:0 から戻した画像', at: [418, 302], steps: [4], bridge: '再生では 4:2:0 の画像のまま GPU に渡り、合成のときに RGB に戻る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -571,7 +575,7 @@
       S.text((XS[1] + 8 * CELL + XS[2]) / 2, Y0 + 96, '÷ 幅', { cls: 't-c t-sm t-b' }, st.arC);
       S.text((XS[1] + 8 * CELL + XS[2]) / 2, Y0 + 110, '丸める', { cls: 't-c t-sm t-b' }, st.arC);
       // 下段左：画像とブロックの格子
-      S.text(24, 330, 'Y\' の画像（72×40 画素）', { cls: 't-b t-md' }, svg);
+      st.y2Title = S.text(24, 330, 'Y\' の画像（72×40 画素）', { cls: 't-b t-md' }, svg);
       mkPix(svg, 24, 342, W2, H2, 3, false).set((i) => Y2[i]);
       for (let k = 1; k < 9; k++) S.line(24 + k * 24, 342, 24 + k * 24, 462, { cls: 'px-halo w1', 'stroke-opacity': 0.4 }, svg);
       for (let k = 1; k < 5; k++) S.line(24, 342 + k * 24, 240, 342 + k * 24, { cls: 'px-halo w1', 'stroke-opacity': 0.4 }, svg);
@@ -607,6 +611,9 @@
       S.text(796, 330, '元との差（4 倍）', { cls: 't-b t-md' }, st.gR);
       st.pixD = mkPix(st.gR, 796, 342, 8, 8, 14, false);
       st.rL = [0, 1, 2].map((k) => S.text(664, 484 + k * 20, '', { cls: 't-mono t-sm' + (k === 0 ? ' t-b' : '') }, st.gR));
+      // 掘り下げ（下の層へ）: 画像のメモリの並び（第8章 場面1）、負の数のビット（第4章 2 の補数）
+      YT.drill.mark(st.y2Title, { to: '08-display.html#s1.3', label: '72×40 画素の画像', at: [186, 326], steps: [1], bridge: 'ブロックは、1 本の列にしたメモリの画像から、行ごとに幅の分ずつ離れた 8 か所を読む' });
+      YT.drill.mark(st.matB.head, { to: '04-ronri.html#s6.5', label: '負の係数', at: [572, 32], steps: [2], bridge: '−201 のような負の係数も、ビットの上では 2 の補数で表す' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -754,7 +761,7 @@
       st.lossless = S.text(BX + 190, 366, `復号：${ENC3.bits} ビット → ${ENC3.pairs.length} 組と終わり → 64 個 → 8×8。量子化した係数と完全に同じに戻る`, { cls: 't-sm t-d fade hide' }, svg);
       // 下段左：指数ゴロム符号の表 → 段階5は方式の一覧
       st.gEG = S.g({ cls: 'fade hide' }, svg);
-      S.text(24, 400, '指数ゴロム符号（絶対値が小さいほど短い）', { cls: 't-b t-md' }, st.gEG);
+      st.egTitle = S.text(24, 400, '指数ゴロム符号（絶対値が小さいほど短い）', { cls: 't-b t-md' }, st.gEG);
       const egv = [0, 1, -1, 2, -2, 3, -3];
       S.text(24, 428, '値（se）', { cls: 't-sm t-dim' }, st.gEG);
       S.text(24, 450, '符号', { cls: 't-sm t-dim' }, st.gEG);
@@ -796,6 +803,8 @@
       st.ariPick = S.rect(AX + 90, 482, 10, 18, { cls: 'f-none s-x w2' }, st.gAri);
       st.ariW = S.text(AX, 524, '', { cls: 't-sm t-mono' }, st.gAri);
       st.ariB = S.text(AX, 546, '', { cls: 't-sm t-mono t-b' }, st.gAri);
+      // 掘り下げ（下の層へ）: 符号の後半は 2 進の数（第4章 場面4）
+      YT.drill.mark(st.egTitle, { to: '04-ronri.html#s4.1', label: '指数ゴロム符号', at: [284, 396], steps: [3], bridge: '符号 010・011・00100 は、前の 0 の個数で桁数を示し、続く 10・11・100 が 2 進の数' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -917,7 +926,7 @@
       const FX = [24, 300, 576], FY = 48, FC = 4;
       // 上段：2 枚のフレームと差（段階4・5 では薄くする）
       const gT = st.gTop = S.g({ cls: 'fade' }, svg);
-      S.text(FX[0], 36, '参照フレーム（前の 1 枚、復号済み）', { cls: 't-b t-md' }, gT);
+      st.refTitle = S.text(FX[0], 36, '参照フレーム（前の 1 枚、復号済み）', { cls: 't-b t-md' }, gT);
       mkPix(gT, FX[0], FY, W4, H4, FC, false).set((i) => YA4[i]);
       S.text(FX[1], 36, 'いまのフレーム（1/25 秒後）', { cls: 't-b t-md' }, gT);
       mkPix(gT, FX[1], FY, W4, H4, FC, false).set((i) => YB4[i]);
@@ -943,7 +952,7 @@
       st.zD = mkPix(gZ, ZX[2], ZY, 8, 8, 12, false);
       st.zT = [0, 1, 2].map((k) => S.text(24, ZY + 124 + k * 22, '', { cls: 't-mono t-sm' + (k === 2 ? ' t-x t-b' : '') }, gZ));
       // SAD の表（15×15）
-      S.text(400, ZY - 12, '225 か所の SAD', { cls: 't-b t-md' }, gZ);
+      st.sadTitle = S.text(400, ZY - 12, '225 か所の SAD', { cls: 't-b t-md' }, gZ);
       S.text(400, ZY + 168, '濃いほど差が小さい', { cls: 't-xs t-dim' }, gZ);
       st.sadCells = CAND4.map((c, n) => S.rect(400 + (n % 15) * 9, ZY + Math.floor(n / 15) * 9, 9, 9, { cls: 'f-d s-sf w1', 'fill-opacity': 0 }, gZ));
       S.rect(400, ZY, 135, 135, { cls: 'f-none s-rule w1' }, gZ);
@@ -998,6 +1007,9 @@
       st.gopBr = S.g({ cls: 'fade hide' }, gG);
       S.path(`M${GX(0)},${GY - 3} V${GY - 9} H${GX(9) + GW} V${GY - 3}`, { cls: 'f-none s-x w2' }, st.gopBr);
       S.text((GX(0) + GX(9) + GW) / 2, GY - 13, 'GOP（I から次の I の手前まで）', { cls: 'halo t-c t-sm t-x t-b' }, st.gopBr);
+      // 掘り下げ（下の層へ）: SAD の計算は命令の繰り返し（第6章 場面4）、参照フレームの読み出し（第6章 キャッシュ）
+      YT.drill.mark(st.sadTitle, { to: '06-cpu.html#s4.6', label: '225 か所の SAD', at: [510, 236], steps: [2], bridge: 'SAD は差の絶対値を 64 回足す計算で、それを 225 か所。CPU では命令の繰り返しになる' });
+      YT.drill.mark(st.refTitle, { to: '06-cpu.html#s6.4', label: '参照フレーム', at: [254, 31], steps: [3], bridge: '参照フレームはメモリに並んだ画素。写すブロックの 1 行は続いた番地なので、ライン単位でまとめて読める' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1200,6 +1212,8 @@
       S.text(RX + 14, 268, '符号化：配信する形式ごとに 1 回', { cls: 't-sm t-b' }, st.gCost);
       S.text(RX + 14, 290, '復号：視聴のたびに、それぞれの端末で', { cls: 't-sm t-b t-d' }, st.gCost);
       S.text(RX + 14, 310, '→ 符号化に時間をかけても、全体の計算は割に合う', { cls: 't-sm' }, st.gCost);
+      // 掘り下げ（下の層へ）: PSNR の 255 は 8 ビットの最大（第4章 場面4）
+      YT.drill.mark(st.mL[1], { to: '04-ronri.html#s4.4', label: 'PSNR の式の 255', at: [770, 290], steps: [2], bridge: '式の 255 は、8 ビットの画素がとれる最大の値。8 ビットは 0〜255 の 256 通り' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1372,7 +1386,7 @@
       S.path(`M${(TX6(ob.a) + TX6(ob.b)) / 2},118 V152`, { cls: 'f-none s-x w15' }, gA);
       S.rect(24, 152, 306, 186, { rx: 6, cls: 'f-sf s-x w15' }, gA);
       S.text(36, 172, '1 パケット分の 20 ms（合成音）', { cls: 't-b t-sm' }, gA);
-      S.text(36, 188, '48 kHz・16 ビット、960 標本（1 チャンネル）', { cls: 't-xs t-dim' }, gA);
+      st.pcmTxt = S.text(36, 188, '48 kHz・16 ビット、960 標本（1 チャンネル）', { cls: 't-xs t-dim' }, gA);
       const WX0 = 80, WX1 = 320, WY = 256, WA = 48 / 16384;
       S.line(WX0, WY, WX1, WY, { cls: 's-soft w1' }, gA);
       [16384, 0, -16384].forEach((v) => S.text(WX0 - 6, WY - v * WA + 4, v ? (v > 0 ? '' : '−') + U.fmt(Math.abs(v)) : '0', { cls: 't-xs t-mono t-dim t-end' }, gA));
@@ -1452,7 +1466,7 @@
         if (hdr) st.hexBg.push({ bg, box: p < 8 ? 0 : 1 });
       });
       [0, 12, 24].forEach((o, r) => S.text(66, 206 + r * 26, String(o), { cls: 't-xs t-mono t-dim t-end' }, gB));
-      [0, 28].forEach((p, k) => S.text(36, 292 + k * 22, `${HEX6.slice(p, p + 4).map(h2).join(' ')} → ${U.fmt(u32(HEX6, p))} バイト、${HEX6.slice(p + 4, p + 8).map(h2).join(' ')} → ${fourcc(HEX6, p + 4)}`, { cls: 't-xs t-mono' }, gB));
+      st.u32L = [0, 28].map((p, k) => S.text(36, 292 + k * 22, `${HEX6.slice(p, p + 4).map(h2).join(' ')} → ${U.fmt(u32(HEX6, p))} バイト、${HEX6.slice(p + 4, p + 8).map(h2).join(' ')} → ${fourcc(HEX6, p + 4)}`, { cls: 't-xs t-mono' }, gB));
       panel(gB, 24, 342, 412, 210, '大きさを足して、次の box の位置へ');
       let pos = 0;
       st.walk = TOP6.map((r, k) => {
@@ -1497,7 +1511,7 @@
       panel(gF, 476, 152, 460, 400, 'WebM（251）：要素 ＝ ID ＋ 大きさ ＋ 中身');
       st.webm = tree(WEBM6, 488, 680, 690);
       S.text(488, 486, '1A 45 DF A3 9F … → ID 1A45DFA3（EBML）、大きさ 9F', { cls: 't-xs t-mono' }, gF);
-      S.text(488, 504, '9F = 1001 1111：先頭の 1 で「1 バイト」、残りの 7 ビット = 31', { cls: 't-xs t-mono' }, gF);
+      st.vintTxt = S.text(488, 504, '9F = 1001 1111：先頭の 1 で「1 バイト」、残りの 7 ビット = 31', { cls: 't-xs t-mono' }, gF);
       S.text(488, 522, 'ID 4 ＋ 大きさ 1 ＋ 中身 31 = 36（木の大きさは要素全体）', { cls: 't-xs t-mono' }, gF);
       S.text(488, 542, 'Cluster と SimpleBlock の時刻の単位は Info の 1 ms', { cls: 't-xs t-dim' }, gF);
 
@@ -1530,6 +1544,11 @@
       S.text(488, 474, 'P（160 ms）を B（80・120 ms）より先に復号する', { cls: 't-sm t-b t-x' }, gS);
       S.text(488, 498, '種類は各フレームのスライスの見出しから読んだ', { cls: 't-xs t-dim' }, gS);
       S.text(488, 516, 'AV1（398）は表示の順に並び、ずれを持たない', { cls: 't-xs t-dim' }, gS);
+      // 掘り下げ（下の層へ）: PCM と出力の装置（第8章 場面6）、4 バイトを整数として読む（第26章 場面1）、16 進表記（第4章 場面4）
+      YT.drill.mark(st.pcmTxt, { to: '08-display.html#s6.1', label: '48 kHz・16 ビットの標本', at: [270, 184], steps: [1, 2], bridge: '960 標本は 48 kHz の PCM の 20 ms 分。1 標本は空気の圧力を測った 16 ビットの整数' });
+      YT.drill.mark(st.gCodec, { to: '08-display.html#s6.2', label: 'AAC の 44.1 kHz', at: [794, 401], steps: [3], bridge: '出力の装置は PCM を決まった速さ（例 48 kHz）で DAC に送るので、44.1 kHz の音は作り直す' });
+      YT.drill.mark(st.u32L[0], { to: '26-kata.html#s1.2', label: 'box の大きさ 4 バイト', at: [316, 287], steps: [4], bridge: 'box の大きさ 00 00 00 1C は、4 バイトを符号なし整数として読んだ値（28）' });
+      YT.drill.mark(st.vintTxt, { to: '04-ronri.html#s4.5', label: '9F = 1001 1111', at: [836, 499], steps: [5], bridge: '大きさの欄の 9F は 16 進表記。1 文字が 4 ビットなので 1001 1111 と読める' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

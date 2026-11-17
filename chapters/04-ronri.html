@@ -296,10 +296,10 @@
       const mk = S.markers(svg);
       const g = st.g = S.g({}, svg);
       // 導線
-      S.rect(40, 60, 130, 60, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      st.sendBox = S.rect(40, 60, 130, 60, { rx: 6, cls: 'f-sf s-rule w1' }, g);
       S.text(105, 86, '送り手', { cls: 't-c t-b' }, g);
       S.text(105, 104, 'ゲートの出力', { cls: 't-c t-xs t-dim' }, g);
-      S.rect(760, 60, 130, 60, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+      st.recvBox = S.rect(760, 60, 130, 60, { rx: 6, cls: 'f-sf s-rule w1' }, g);
       S.text(825, 86, '受け手', { cls: 't-c t-b' }, g);
       S.text(825, 104, '次のゲートの入力', { cls: 't-c t-xs t-dim' }, g);
       st.wire = S.line(170, 90, 760, 90, { cls: 's-dim w6 round' }, g);
@@ -347,6 +347,10 @@
       S.text(860, 386, '16 進', { cls: 't-c t-xs t-dim' }, gb);
       st.serialTxt = S.text(480, 520, '', { cls: 't-c t-sm t-dim' }, gb);
       st.busValue = 0;
+      // 掘り下げ（下の層へ）: ゲートの出力が VDD か GND につながる（第3章 場面4）、容量の充電の時間（第3章 場面4）
+      YT.drill.mark(st.sendBox, { to: '03-transistor.html#s4.2', label: '送り手のゲート', at: [190, 60], steps: [1, 2], bridge: '出力が 1 か 0 の電圧になるのは、オンの pMOS か nMOS で VDD か GND につながるから' });
+      YT.drill.mark(st.recvBox, { to: '03-transistor.html#s4.2', label: '受け手のゲート', at: [740, 60], steps: [3], bridge: '作り直せるのは、受け手のゲートの出力がオンの pMOS か nMOS で VDD か GND につながるから' });
+      YT.drill.mark(st.riseTxt, { to: '03-transistor.html#s4.5', label: '立ち上がり時間', at: [668, 426], steps: [4], bridge: '電圧がゆっくり上がるのは、次の段のゲートの容量 C を pMOS で充電するのに時間がかかるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -425,6 +429,12 @@
       st.note = S.text(480, 545, '', { cls: 't-c t-sm t-dim' }, svg);
       // 掘り下げ（下の層へ）: nMOS が閉じる仕組み（第3章 場面2 の反転層）
       YT.drill.mark(st.nand.sw.N1.g, { to: '03-transistor.html#s2.3', label: 'nMOS（N1）', at: [522, 310], steps: [1, 2, 3, 4, 6], bridge: 'nMOS が閉じるのは、ゲートの電圧で S と D の間に電子の道（チャネル）ができるから' });
+      // 直列・並列のスイッチの論理（第1章 場面5）、出力の充放電（第3章 場面4）
+      YT.drill.mark(st.nand.sw.P2.g, { to: '01-denshi.html#s5.6', label: '並列の P1・P2', at: [470, 128], steps: [3], bridge: '並列の P1・P2 で Y が VDD につながる条件は、枝分かれにつないだスイッチ 2 個の OR と同じ' });
+      YT.drill.mark(st.nand.sw.N2.g, { to: '01-denshi.html#s5.5', label: '直列の N1・N2', at: [430, 400], steps: [3, 4], bridge: '直列の N1・N2 で Y が GND につながる条件は、一列につないだスイッチ 2 個の AND と同じ' });
+      YT.drill.mark(st.nand.outWire, { to: '03-transistor.html#s4.5', label: '出力の充放電', at: [592, 238], steps: [2, 4, 6], bridge: '切り替えの直後だけ流れるのは、出力の配線と次の段のゲートの容量 C を充電・放電する電流' });
+      YT.drill.mark(st.nor.sw.P2.g, { to: '01-denshi.html#s5.5', label: '直列の P1・P2（NOR）', at: [430, 170], steps: [5], bridge: 'NOR の直列の P1・P2 は、両方の入力が 0 で両方閉じたときだけ Y を VDD につなぐ（AND）' });
+      YT.drill.mark(st.nor.sw.N2.g, { to: '01-denshi.html#s5.6', label: '並列の N1・N2（NOR）', at: [470, 316], steps: [5], bridge: 'NOR の並列の N1・N2 は、どちらかの入力が 1 なら Y を GND につなぐ。枝分かれのスイッチの OR' });
 
       /* 回路図を組み立てる。nor が真なら上が直列・下が並列 */
       function buildGate(parent, nor) {
@@ -583,6 +593,9 @@
       });
       S.text(480, 545, 'NOT・AND・OR がそろえば、どんな真理値表も「1 になる行の AND を OR でまとめる」形で作れる', { cls: 't-c t-sm t-dim' }, st.symG);
       st.built = -1;
+      // 掘り下げ（下の層へ）: NAND の中のスイッチ（場面2）、インバータ（第3章 場面4）。回路は段階ごとに組み直すので、印は消えない st.circ に付けて位置を at で決める
+      YT.drill.mark(st.circ, { to: '04-ronri.html#s2.4', label: 'NAND の中身', at: [628, 212], steps: [1, 2], bridge: 'NAND の記号の中は場面2 のスイッチ 4 個。両方 1 のときだけ直列の nMOS が GND につなぐ' });
+      YT.drill.mark(st.circ, { to: '03-transistor.html#s4.6', label: 'NOT（インバータ）', at: [762, 46], steps: [2], bridge: 'NOT は NAND を使わなくても、pMOS と nMOS を 1 個ずつ重ねた CMOS インバータで作れる' });
     },
     /* 段階ごとの回路を組み立てる。nets: {名前: [配線]}、eval(a,b) → {名前: 値, Y} */
     build(ctx, i) {
@@ -730,6 +743,8 @@
       st.calcNote2 = S.text(180, 44, '', { cls: 't-c t-sm t-dim' }, gc);
       st.calcAns = S.text(180, 110, '', { cls: 't-c t-mono t-b t-lg' }, gc);
       st.value = 0b1011;
+      // 掘り下げ（下の層へ）: 1 ビット＝1 本の導線の電圧（場面1 のバス）
+      YT.drill.mark(st.g, { to: '04-ronri.html#s1.5', label: '8 ビットの箱', at: [838, 150], steps: [1, 2, 3, 4, 5], bridge: '8 個の箱の 1 つ 1 つは、8 本並べた導線（バス）の 1 本の電圧の高い・低い' });
     },
     render(ctx, v, carries) {
       const st = ctx.state;
@@ -870,6 +885,11 @@
       for (let k = 0; k < 8; k++) { const a = k >> 2 & 1, b = k >> 1 & 1, c = k & 1; const s = a + b + c; rows8.push([a, b, c, s & 1, s >> 1]); }
       st.fTbl = truthTable(gf, 690, 100, ['A', 'B', 'Cin', 'S', 'Cout'], rows8, 48, '全加算器の真理値表');
       st.fTbl.g.classList.add('fade');
+      // 掘り下げ（下の層へ）: XOR・AND・OR を NAND で作る（場面3）
+      YT.drill.mark(hx.g, { to: '04-ronri.html#s3.5', label: 'XOR（和）', at: [330, 180], steps: [1, 2], bridge: '和を出す XOR は、NAND 4 個を組み合わせて作れる' });
+      YT.drill.mark(ha.g, { to: '04-ronri.html#s3.3', label: 'AND（桁上がり）', at: [326, 386], steps: [1, 2], bridge: '桁上がりを出す AND は、NAND の出力を NOT で反転して作れる' });
+      YT.drill.mark(x2.g, { to: '04-ronri.html#s3.5', label: 'XOR2（和 S）', at: [500, 172], steps: [3, 4, 5], bridge: '全加算器の XOR も、NAND 4 個を組み合わせて作れる' });
+      YT.drill.mark(o1.g, { to: '04-ronri.html#s3.4', label: 'OR（Cout）', at: [566, 374], steps: [4, 5], bridge: 'C1 と C2 をまとめる OR は、入力をそれぞれ NOT してから NAND に入れて作れる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -928,7 +948,7 @@
       for (let k = 0; k < 4; k++) {
         const bit = 3 - k, x = X[k];
         const fa = {};
-        S.rect(x - 70, 200, 140, 90, { rx: 8, cls: 'f-sf s-fg w2' }, g);
+        fa.box = S.rect(x - 70, 200, 140, 90, { rx: 8, cls: 'f-sf s-fg w2' }, g);
         S.text(x, 238, '全加算器', { cls: 't-c t-b t-sm' }, g);
         S.text(x, 258, 'ビット ' + bit + '（重み ' + (1 << bit) + '）', { cls: 't-c t-xs t-dim' }, g);
         fa.A = bitBox(g, x - 30, 130, 40, 36, 'A' + bit, { fs: 18 });
@@ -964,6 +984,9 @@
       st.tNow = S.line(0, 10, 0, 110, { cls: 's-x w1' }, gt);
       st.subG = S.g({ cls: 'fade hide' }, svg);
       S.text(480, 545, '−3 = ¬0011 + 1 = 1100 + 1 → B を反転して 1100、Cin に 1 を入れる', { cls: 't-c t-sm t-d' }, st.subG);
+      // 掘り下げ（下の層へ）: 全加算器の中（場面5）、1 段の遅延（第3章 場面3 の切り替えの時間）
+      YT.drill.mark(st.fa[3].box, { to: '04-ronri.html#s5.4', label: '全加算器', at: [846, 204], steps: [1, 2, 3], bridge: 'どの桁の箱も、半加算器 2 個と OR で A・B・Cin の 3 つを足す全加算器' });
+      YT.drill.mark(st.gt, { to: '03-transistor.html#s3.4', label: '1 段の遅延', at: [392, 420], steps: [3, 4], bridge: '1 段の遅れ（数十ピコ秒）は、各ゲートが次のゲートの容量を充放電して切り替わるのにかかる時間' });
     },
     load(ctx, A, B, cin0, eq, eq2) {
       const st = ctx.state;

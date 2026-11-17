@@ -309,7 +309,7 @@
       }
       S.text(90, 116, '1-2 対2 ／ 3-6 対3 ／ 4-5 対1 ／ 7-8 対4', { cls: 't-c t-xs t-dim' }, gr);
       // より対線の側面図
-      const gt = S.g({}, svg);
+      const gt = st.pair = S.g({}, svg);
       S.text(230, 228, 'より合わせた 1 対（側面）', { cls: 't-sm t-b' }, gt);
       const ptsA = [], ptsB = [];
       for (let x = 60; x <= 900; x += 4) {
@@ -361,6 +361,9 @@
       st.tbl = tb.g;
       tb.g.classList.add('fade', 'hide');
       st.bits = [1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0, 1];
+      // 掘り下げ（下の層へ）: 電圧が線を伝わる仕組み（第1章 場面2）、長さと抵抗（第1章 場面3）
+      YT.drill.mark(st.pair, { to: '01-denshi.html#s2.2', label: 'より対線の電圧', at: [46, 248], steps: [2], bridge: '送り手が A・B 線にかけた電圧は、電場として導線に沿って広がり、受け手側の電子も押す' });
+      YT.drill.mark(st.tbl, { to: '01-denshi.html#s3.3', label: '保証距離 100 m', at: [496, 316], steps: [5], bridge: '長い銅線ほど信号が弱まる元の 1 つは抵抗。抵抗は導線の長さに比例して大きくなる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -472,6 +475,9 @@
          ['10GBASE-T', 'PAM-16', '800 M/秒', '4 対、同時双方向', 'Cat6A 100 m（Cat6 55 m）']], 36);
       st.tbl = tb.g; tb.g.classList.add('fade', 'hide');
       S.text(420, 290, '速さ 1,000 倍のあいだに、シンボル速度は 80 倍、1 シンボルで運ぶ情報は 1 ビットから 4 対で計 12.5 ビットへ', { cls: 't-c t-xs t-dim' }, tb.g);
+      // 掘り下げ（下の層へ）: 読む時刻が要る理由としきい値（第4章 場面1）
+      YT.drill.mark(st.traces[0].g, { to: '04-ronri.html#s1.4', label: '受け手の拍', at: [935, 228], steps: [1], bridge: '受け手に拍が要るのは、電圧の切り替わりの途中で読むと値が決まらないから' });
+      YT.drill.mark(st.traces[0].g, { to: '04-ronri.html#s1.2', label: '4 本のしきい値', at: [40, 234], steps: [5], bridge: '4 本のしきい値で 5 段階を読むのは、論理回路の入力がしきい値で 0 と 1 を読むのと同じ判定' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -643,13 +649,18 @@
       // 線の上のビット
       S.text(40, 468, '線の上', { cls: 't-sm t-b' }, svg);
       const wirePath = road(svg, 'M110,470 H920');
-      S.rect(110, 462, 810, 16, { rx: 8, cls: 'f-in s-rule w1' }, svg);
+      st.wire = S.rect(110, 462, 810, 16, { rx: 8, cls: 'f-in s-rule w1' }, svg);
       st.flow = A.flow(wirePath, { count: 36, speed: 90, r: 3.5, cls: 'f-e', parent: svg, jitter: 2 });
       st.wireTxt = S.text(515, 500, '', { cls: 't-c t-xs t-dim t-mono' }, svg);
       st.bolt = S.g({ cls: 'fade hide' }, svg);
       S.polygon([[600, 436], [591, 456], [599, 456], [592, 476], [612, 452], [602, 452], [610, 436]], { cls: 'f-x' }, st.bolt);
       S.text(620, 450, 'ノイズで 1 ビット反転', { cls: 't-xs t-x t-b' }, st.bolt);
       st.total = 8 + 6 + 6 + 2 + 100 + 4;
+      // 掘り下げ（下の層へ）: 線の上の符号（場面2）、信号の速さ（第15章 場面6）
+      YT.drill.mark(st.wire, { to: '13-ethernet.html#s2.3', label: '線の上のビット', at: [934, 470], steps: [1], bridge: '1000BASE-T の 1 バイト 8 ナノ秒は、4 対の PAM-5 の 1 シンボルで 8 ビットを送るから' });
+      YT.drill.mark(st.fields[0].g, { to: '13-ethernet.html#s2.1', label: 'プリアンブル', at: [24, 133], steps: [2], bridge: 'プリアンブルで拍を合わせられるのは、符号の電圧の変化から受け手が拍を取り出せるから' });
+      YT.drill.mark(st.fields[4].g, { to: '15-hikari.html#s6.1', label: '最小長の 51.2 µs', at: [784, 104], steps: [5], bridge: '51.2 µs は、信号がいちばん遠い機器まで往復する時間より長く決めた。銅線の信号は光速の約 3 分の 2' });
+      YT.drill.mark(st.bolt, { to: '13-ethernet.html#s2.5', label: 'ノイズで 1 ビット反転', at: [574, 446], steps: [6], bridge: '1 ビットの反転は、受け手がしきい値で段階を読み違え、誤り訂正でも直せなかったときに起きる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -795,7 +806,7 @@
         Tout: road(svg, 'M580,355 H690'), Rout: road(svg, 'M580,265 H690')
       };
       // スイッチ
-      box(svg, 380, 235, 200, 150, '', '', 'f-sf s-fg w2');
+      st.swBox = box(svg, 380, 235, 200, 150, '', '', 'f-sf s-fg w2');
       S.text(480, 300, 'スイッチ（L2）', { cls: 't-c t-b t-lg' }, svg);
       S.text(480, 322, '宛先 MAC → ポート', { cls: 't-c t-xs t-dim' }, svg);
       st.ports = S.g({}, svg);   // ポート番号は札より手前に出す（札を作ったあとで最前面へ移す）
@@ -848,6 +859,9 @@
       st.hubFlows = st.hubLinks.map((l) => A.flow(l, { count: 5, speed: 60, r: 3, cls: 'f-d', parent: st.hub }));
       S.text(290, 474, '全員が全部を聞く', { cls: 't-xs t-dim', 'text-anchor': 'end' }, st.hub);
       S.text(670, 474, '同時送信 → 衝突 → やり直し', { cls: 't-xs t-x', }, st.hub);
+      // 掘り下げ（下の層へ）: 表を引く仕組み（第27章 場面3 のハッシュ表）、全二重（場面2）
+      YT.drill.mark(st.tblG, { to: '27-algorithm.html#s3.1', label: 'MAC アドレス表', at: [906, 78], steps: [1, 2, 3], bridge: 'スイッチの MAC 表はハッシュ表で作れる。宛先 MAC から置き場所を計算して 1 回で引く' });
+      YT.drill.mark(st.swBox, { to: '13-ethernet.html#s2.4', label: '全二重のポート', at: [480, 396], steps: [3], bridge: '全二重は、1 本のケーブルで送りと受けを同時に通すこと。1000BASE-T は自分の送信分を差し引いて受ける' });
     },
     renderTable(st, entries, hl) {
       st.rows.forEach((r, k) => {
@@ -948,11 +962,11 @@
       box(svg, 390, 240, 180, 120, '', '', 'f-sf s-fg w2');
       S.text(480, 296, 'スイッチ', { cls: 't-c t-b t-lg' }, svg);
       S.text(480, 318, '（ルーターの LAN ポート）', { cls: 't-c t-xs t-dim' }, svg);
-      box(svg, 60, 265, 140, 70, 'PC A', '192.168.1.10', 'f-sf s-rule w15');
+      st.pcA = box(svg, 60, 265, 140, 70, 'PC A', '192.168.1.10', 'f-sf s-rule w15');
       S.text(130, 328, MAC.A, { cls: 't-c t-xs t-mono t-dim' }, svg);
       box(svg, 740, 232, 140, 66, 'ルーター部', '192.168.1.1', 'f-sf s-rule w15');
       S.text(810, 291, MAC.R, { cls: 't-c t-xs t-mono t-dim' }, svg);
-      box(svg, 740, 312, 140, 66, 'テレビ', '192.168.1.5', 'f-sf s-rule w15');
+      st.tvBox = box(svg, 740, 312, 140, 66, 'テレビ', '192.168.1.5', 'f-sf s-rule w15');
       S.text(810, 371, MAC.T, { cls: 't-c t-xs t-mono t-dim' }, svg);
       st.cloud = S.g({ cls: 'fade hide' }, svg);
       S.text(956, 246, '→ 外へ', { cls: 't-xs t-dim', 'text-anchor': 'end' }, st.cloud);
@@ -978,6 +992,9 @@
       st.pk = [0, 1, 2].map(() => pkt(svg, '', 130));
       st.pkOut = pkt(svg, 'IP', 40);   // ルーターから外へ出る区間は小さな札（図の端からはみ出さない）
       st.q = S.text(130, 250, '?', { cls: 't-c t-xxl t-b t-x fade hide' }, svg);
+      // 掘り下げ（下の層へ）: フレームを送る・受ける NIC（第7章 場面6）
+      YT.drill.mark(st.pcA, { to: '07-shuuhen.html#s6.2', label: 'PC A が送る', at: [206, 259], steps: [2], bridge: 'PC が送る ARP 要求も、OS がメモリに作ったフレームを NIC が読み出して送る' });
+      YT.drill.mark(st.tvBox, { to: '07-shuuhen.html#s6.4', label: 'テレビが受けて捨てる', at: [886, 384], steps: [2, 3], bridge: 'ブロードキャストは全員の NIC が受け取ってメモリに書く。目標 IP を見て捨てるのは OS' });
     },
     cache(st, rows) {
       st.crow.forEach((r, k) => { const e = rows[k]; S.fade(r.g, !!e); if (e) { r.ip.textContent = e[0]; r.mac.textContent = e[1]; r.stt.textContent = e[2]; } });
@@ -1067,7 +1084,7 @@
       link(svg, 'M360,316 V380 H190', 's-rule w6 round');  // eth0 → PC
       link(svg, 'M692,138 H780', 's-rule w6 round');       // WAN → ONU
       // 電波
-      for (let k = 1; k <= 3; k++) S.path(`M${200 + k * 14},${139 - k * 10} a${k * 12},${k * 12} 0 0 1 0,${k * 20}`, { cls: 'f-none s-r w2' }, svg);
+      for (let k = 1; k <= 3; k++) st.radio = S.path(`M${200 + k * 14},${139 - k * 10} a${k * 12},${k * 12} 0 0 1 0,${k * 20}`, { cls: 'f-none s-r w2' }, svg);
       // 機器
       box(svg, 60, 104, 140, 70, 'スマートフォン', 'MAC …5F', 'f-sf s-rule w15');
       box(svg, 60, 345, 130, 70, 'PC', 'MAC …81', 'f-sf s-rule w15');
@@ -1103,6 +1120,8 @@
       FE.forEach(([n, w]) => { S.rect(x, 8, w, 34, { rx: 3, cls: 'f-d-soft s-d w1' }, gEt); S.text(x + w / 2, 21, n, { cls: 't-c t-xs' }, gEt); st.fEt.push(S.text(x + w / 2, 36, '', { cls: 't-c t-xs t-mono t-b' }, gEt)); x += w + 4; });
       st.msg = S.text(500, 404, '', { cls: 't-c t-sm t-b' }, svg);
       st.msg2 = S.text(500, 424, '', { cls: 't-c t-xs t-dim' }, svg);
+      // 掘り下げ（下の層へ）: 802.11 フレームを電波に乗せる変調（第12章 場面2）
+      YT.drill.mark(st.radio, { to: '12-wifi.html#s2.1', label: '802.11 の電波', at: [236, 94], steps: [2, 5], bridge: '802.11 フレームのビットは、搬送波の振幅や位相を切り替える変調で電波に乗る' });
     },
     set11(st, vals, on) { st.f11.forEach((t, k) => { t.textContent = vals ? (vals[k] || '') : ''; }); st.g11.style.opacity = on ? 1 : 0.35; },
     setEt(st, vals, on) { st.fEt.forEach((t, k) => { t.textContent = vals ? (vals[k] || '') : ''; }); st.gEt.style.opacity = on ? 1 : 0.35; },

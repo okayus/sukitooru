@@ -316,11 +316,18 @@
         S.text(x + (w - 3) / 2, 458, s, { cls: 't-c t-sm t-b ' + tc }, svg);
         x += w;
       });
-      S.text(X0, 486, '幅は比例していない。Ethernet で送るときは、前に 14 バイトのヘッダ、後ろに 4 バイトの FCS が付く（第13章）', { cls: 't-xs t-dim' }, svg);
+      st.ethNote = S.text(X0, 486, '幅は比例していない。Ethernet で送るときは、前に 14 バイトのヘッダ、後ろに 4 バイトの FCS が付く（第13章）', { cls: 't-xs t-dim' }, svg);
       // 段階ごとの計算の欄
       S.rect(X0, 496, W, 56, { rx: 6, cls: 'f-sf s-rule w1' }, svg);
       st.n1 = S.text(X0 + 14, 518, '', { cls: 't-sm' }, svg);
       st.n2 = S.text(X0 + 14, 541, '', { cls: 't-sm' }, svg);
+
+      // 掘り下げ（下の層へ）: Ethernet の包み方と詰め物（第13章）、受け取った OS の振り分け（第9章）、足し算と 16 進（第4章）
+      YT.drill.mark(st.ethNote, { to: '13-ethernet.html#s3.1', label: 'Ethernet のヘッダと FCS', at: [626, 482], steps: [1], bridge: 'Ethernet で送るときは、IP パケットの前に宛先・送信元・タイプの 14 バイト、後ろに FCS 4 バイト' });
+      YT.drill.mark(st.f.len.g, { to: '13-ethernet.html#s3.5', label: '全長', at: [912, 90], steps: [2], bridge: '全長より後ろは読まない。中身が 46 バイト未満なら、Ethernet が 0 を詰めて送るから' });
+      YT.drill.mark(st.f.proto.g, { to: '09-os.html#s6.3', label: 'プロトコル 17', at: [496, 206], steps: [4], bridge: '受け取った OS は、IP の層でプロトコル 17 を見て、UDP の処理へ振り分ける' });
+      YT.drill.mark(st.f.sum.g, { to: '04-ronri.html#s4.6', label: 'ヘッダチェックサム', at: [912, 206], steps: [5], bridge: '16 ビットずつの足し算も、右の桁から和と桁上がりを出す筆算。最上位からの桁上がりがあふれた桁' });
+      YT.drill.mark(st.n1, { to: '04-ronri.html#s4.5', label: '16 進の C0 A8 01 0A', at: [640, 514], steps: [6], bridge: 'C0 A8 01 0A は 1 バイトを 16 進 2 文字で書いたもの。C0 ＝ 1100 0000 ＝ 192' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -409,7 +416,7 @@
       });
       S.text(X0 + 8 * 62 + 12, 239, '＝ 128 ＋ 8 ＋ 4 ＋ 2 ＝ 142', { cls: 't-lg' }, g);
       S.text(X0, 302, '32 ビット全部で', { cls: 't-sm t-dim' }, g);
-      S.text(X0, 336, '2³² ＝ 4,294,967,296 通り（約 43 億）', { cls: 't-xl t-b' }, g);
+      st.n32 = S.text(X0, 336, '2³² ＝ 4,294,967,296 通り（約 43 億）', { cls: 't-xl t-b' }, g);
       S.rect(X0, 380, 43 * 8, 26, { rx: 3, cls: 'f-d' }, g);
       S.text(X0 + 43 * 8 + 10, 398, 'IPv4 アドレス 約 43 億個', { cls: 't-sm t-b' }, g);
       S.rect(X0, 416, 80 * 8, 26, { rx: 3, cls: 'f-in s-rule w1' }, g);
@@ -500,6 +507,10 @@
       });
       S.rect(X0, 484, 842, 40, { rx: 6, cls: 'f-sf s-rule w1' }, g);
       S.text(X0 + 421, 509, 'その後：使われていない範囲の移転（売買）・NAT と CGNAT での共有・IPv6 への移行', { cls: 't-c t-sm' }, g);
+
+      // 掘り下げ（下の層へ）: n ビットで 2ⁿ 通り（第4章）、家のルーターの WAN 側の番号を受け取る PPPoE（第15章）
+      YT.drill.mark(st.n32, { to: '04-ronri.html#s4.4', label: '2³² 通り', at: [420, 330], steps: [1], bridge: '2³² 通りは、n ビットで 2ⁿ 通りの n が 32 のとき。8 ビットなら 256 通り' });
+      YT.drill.mark(st.chain[4], { to: '15-hikari.html#s5.2', label: 'WAN 側 203.0.113.5', at: [392, 486], steps: [4], bridge: 'ISP が家のルーターに付ける 203.0.113.5 は、PPPoE のセッションを開くときに受け取る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -571,7 +582,7 @@
       S.rect(40, 240, 800, 30, { rx: 3, cls: 'f-d-soft s-d w1' }, g);
       S.text(440, 260, 'IPv6 128 ビット（長さは IPv4 の 4 倍）', { cls: 't-c t-sm t-b' }, g);
       S.text(40, 292, '2¹²⁸ ≒ 3.4×10³⁸ 通り。IPv4 の数をさらに約 7.9×10²⁸ 倍したもの', { cls: 't-sm' }, g);
-      S.text(40, 346, '1 組 ＝ 16 ビット ＝ 16 進数 4 桁（1 桁 ＝ 4 ビット）。080a の場合', { cls: 't-sm t-b' }, g);
+      st.hex4 = S.text(40, 346, '1 組 ＝ 16 ビット ＝ 16 進数 4 桁（1 桁 ＝ 4 ビット）。080a の場合', { cls: 't-sm t-b' }, g);
       [['0', '0000'], ['8', '1000'], ['0', '0000'], ['a', '1010']].forEach(([h, b], k) => {
         const x = 40 + k * 112;
         S.rect(x, 360, 100, 36, { rx: 3, cls: 'f-d-soft s-d w1' }, g);
@@ -604,7 +615,8 @@
       });
       [[0, 56, '/56：ISP が家に配る範囲（56 ビット）', '2001:db8:1234:5600::/56'], [56, 64, '家の中の網', '256 通り'], [64, 128, '機器ごとの部分（64 ビット）', 'SLAAC では機器が自分で決める']].forEach(([a, b, l1, l2]) => {
         const cx = (PX(a) + PX(b)) / 2;
-        S.text(cx, 258, l1, { cls: 't-c t-xs t-b' }, g);
+        const t1 = S.text(cx, 258, l1, { cls: 't-c t-xs t-b' }, g);
+        if (a === 0) st.l56 = t1;   // 掘り下げの印を付ける /56 の札
         S.text(cx, 273, l2, { cls: 't-c t-xs t-dim' }, g);
       });
       S.path(`M${PX(0)},288 V296 H${PX(64) - 2} V288`, { cls: 'f-none s-d w15' }, g);
@@ -622,10 +634,11 @@
       box(g, 40, 184, 220, 56, '家のルーター', 'fe80::1（リンクローカル、例）');
       box(g, 700, 184, 220, 56, 'PC', 'LAN に参加したばかり');
       const MSG = [['RS（133）：ルーターはいるか', 268, -1], ['RA（134）：2001:db8:1234:5600::/64、ゲートウェイは私', 314, 1], ['NS（135）：この番号を使っている機器はいるか（マルチキャスト）', 452, -1]];
-      st.slaacRoads = MSG.map(([l, y, dir]) => {
+      st.slaacRoads = MSG.map(([l, y, dir], k) => {
         const x1 = dir > 0 ? 262 : 698, x2 = dir > 0 ? 698 : 262;
         S.line(x1, y, x2, y, { cls: 's-dim w15', 'marker-end': mk('dim') }, g);
-        S.text(480, y - 8, l, { cls: 't-c t-sm' }, g);
+        const tl = S.text(480, y - 8, l, { cls: 't-c t-sm' }, g);
+        if (k === 2) st.nsTxt = tl;   // 掘り下げの印を付ける NS の行
         return road(g, `M${x1},${y + 13} H${x2}`);
       });
       S.text(480, 362, 'PC が自分の番号を作る', { cls: 't-c t-sm t-b' }, g);
@@ -681,6 +694,11 @@
       S.text(GX(2026) + 8, GY(61.6) + 4, '日本 62%', { cls: 't-sm t-b t-d' }, g);
       S.text(GX(2026) + 8, GY(43.6) + 4, '世界 44%', { cls: 't-sm t-b t-mid' }, g);
       S.text(540, 520, '各年 10 月（2026 年は 10 月 9 日）の 30 日平均。APNIC Labs の広告を使った測定', { cls: 't-xs t-dim' }, g);
+
+      // 掘り下げ（下の層へ）: 16 進の書き方（第4章）、/56 を受け取る IPoE（第15章）、NS が届くマルチキャスト（第13章 NDP）
+      YT.drill.mark(st.hex4, { to: '04-ronri.html#s4.5', label: '16 進数 4 桁', at: [424, 342], steps: [1], bridge: '16 ビットの 1 組が 16 進 4 桁になるのは、4 ビットを 1 文字で書くから' });
+      YT.drill.mark(st.l56, { to: '15-hikari.html#s5.4', label: '/56 の範囲', at: [372, 262], steps: [3], bridge: '家に配られる /56 は、ルーターが IPoE の網から DHCPv6-PD で受け取る' });
+      YT.drill.mark(st.nsTxt, { to: '13-ethernet.html#s5.6', label: 'NS（マルチキャスト）', at: [684, 436], steps: [4], bridge: '重複を確かめる NS も、近隣要請と同じく 33:33 で始まる MAC のマルチキャストで届く' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -786,13 +804,20 @@
       S.line(548, 500, 700, 500, { cls: 's-rule w3' }, gq);
       st.qIn = A.flow(inRoad, { count: 2, speed: 140, r: 5, cls: 'f-d', parent: gq });
       st.qOut = A.flow(road(gq, 'M552,500 H700'), { count: 3, speed: 100, r: 5, cls: 'f-d', parent: gq });
-      S.text(628, 482, '1,500 バイトを 12 µs で送り出す', { cls: 't-c t-xs' }, gq);
+      st.txT = S.text(628, 482, '1,500 バイトを 12 µs で送り出す', { cls: 't-c t-xs' }, gq);
       st.qTxt = S.text(720, 496, '', { cls: 't-sm t-b' }, gq);
       S.text(720, 520, '前に 100 個なら 1.2 ms', { cls: 't-sm t-dim' }, gq);
       st.qDrop = S.text(128, 474, '× あふれて捨てる', { cls: 't-c t-sm t-b t-x' }, gq);
       st.qLbl = S.text(362, 540, '待ち行列（右端から順に出ていく）', { cls: 't-c t-xs t-dim' }, gq);
       /* 道を進むパケット */
       st.p = pkt(svg, 'TTL 64', 'f-d');
+
+      // 掘り下げ（下の層へ）: 区間ごとのフレーム（第13章）、チェックサムの桁の重み（第4章）、ゲートウェイの MAC（第13章 ARP）、送り出しの時間（第15章）、FCS（第13章）
+      YT.drill.mark(st.head[1], { to: '13-ethernet.html#s6.3', label: '通り道（区間）', at: [236, 146], steps: [1], bridge: '区間ごとに通り道が違っても、IP パケットは同じまま。AP は 802.11 を Ethernet に組み替える' });
+      YT.drill.mark(st.head[5], { to: '04-ronri.html#s4.1', label: 'チェックサムの差分', at: [524, 125], steps: [3], bridge: '0x0100 は、16 ビットの語の上位 8 ビットにある TTL の 1 の重み（2⁸）' });
+      YT.drill.mark(st.head[2], { to: '13-ethernet.html#s5.5', label: '宛先 MAC', at: [282, 125], steps: [4], bridge: '区間 1 の宛先 MAC がルーターなのは、PC が外の宛先にゲートウェイの MAC を使うから' });
+      YT.drill.mark(st.txT, { to: '15-hikari.html#s6.5', label: '送り出し 12 µs', at: [724, 470], steps: [5], bridge: '1,500 バイトを 1 Gbps で送り出す 12 µs は、片道の時間の内訳の 1 つ' });
+      YT.drill.mark(st.head[5], { to: '13-ethernet.html#s3.6', label: '各区間の FCS', at: [524, 125], steps: [6], bridge: 'IPv6 のヘッダに検算が無くても、各区間の FCS（CRC-32）が壊れたフレームを捨てる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -889,7 +914,7 @@
         const tv = S.text((x1 + x2) / 2, 58, v, { cls: 't-c t-sm t-b' }, svg);
         return { ln, tv };
       });
-      S.text(390, 116, 'IPv4 over IPv6 なら 1,460', { cls: 't-c t-xs t-dim' }, svg);
+      st.v4v6 = S.text(390, 116, 'IPv4 over IPv6 なら 1,460', { cls: 't-c t-xs t-dim' }, svg);
       st.pmtu = S.text(480, 142, '経路 MTU ＝ 1,492（最も小さい区間で決まる）', { cls: 't-c t-sm t-b' }, svg);
 
       const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
@@ -1007,6 +1032,11 @@
       S.text(56, 452, 'UDP の中身が 1,200 バイト通らない道では QUIC を使わず、TCP の HTTPS に切り替える', { cls: 't-sm' }, g);
       S.text(56, 478, 'IPv4 でも DF を立て、途中で分けさせない。より大きい値は、詰め物をしたパケットで試して確かめる（DPLPMTUD、RFC 8899）', { cls: 't-sm' }, g);
       S.text(56, 504, 'Chrome は最初から中身を 1,250 バイトに詰めて送る（場面1 の例。2026 年 10 月に Chrome 155 で確認）', { cls: 't-sm t-dim' }, g);
+
+      // 掘り下げ（下の層へ）: 区間ごとの MTU の出どころ（第13章 Ethernet の中身、第15章 PPPoE と IPv4 over IPv6）
+      YT.drill.mark(st.links[0].tv, { to: '13-ethernet.html#s3.5', label: 'Ethernet の 1,500', at: [198, 62], steps: [1], bridge: '1,500 は Ethernet の中身の上限。IP パケットはフレームの中身に 1 個そのまま入る' });
+      YT.drill.mark(st.links[1].tv, { to: '15-hikari.html#s5.2', label: 'PPPoE の 1,492', at: [423, 62], steps: [1, 2, 3, 5], bridge: '1,492 なのは、PPPoE の 6 バイトと PPP の 2 バイトが同じ 1,500 バイトの中に入るから' });
+      YT.drill.mark(st.v4v6, { to: '15-hikari.html#s5.6', label: 'IPv4 over IPv6', at: [478, 112], steps: [1], bridge: '1,460 なのは、IPv4 のパケットの外側に IPv6 ヘッダ 40 バイトを付けて運ぶから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1083,7 +1113,8 @@
         const y = 252 + k * 36;
         if (!head) S.rect(40, y, 880, 32, { rx: 3, cls: 'f-sf s-rule w1' }, g0);
         S.text(52, y + 21, a, { cls: 't-sm' + (head ? ' t-b t-dim' : ' t-b') }, g0);
-        S.text(220, y + 21, b, { cls: 't-sm' + (head ? ' t-b t-dim' : '') }, g0);
+        const tb = S.text(220, y + 21, b, { cls: 't-sm' + (head ? ' t-b t-dim' : '') }, g0);
+        if (k === 6) st.ndpT = tb;   // 掘り下げの印を付ける NDP の行
         S.text(540, y + 21, c, { cls: 't-sm' + (head ? ' t-b t-dim' : ' t-dim') }, g0);
       });
       S.text(40, 528, 'タイプ 11 のデータ：捨てたパケットの IP ヘッダ 20 バイトと、その中身の先頭 8 バイト以上（UDP ならポート番号が入る）', { cls: 't-xs' }, g0);
@@ -1097,7 +1128,8 @@
       S.text(56, 204, 'PING 142.250.196.110 (142.250.196.110) 56(84) bytes of data.', { cls: 't-mono t-md' }, g1);
       st.pingLines = [1, 2, 3].map((n, k) => S.text(56, 234 + k * 28, `64 bytes from 142.250.196.110: icmp_seq=${n} ttl=119 time=${['6.4', '6.2', '6.3'][k]} ms`, { cls: 't-mono t-md' }, g1));
       [['56(84)', '中身 56 バイト。ICMP のヘッダ 8 と IP ヘッダ 20 を足すと 84'], ['ttl=119', 'サーバーが返事に付けた TTL（例では 128 から）が、帰り道の 9 台で減った値'], ['time=6.4 ms', '要求を送ってから応答が着くまで（往復）。止めるまで 1 秒ごとに続く']].forEach(([a, b], k) => {
-        S.text(56, 350 + k * 30, a, { cls: 't-mono t-sm t-b t-d' }, g1);
+        const ta = S.text(56, 350 + k * 30, a, { cls: 't-mono t-sm t-b t-d' }, g1);
+        if (k === 2) st.timeT = ta;   // 掘り下げの印を付ける往復時間
         S.text(170, 350 + k * 30, b, { cls: 't-sm' }, g1);
       });
 
@@ -1127,6 +1159,10 @@
       });
       st.trNote = S.text(56, 518, '', { cls: 't-sm t-b t-x' }, g2);
       st.pk = pkt(svg, '', 'f-d');
+
+      // 掘り下げ（下の層へ）: ICMPv6 の近隣の手続き（第13章 NDP）、往復時間の中身（第15章）
+      YT.drill.mark(st.ndpT, { to: '13-ethernet.html#s5.6', label: 'ICMPv6 の NDP', at: [440, 484], steps: [1], bridge: 'ICMPv6 の近隣の手続き（NDP）は、IPv4 の ARP の代わりに相手の MAC を調べる' });
+      YT.drill.mark(st.timeT, { to: '15-hikari.html#s6.5', label: 'time=6.4 ms', at: [552, 406], steps: [2], bridge: '往復 6.4 ms の中身は、主に光が進む距離の時間と、行列や許可の待ち時間' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

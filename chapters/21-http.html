@@ -289,7 +289,7 @@
       box(svg, 30, 8, 180, 46, 'ブラウザ（PC）', '192.168.1.10');
       box(svg, 750, 8, 180, 46, 'www.youtube.com', '142.250.196.110:443');
       S.line(216, 31, 744, 31, { cls: 's-rule w15', 'marker-end': mk('dim'), 'marker-start': mk('dim') }, svg);
-      S.text(480, 64, 'TLS で暗号化した接続の中を通る（第20章）', { cls: 't-c t-xs t-dim' }, svg);
+      st.tlsT = S.text(480, 64, 'TLS で暗号化した接続の中を通る（第20章）', { cls: 't-c t-xs t-dim' }, svg);
       st.reqRoad = road(svg, 'M290,31 H670');
       st.resRoad = road(svg, 'M670,31 H290');
 
@@ -407,7 +407,7 @@
           ['＜8,000 バイト＞ …', 't-dim'],
           ['0', 't-x t-b']
         ], 20);
-        S.text(560, 438, '← 16 進で書いた長さ（0x1f40 = 8,000）', { cls: 't-xs t-dim' }, g);
+        st.chunkT = S.text(560, 438, '← 16 進で書いた長さ（0x1f40 = 8,000）', { cls: 't-xs t-dim' }, g);
         S.text(560, 518, '← 長さ 0 の塊で本文の終わり', { cls: 't-xs t-dim' }, g);
         S.text(44, 540, '長さの数字も CR LF で終える。chunked は全体の長さを知らないまま送り始められる。', { cls: 't-xs t-dim' }, g);
         st.details.push([g, '本文の終わりの示し方（HTTP/1.1。例の POST は HTTP/1.1 で書いた場合）']);
@@ -456,6 +456,11 @@
       /* 動く荷札 */
       st.reqTok = pkt(svg, 'GET /watch?v=…', 'f-d');
       st.resTok = pkt(svg, '200 OK', 'f-d');
+
+      // 掘り下げ（下の層へ）: 要求を包む TLS のレコード（第20章）、バイトの 16 進の書き方（第4章）
+      YT.drill.mark(st.tlsT, { to: '20-tls.html#s6.1', label: 'TLS で暗号化した接続', at: [610, 60], steps: [1], bridge: 'この要求の先頭 24 バイトも、TLS のレコードに入れて AEAD で包んでから送る' });
+      YT.drill.mark(st.details[0][0], { to: '04-ronri.html#s4.5', label: '1 バイトずつ（16 進）', at: [206, 389], steps: [1], bridge: '1 バイトを 16 進 2 文字で書く。G は 0x47 ＝ 0100 0111' });
+      YT.drill.mark(st.chunkT, { to: '04-ronri.html#s4.5', label: '16 進で書いた長さ', at: [792, 434], steps: [3], bridge: '1f40 は 16 進。1 文字が 4 ビットで、0x1f40 ＝ 8,000' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -541,7 +546,7 @@
       S.line(206, 31, 734, 31, { cls: 's-rule w15', 'marker-end': mk('dim'), 'marker-start': mk('dim') }, svg);
       st.lost = S.g({ cls: 'fade hide' }, svg);
       S.text(470, 38, '×', { cls: 't-c t-xl t-b t-x' }, st.lost);
-      S.text(470, 68, '途中で失われた', { cls: 't-c t-xs t-x' }, st.lost);
+      S.text(470, 68, '接続が切れた', { cls: 't-c t-xs t-x' }, st.lost);   // パケット 1 個の損失なら先に TCP が送り直す。ブラウザが送り直すのは接続ごと切れたとき
       /* 荷札は × より後に描く（送り直しの荷札が × の上を通っても、文字が消されて見えないように） */
       st.tok = pkt(svg, 'GET', 'f-d');
 
@@ -606,6 +611,9 @@
       });
       S.circle(484, 522, 3.5, { cls: 'f-d' }, svg);
       S.text(494, 526, '2026 年 10 月の計測で YouTube まわりの応答に見たコード（Chrome と curl）', { cls: 't-xs t-dim' }, svg);
+
+      // 掘り下げ（下の層へ）: パケットが失われただけなら TCP が送り直す（第19章）。ブラウザが送り直すのは接続が切れたとき
+      YT.drill.mark(st.lost, { to: '19-tcp.html#s3.5', label: '接続が切れた要求', at: [526, 64], steps: [2], bridge: 'パケットが失われただけなら TCP が送り直す。ブラウザが送り直すのは接続ごと切れたとき' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -815,11 +823,14 @@
       {
         const g = S.g({ cls: 'fade hide' }, svg);
         const cols = [44, 250, 420, 600];
-        ['', 'TCP と TLS の握手', '1 本の接続に流す要求', '同時に流せる要求'].forEach((s, k) => S.text(cols[k], 420, s, { cls: 't-xs t-b t-dim' }, g));
+        ['', 'TCP と TLS の握手', '1 本の接続に流す要求', '同時に流せる要求'].forEach((s, k) => {
+          const th = S.text(cols[k], 420, s, { cls: 't-xs t-b t-dim' }, g);
+          if (k === 1) st.hsT = th;   // 掘り下げの印を付ける「握手」の見出し
+        });
         [['HTTP/1.1・接続 1 本', '1 回', '8 個を順に', '1 個'], ['HTTP/1.1・接続 6 本', '6 回（並べて）', '1〜2 個ずつ', '6 個（7 個目からは待つ）'], ['HTTP/2・接続 1 本', '1 回', '8 個を混ぜて', 'サーバーが設定で上限を示す']].forEach((row, r) => {
           row.forEach((s, k) => S.text(cols[k], 446 + r * 26, s, { cls: (k ? 't-sm' : 't-sm t-b') }, g));
         });
-        S.text(44, 534, '接続が増えると、サーバーも接続ごとの状態と、TCP の輻輳制御（第19章）を別々に持つ。図の帯域は全部の接続で分け合っている。', { cls: 't-xs t-dim' }, g);
+        st.ccT = S.text(44, 534, '接続が増えると、サーバーも接続ごとの状態と、TCP の輻輳制御（第19章）を別々に持つ。図の帯域は全部の接続で分け合っている。', { cls: 't-xs t-dim' }, g);
         st.details.push([g, '接続を増やす費用']);
       }
       /* 段階3: フレームの見出し */
@@ -851,7 +862,10 @@
         const cols = [44, 340, 420, 690];
         ['ヘッダ', '文字', '1 回目に送るバイト', '2 回目（同じ値）'].forEach((s, k) => S.text(cols[k], 418, s, { cls: 't-xs t-b t-dim' }, g));
         [[':method: GET', '3 字', '82（静的表の 2 番）', '82'], [':authority: www.youtube.com', '15 字', '41 8C …（14 B。動的表に加える）', 'CB（動的表の番号）'], ['user-agent: Mozilla/5.0 …', '101 字', '7A …（80 B。ハフマン符号）', 'C7（1 B）'], ['17 個の合計', '682 B', '450 B', '35 B']].forEach((row, r) => {
-          row.forEach((s, k) => S.text(cols[k], 442 + r * 24, s, { cls: 't-sm' + (k === 0 || k >= 2 ? ' t-mono' : '') + (r === 3 ? ' t-b' : '') + (k === 3 ? ' t-x t-b' : '') }, g));
+          row.forEach((s, k) => {
+            const tc = S.text(cols[k], 442 + r * 24, s, { cls: 't-sm' + (k === 0 || k >= 2 ? ' t-mono' : '') + (r === 3 ? ' t-b' : '') + (k === 3 ? ' t-x t-b' : '') }, g);
+            if (r === 2 && k === 2) st.huffT = tc;   // 掘り下げの印を付けるハフマン符号の欄
+          });
         });
         S.text(44, 540, '動的表は両端が同じ順に書き足す表で、既定の大きさは 4,096 バイト。あふれると古い組から押し出す。', { cls: 't-xs t-dim' }, g);
         st.details.push([g, 'HPACK（17 個のヘッダを 2 回送った例。文字にすると 682 B）']);
@@ -873,6 +887,12 @@
         S.text(44, 532, '失われたのはストリーム 3 のデータだけなのに、あとに届いた S1・S5・S7 のデータも待たされる。', { cls: 't-sm' }, g);
         st.details.push([g, 'TCP から見ると（受け手。S1 は「ストリーム 1 のフレーム」）']);
       }
+
+      // 掘り下げ（下の層へ）: 接続ごとの握手と輻輳制御（第19章）、ハフマン符号（第23章。登録簿では横）、TCP の順番待ち（第19章）
+      YT.drill.mark(st.hsT, { to: '19-tcp.html#s2.4', label: 'TCP と TLS の握手', at: [368, 416], steps: [2], bridge: '接続ごとの握手は、TCP の 1 往復と TLS 1.3 の 1 往復で、要求までに 2 往復' });
+      YT.drill.mark(st.ccT, { to: '19-tcp.html#s4.3', label: '接続ごとの輻輳制御', at: [682, 530], steps: [2], bridge: '接続ごとに別の輻輳ウィンドウを持ち、どれも 10 個から 1 往復ごとに倍に増やす' });
+      YT.drill.mark(st.huffT, { to: '23-codec.html#s3.3', label: 'ハフマン符号', at: [646, 486], steps: [4], bridge: 'ハフマン符号も指数ゴロム符号と同じく、よく出る値ほど短い符号を割り当てる' });
+      YT.drill.mark(st.loss, { to: '19-tcp.html#s3.4', label: 'TCP の順番待ち', at: [316, 214], steps: [5], bridge: 'アプリに渡せないのは、TCP が抜けた 1 個の再送を待ち、後ろに届いた分を取り置くから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -942,7 +962,7 @@
         S.text(x + 19, 20, s, { cls: 't-xs t-dim' }, gt);
       });
       const block = (y0, title, names, tcp) => {
-        S.text(30, y0 + 4, title, { cls: 't-xs t-b' }, gt);
+        const tt = S.text(30, y0 + 4, title, { cls: 't-xs t-b' }, gt);
         S.rect(TX0 - 4, y0 + 10, TX1 - TX0 + 8, 3 * 17 + 4, { rx: 4, cls: 'f-none s-rule w1' }, gt);
         names.forEach((n, k) => S.text(TX0 - 10, y0 + 24 + k * 17, n, { cls: 't-xs t-mono t-end' }, gt));
         const sched = simLoss(tcp);
@@ -959,9 +979,10 @@
         });
         const note = S.text((sx(H3.LOST) + sx(H3.LOST + H3.RTT4)) / 2, y0 + 4, tcp ? '3 本とも HTTP に渡せない（約 1 往復）' : '待つのはストリーム 4 だけ', { cls: 't-c t-xs t-b t-x' }, gt);
         st.items.push({ el: note, a: H3.LOST });
+        return tt;   // 題（掘り下げの印を付ける）
       };
-      block(34, 'HTTP/2（TCP の上）', ['S1', 'S3', 'S5'], true);
-      block(112, 'HTTP/3（QUIC の上）', ['0', '4', '8'], false);
+      st.h2T = block(34, 'HTTP/2（TCP の上）', ['S1', 'S3', 'S5'], true);
+      st.h3T = block(112, 'HTTP/3（QUIC の上）', ['0', '4', '8'], false);
       S.line(TX0, 186, TX1, 186, { cls: 's-dim w1', 'marker-end': mk('dim') }, gt);
       S.text(TX1, 198, '時間 →', { cls: 't-xs t-dim t-end' }, gt);
       S.text(TX0, 198, '1 個が 1 パケット（中身は 1 本のストリームのデータ）', { cls: 't-xs t-dim' }, gt);
@@ -1034,6 +1055,14 @@
         });
         return { g, bx };
       });
+
+      // 掘り下げ（下の層へ）: TCP と QUIC の損失の扱い（第19章）、h3 の 443 番（第19章）、HTTPS レコード（第17章。同じ層）、QUIC の接続と、UDP が通らないとき（第19章）
+      YT.drill.mark(st.h2T, { to: '19-tcp.html#s3.4', label: 'HTTP/2（TCP の上）', at: [156, 34], steps: [2], bridge: '3 本とも待つのは、TCP が抜けた 1 個を重複 ACK で知らせ、送り直しを待つから' });
+      YT.drill.mark(st.h3T, { to: '19-tcp.html#s6.3', label: 'HTTP/3（QUIC の上）', at: [160, 112], steps: [1, 2], bridge: 'HTTP/3 のストリームの順番と再送は、QUIC がストリームごとに数えて受け持つ' });
+      YT.drill.mark(st.paths[0].bx[3], { to: '19-tcp.html#s1.2', label: 'h3=":443"', at: [770, 402], steps: [4], bridge: 'h3=":443" の 443 は UDP の 443 番。HTTPS と同じ番号で QUIC も待つ' });
+      YT.drill.mark(st.paths[1].bx[0], { to: '17-dns.html#s6.6', label: 'HTTPS レコード', at: [332, 452], steps: [5], bridge: 'alpn="h3" は、DNS の HTTPS レコードが知らせる接続のしかた' });
+      YT.drill.mark(st.paths[1].bx[1], { to: '19-tcp.html#s6.2', label: 'QUIC ＋ TLS', at: [478, 452], steps: [5], bridge: '最初から QUIC なら、Initial パケットの ClientHello で接続と鍵が 1 往復で決まる' });
+      YT.drill.mark(st.paths[2].bx[1], { to: '19-tcp.html#s6.6', label: 'UDP が止められた網', at: [478, 502], steps: [6], bridge: 'UDP 443 が止められた網では、並べて試した TCP＋TLS の方が先に使えて HTTP/2 になる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1097,7 +1126,7 @@
       /* 左: ブラウザの中 */
       S.rect(30, 8, 300, 354, { rx: 8, cls: 'f-sf s-fg w15' }, svg);
       S.text(44, 28, 'ブラウザ（PC）', { cls: 't-sm t-b' }, svg);
-      S.text(44, 52, 'キャッシュ（ディスク）', { cls: 't-xs t-b t-dim' }, svg);
+      st.diskT = S.text(44, 52, 'キャッシュ（ディスク）', { cls: 't-xs t-b t-dim' }, svg);
       const crow = (y, name, sub, state) => {
         const g = S.g({}, svg);
         const r = S.rect(40, y, 280, 38, { rx: 5, cls: 'f-in s-rule w1' }, g);
@@ -1232,7 +1261,8 @@
           const y = 132 + k * 36;
           S.rect(364, y, 552, 28, { rx: 5, cls: ok ? 'f-d-soft s-d w1' : 'f-in s-rule w1' }, g);
           S.text(378, y + 19, ok ? '○' : '×', { cls: 't-sm t-b' + (ok ? ' t-d' : ' t-dim') }, g);
-          S.text(400, y + 19, h, { cls: 't-xs t-mono t-b' }, g);
+          const ht = S.text(400, y + 19, h, { cls: 't-xs t-mono t-b' }, g);
+          if (k === 1) st.domT = ht;   // 掘り下げの印を付ける m.youtube.com の行
           S.text(904, y + 19, s, { cls: 't-xs t-end' + (ok ? '' : ' t-dim') }, g);
         });
         S.text(364, 300, '送り返すのは「名前=値」だけで、属性は送らない。', { cls: 't-xs t-dim' }, g);
@@ -1244,7 +1274,8 @@
         const g = S.g({ cls: 'fade hide' }, svg);
         [['Secure', 'HTTPS の要求にだけ付ける'], ['HttpOnly', 'JS（document.cookie）から読めない'], ['SameSite=lax', '他のサイトからは、リンクで移るときだけ付ける'], ['SameSite=none', '他のサイトに埋め込まれても付ける（Secure が要る）'], ['Partitioned', '埋め込み先のサイトごとに、別の入れ物に保存する']].forEach(([a, b], k) => {
           const y = 120 + k * 36;
-          S.text(364, y, a, { cls: 't-sm t-mono t-b t-x' }, g);
+          const at = S.text(364, y, a, { cls: 't-sm t-mono t-b t-x' }, g);
+          if (k === 0) st.secureT = at;   // 掘り下げの印を付ける Secure の行
           S.text(520, y, b, { cls: 't-xs' }, g);
         });
         S.text(364, 310, 'SameSite を書かない札は、Chrome では lax として扱う。', { cls: 't-xs t-dim' }, g);
@@ -1268,6 +1299,12 @@
         if (R) { S.line(478, 404, 478, 540, { cls: 's-soft w1' }, g); codeRows(g, 496, 420, R, 24); }
         return [g, title];
       });
+
+      // 掘り下げ（下の層へ）: ディスクのキャッシュを読む OS のページキャッシュ（第9章）、途中から見えるもの（第20章）、名前の木（第17章。同じ層）、平文の Cookie（第20章）
+      YT.drill.mark(st.diskT, { to: '09-os.html#s4.6', label: 'ディスクのキャッシュ', at: [172, 48], steps: [1], bridge: 'ディスクのキャッシュのファイルも、一度読めば OS がページキャッシュとしてメモリに残す' });
+      YT.drill.mark(st.cdn, { to: '20-tls.html#s6.4', label: '共有キャッシュの置き場', at: [626, 14], steps: [4], bridge: '共有キャッシュを経路の途中に置けないのは、途中から見えるのが包みの外側だけだから' });
+      YT.drill.mark(st.domT, { to: '17-dns.html#s2.1', label: 'youtube.com の下', at: [640, 182], steps: [5], bridge: 'youtube.com の下に付くのは、www も m も名前の木の同じ枝の葉だから' });
+      YT.drill.mark(st.secureT, { to: '20-tls.html#s1.1', label: 'Secure', at: [430, 116], steps: [6], bridge: 'Secure の札を HTTPS にだけ付けるのは、平文では Cookie も途中のどこでも読めるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1420,6 +1457,10 @@
         codeRows(g, 44, 474, ls, 24, 't-xs t-mono pre');
         return [g, titles[k]];
       });
+
+      // 掘り下げ（下の層へ）: 1 本の接続に何本ものストリーム、接続を先に作る（第19章 QUIC）
+      YT.drill.mark(st.rows[4].lab, { to: '19-tcp.html#s6.3', label: '1 本の HTTP/3 の接続', at: [170, 248], steps: [3], bridge: '93 個が 1 本の接続に乗るのは、QUIC が 1 つの接続に独立したストリームを何本も持つから' });
+      YT.drill.mark(st.rows[5].lab, { to: '19-tcp.html#s6.2', label: 'generate_204 の接続', at: [170, 294], steps: [4], bridge: 'generate_204 で先に作る接続は、QUIC の最初の 1 往復で鍵まで決まる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

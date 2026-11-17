@@ -282,6 +282,10 @@
       S.text(480, 54, '255', { cls: 't-xs t-mono t-dim', 'text-anchor': 'end' }, st.gDepth);
       S.text(0, 84, '8 bit × 3 色 = 16,777,216 色　／　10 bit × 3 色（HDR）= 1,073,741,824 色', { cls: 't-sm t-mono' }, st.gDepth);
       S.text(0, 108, '数値は「指示」。実際に出る光はパネルが決める（場面4・5）', { cls: 't-xs t-dim' }, st.gDepth);
+      // 掘り下げ（下の層へ）
+      YT.drill.mark(st.byteBoxes[0].g, { to: '04-ronri.html#s4.4', label: '1 バイト（0〜255）', at: [924, 126], steps: [2], bridge: '各色の 0〜255 は、8 ビットで表せる 2⁸ = 256 通り' });
+      YT.drill.mark(st.decTxt, { to: '04-ronri.html#s4.5', label: '16 進 FF', at: [826, 188], steps: [2], bridge: 'FF は 4 ビットずつを 1 文字にした 16 進。1111 1111 で 255' });
+      YT.drill.mark(st.gDepth, { to: '04-ronri.html#s4.4', label: '8 ビット・10 ビット', at: [536, 422], steps: [5], bridge: '8 ビットで 256 段階、10 ビットで 1,024 段階。ビットが 1 増えるごとに 2 倍になる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -396,6 +400,8 @@
       for (let r = 0; r < 5; r++) for (let c = 0; c < 16; c++) st.cores.push(S.rect(c * 15, r * 15, 12, 12, { rx: 2, cls: 'f-in' }, st.gCores));
       S.text(120, 100, '演算器が 1 画素ずつ同じ式を同時に計算', { cls: 't-c t-xs t-dim' }, st.gCores);
       S.text(120, 118, '出力 = α × 前景 + (1 − α) × 背景', { cls: 't-c t-xs t-mono t-dim' }, st.gCores);
+      // 掘り下げ（下の層へ）
+      YT.drill.mark(st.gCores, { to: '06-cpu.html#s1.3', label: 'GPU の演算器', at: [686, 366], steps: [5], bridge: '演算器の 1 個 1 個は、加算器などを並べた ALU と同じ種類の回路。下の例は YT-8 の 8 ビットの ALU' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -449,7 +455,7 @@
       const svg = ctx.svg, st = ctx.state;
       const mk = S.markers(svg);
       // フレームバッファ
-      S.rect(30, 110, 150, 86, { rx: 6, cls: 'f-sf s-rule w1' }, svg);
+      st.fb = S.rect(30, 110, 150, 86, { rx: 6, cls: 'f-sf s-rule w1' }, svg);
       for (let k = 0; k < 5; k++) S.rect(40, 120 + k * 14, 130, 9, { cls: 'f-d-soft' }, svg);
       S.text(105, 92, 'フレームバッファ', { cls: 't-c t-sm t-b' }, svg);
       S.text(105, 214, 'GPU のメモリ', { cls: 't-c t-xs t-dim' }, svg);
@@ -480,7 +486,7 @@
       st.tearTxt = S.text(PX + PWd, PY + PHt + 53, '', { cls: 't-xs t-x t-b', 'text-anchor': 'end' }, svg);
       // 段階3: 行ドライバ
       st.gDrv = S.g({ cls: 'fade hide' }, svg);
-      S.rect(PX - 34, PY, 18, PHt, { rx: 3, cls: 'f-e-soft s-e w1' }, st.gDrv);
+      st.gateBar = S.rect(PX - 34, PY, 18, PHt, { rx: 3, cls: 'f-e-soft s-e w1' }, st.gDrv);
       S.text(PX - 25, PY + PHt + 14, 'ゲート', { cls: 't-c t-xs t-e' }, st.gDrv);
       S.rect(PX, PY - 34, PWd, 18, { rx: 3, cls: 'f-e-soft s-e w1' }, st.gDrv);
       S.text(PX + PWd / 2, PY - 21, '列ドライバ（1 行分の電圧を並べる）', { cls: 't-c t-xs t-e' }, st.gDrv);
@@ -507,16 +513,22 @@
       S.text(0, 0, '押してから見えるまで（目安）', { cls: 't-sm t-b' }, st.gLat);
       const segs = [['入力の読み取り', 5, 'e'], ['アプリの描画', 16.7, 'd'], ['合成', 16.7, 'd'], ['送出（走査）', 16.7, 'e'], ['パネル応答', 5, 'p']];
       let x0 = 0; const scale = 860 / 62;
-      segs.forEach(([n, ms, c]) => {
+      st.latSegs = segs.map(([n, ms, c]) => {
         const w = ms * scale;
-        S.rect(x0, 14, w - 2, 30, { rx: 3, cls: `f-${c}-soft s-${c} w1` }, st.gLat);
+        const r = S.rect(x0, 14, w - 2, 30, { rx: 3, cls: `f-${c}-soft s-${c} w1` }, st.gLat);
         S.text(x0 + w / 2, 33, n, { cls: 't-c t-xs' }, st.gLat);
         S.text(x0 + w / 2, 62, (ms === 5 ? '〜' : '≤ ') + ms + ' ms', { cls: 't-c t-xs t-mono t-dim' }, st.gLat);
         x0 += w;
+        return r;
       });
       S.text(0, 92, '合計で数十 ms。120 Hz なら「≤ 16.7 ms」の段がそれぞれ「≤ 8.3 ms」になる', { cls: 't-xs t-dim' }, st.gLat);
       st.PX = PX; st.PY = PY; st.rh = rh; st.PWd = PWd; st.TW = TW;
       st.src = 0; st.lastSwap = 0; st.frameNo = 1;
+      // 掘り下げ（下の層へ）。差動線は第13章にしか無い（登録簿の display の下に phy が無いので向きは「横」）
+      YT.drill.mark(st.fb, { to: '07-shuuhen.html#s4.3', label: 'フレームバッファを読む', at: [192, 112], steps: [1], bridge: 'ディスプレイコントローラは CPU を通さずに自分でメモリを読む。下の例は NIC が書く DMA' });
+      YT.drill.mark(cable, { to: '13-ethernet.html#s1.2', label: 'ケーブル（差動線）', at: [318, 196], steps: [2], bridge: 'HDMI・DP の差動線も、2 本の電圧の差で送る。下の例は LAN ケーブルの対' });
+      YT.drill.mark(st.gateBar, { to: '05-kioku.html#s5.2', label: 'ゲートドライバ・TFT', at: [366, 72], steps: [3], bridge: '行の TFT を開いてコンデンサを充放電し、閉じて電荷を残すのは DRAM の書き込みと同じ形' });
+      YT.drill.mark(st.latSegs[0], { to: '07-shuuhen.html#s5.3', label: '入力の読み取り', at: [24, 449], steps: [5], bridge: '入力の読み取りが遅れるのは、USB のホストが 1〜8 ms ごとにしか読みに行かないから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -577,7 +589,7 @@
       const CH = [{ y: 150, c: 'R', cls: 'x', rgb: [255, 0, 0] }, { y: 280, c: 'G', cls: 'd', rgb: [0, 200, 0] }, { y: 410, c: 'B', cls: 'e', rgb: [0, 90, 255] }];
       st.X = X; st.CH = CH;
       // 層の描画
-      S.rect(X.bl, 70, 40, 420, { rx: 4, cls: 'f-p-soft s-p w1' }, svg);
+      st.bl = S.rect(X.bl, 70, 40, 420, { rx: 4, cls: 'f-p-soft s-p w1' }, svg);
       for (let k = 0; k < 7; k++) S.circle(X.bl + 20, 100 + k * 60, 7, { cls: 'f-p' }, svg);
       S.text(X.bl + 20, 56, 'バックライト', { cls: 't-c t-xs' }, svg);
       S.text(X.bl + 20, 508, '白色 LED', { cls: 't-c t-xs t-dim' }, svg);
@@ -586,7 +598,7 @@
       st.p1 = S.rect(X.p1, 70, 12, 420, { cls: 'f-dim', style: { opacity: 0.25 } }, svg);
       S.text(X.p1 + 6, 56, '偏光板 1', { cls: 't-c t-xs' }, svg);
       S.text(X.p1 + 6, 508, '縦を通す', { cls: 't-c t-xs t-dim' }, svg);
-      S.rect(X.g1, 70, 8, 420, { cls: 'f-e-soft s-e w1' }, svg);
+      st.tft = S.rect(X.g1, 70, 8, 420, { cls: 'f-e-soft s-e w1' }, svg);
       S.text(X.g1 + 4, 56, 'TFT', { cls: 't-c t-xs' }, svg);
       S.rect(X.lc0, 70, X.lc1 - X.lc0, 420, { cls: 'f-sf s-rule w1' }, svg);
       S.text((X.lc0 + X.lc1) / 2, 56, '液晶層（分子の向き）', { cls: 't-c t-xs' }, svg);
@@ -637,6 +649,9 @@
         return arr;
       });
       st.note = S.text(480, 540, '', { cls: 't-c t-sm t-dim' }, svg);
+      // 掘り下げ（下の層へ）
+      YT.drill.mark(st.bl, { to: '02-handoutai.html#s6.2', label: '白色 LED', at: [70, 530], steps: [1], bridge: 'バックライトの白は、InGaN の青色 LED と黄色の蛍光体の組。LED の色は材料で決まる' });
+      YT.drill.mark(st.tft, { to: '03-transistor.html#s3.3', label: 'TFT', at: [209, 30], steps: [4, 5], bridge: 'サブ画素の TFT も第3章と同じスイッチ。ゲートの電圧でチャネルができ、電極に電圧が届く' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -725,7 +740,7 @@
         { name: 'TFT 基板', y: 332, h: 30, cls: 'f-in s-rule w1' }
       ];
       L.forEach((l) => {
-        S.rect(130, l.y, 360, l.h, { cls: l.cls }, svg);
+        l.r = S.rect(130, l.y, 360, l.h, { cls: l.cls }, svg);
         S.text(500, l.y + l.h / 2 + 4, l.name, { cls: 't-xs t-dim' }, svg);
       });
       S.text(310, 70, 'OLED の 1 サブ画素（断面、光は上へ）', { cls: 't-c t-b' }, svg);
@@ -734,7 +749,7 @@
       // 電源
       S.text(310, 392, '電流 → 明るさ（TFT が制御）', { cls: 't-c t-xs t-dim' }, svg);
       st.curBar = S.rect(200, 400, 0, 10, { rx: 3, cls: 'f-e' }, svg);
-      S.rect(200, 400, 220, 10, { rx: 3, cls: 'f-none s-rule w1' }, svg);
+      st.curBox = S.rect(200, 400, 220, 10, { rx: 3, cls: 'f-none s-rule w1' }, svg);
       // 粒
       st.es = []; st.hs = []; st.phs = [];
       for (let k = 0; k < 10; k++) {
@@ -772,6 +787,10 @@
       });
       S.text(140, 126, '青の材料がいちばん早く劣化する', { cls: 't-c t-xs t-dim' }, gb);
       S.text(140, 144, 'TFT は電流を制御（液晶は電圧）、調光は PWM も', { cls: 't-c t-xs t-dim' }, gb);
+      // 掘り下げ（下の層へ）
+      YT.drill.mark(L[5].r, { to: '02-handoutai.html#s3.3', label: '陽極（正孔）', at: [580, 317], steps: [1], bridge: '陽極から入る正孔は、電子の抜けた空席を＋の粒と見なしたもの。下の例はシリコンの結晶' });
+      YT.drill.mark(L[3].r, { to: '02-handoutai.html#s6.1', label: '発光層（再結合）', at: [600, 223], steps: [2], bridge: '発光層の光も、電子が正孔に落ちる再結合で出る。下の例は無機の pn 接合' });
+      YT.drill.mark(st.curBox, { to: '03-transistor.html#s2.4', label: 'TFT（電流を制御）', at: [436, 404], steps: [4], bridge: 'TFT が電流の量を決められるのは、ゲートの電圧でチャネルの濃さが連続的に変わるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -821,7 +840,7 @@
       const gx = 40, gy = 200, gw = 400, gh = 130;
       st.g = { gx, gy, gw, gh };
       S.text(gx, 60, '標本（数値の列）', { cls: 't-b t-lg' }, svg);
-      S.text(gx, 80, '48,000 個/秒、各 16 ビット', { cls: 't-xs t-dim t-mono' }, svg);
+      st.fmtTxt = S.text(gx, 80, '48,000 個/秒、各 16 ビット', { cls: 't-xs t-dim t-mono' }, svg);
       S.line(gx, gy, gx + gw, gy, { cls: 's-rule w1' }, svg);
       S.line(gx, gy - gh / 2 - 10, gx, gy + gh / 2 + 10, { cls: 's-rule w1' }, svg);
       S.text(gx - 3, gy - gh / 2 + 4, '+32767', { cls: 't-xs t-mono t-dim', 'text-anchor': 'end' }, svg);
@@ -854,7 +873,7 @@
         if (k < 2) S.path(`M525,${172 + k * 100} V${206 + k * 100}`, { cls: 'f-none s-dim w2', 'marker-end': mk('dim') }, svg);
         return g;
       });
-      S.path('M440,200 H466', { cls: 'f-none s-dim w2', 'marker-end': mk('dim') }, svg);
+      st.pcmArrow = S.path('M440,200 H466', { cls: 'f-none s-dim w2', 'marker-end': mk('dim') }, svg);
       S.path('M580,340 H640 V300 H660', { cls: 'f-none s-e w2', 'marker-end': mk('e') }, svg);
       st.ampTxt = S.text(525, 400, '', { cls: 't-c t-xs t-mono t-e' }, svg);
       // スピーカー断面
@@ -886,6 +905,10 @@
       S.text(sx + 160, 500, '', { cls: 't-c t-xs t-dim' }, svg);
       st.airTxt = S.text(sx + 150, 440, '', { cls: 't-c t-xs t-p t-b' }, svg);
       st.speedTxt = S.text(sx + 150, 460, '', { cls: 't-c t-xs t-dim' }, svg);
+      // 掘り下げ（下の層へ）
+      YT.drill.mark(st.fmtTxt, { to: '04-ronri.html#s6.5', label: '16 ビット（符号付き）', at: [208, 76], steps: [1], bridge: '−32,768〜32,767 の負の側は 2 の補数で表す。下の例は 4 ビットの −3' });
+      YT.drill.mark(st.pcmArrow, { to: '07-shuuhen.html#s4.3', label: 'PCM を DMA で読む', at: [454, 186], steps: [2], bridge: 'オーディオコントローラも CPU を通さずにメモリを読む。下の例は NIC が書く DMA' });
+      YT.drill.mark(st.boxes[2], { to: '03-transistor.html#s2.4', label: 'アンプ', at: [566, 322], steps: [3], bridge: 'アンプの増幅もトランジスタが担う。電流はゲートの電圧で連続的に変えられる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

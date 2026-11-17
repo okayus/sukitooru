@@ -466,6 +466,12 @@
       /* 下の板: 途中から見える中身 */
       st.bd = board(svg, 14, 290, 932, 254, 4, 40);
       st.ISPX = X(3) + W / 2;
+
+      // 掘り下げ（下の層へ）: Wi-Fi の暗号の範囲（第12章）、すり替えの手口（第13章 ARP・第17章 DNS）、TLS を運ぶ TCP（第11章）
+      YT.drill.mark(st.nodes[1], { to: '12-wifi.html#s5.5', label: 'Wi-Fi の暗号', at: [304, 52], steps: [1, 5], bridge: 'Wi-Fi の暗号が電波の区間だけなのは、端末と AP の間の鍵（PTK）でフレームを包むから' });
+      YT.drill.mark(st.bd.lines[1], { to: '13-ethernet.html#s5.3', label: 'ARP の偽装', at: [410, 388], steps: [3], bridge: 'ARP の偽装は、届いた応答の MAC をそのまま表に覚える ARP の手順につけ込む' });
+      YT.drill.mark(st.bd.lines[0], { to: '17-dns.html#s6.1', label: 'DNS の偽の答え', at: [446, 348], steps: [3], bridge: 'DNS の偽の答えも、ID と送信元ポートが合えば PC が受け取る平文の UDP の答え' });
+      YT.drill.mark(st.bd.lines[2], { to: '11-sou.html#s3.2', label: 'TLS の下の TCP', at: [640, 428], steps: [5], bridge: 'TLS のレコードも、HTTP の要求文と同じく、前に TCP ヘッダ 20 バイトが付いて送られる' });
     },
     rows(i) {
       return [
@@ -560,7 +566,7 @@
       [['AES-128', '128 ビット（16 バイト）', '10', '2^{128} ≈ 3.4×10^{38}', '使う（Chrome と YouTube の例）'], ['AES-192', '192 ビット（24 バイト）', '12', '2^{192} ≈ 6.3×10^{57}', '使わない'], ['AES-256', '256 ビット（32 バイト）', '14', '2^{256} ≈ 1.2×10^{77}', '使う']].forEach((row, r) => {
         row.forEach((s, k) => rt(b1, cx[k], 316 + r * 34, s, { cls: k === 0 ? 't-sm t-b' : 't-sm' }));
       });
-      rt(b1, 50, 420, '総当たり：毎秒 10^{18} 個の鍵を試せても、2^{128} 通りを試し終えるには約 1.1×10^{13} 年かかる', { cls: 't-sm t-b' });
+      st.brute = rt(b1, 50, 420, '総当たり：毎秒 10^{18} 個の鍵を試せても、2^{128} 通りを試し終えるには約 1.1×10^{13} 年かかる', { cls: 't-sm t-b' });
 
       /* 段階2: 1 ラウンドの 4 つの操作（ラウンド 1 の実際の値） */
       const b2 = st.b2 = S.g({ cls: 'fade hide' }, svg);
@@ -607,7 +613,8 @@
         S.line(c, 344, c, 356, { cls: 's-fg w15', 'marker-end': mk('fg') }, b4);
         S.rect(x0, 358, 410, 26, { rx: 4, cls: 'f-sf s-rule w1' }, b4);
         rt(b4, c, 375, '鍵の流れ {m|' + hx(G.ks[k]) + '}', { cls: 't-c t-xs pre' });
-        rt(b4, c, 404, '⊕ 平文 {m|"' + String.fromCharCode(...EX.req.slice(16 * k, 16 * k + n)) + '"}', { cls: 't-c t-sm pre' });
+        const xr = rt(b4, c, 404, '⊕ 平文 {m|"' + String.fromCharCode(...EX.req.slice(16 * k, 16 * k + n)) + '"}', { cls: 't-c t-sm pre' });
+        if (k === 0) st.xorT = xr;   // 掘り下げの印を付ける XOR の行
         S.line(c, 412, c, 424, { cls: 's-d w15', 'marker-end': mk('d') }, b4);
         S.rect(x0, 426, 410, 26, { rx: 4, cls: 'f-d-soft s-d w1' }, b4);
         rt(b4, c, 443, '暗号文 {m|' + hx(G.ct.slice(16 * k, 16 * k + n)) + '}', { cls: 't-c t-xs t-d t-b pre' });
@@ -621,7 +628,8 @@
       const b5 = st.b5 = S.g({ cls: 'fade hide' }, svg);
       S.rect(30, 252, 430, 282, { rx: 8, cls: 'f-sf s-rule w1' }, b5);
       [['x86-64（AES-NI と PCLMULQDQ）', 1], ['aesenc      xmm0, xmm1    ; 1 ラウンド'], ['aesenclast  xmm0, xmm2    ; 最後のラウンド'], ['pclmulqdq   xmm3, xmm4, 0 ; GHASH の掛け算'], [''], ['ARMv8（暗号拡張）', 1], ['aese   v0.16b, v1.16b     ; 鍵と XOR・SubBytes・ShiftRows'], ['aesmc  v0.16b, v0.16b     ; MixColumns'], ['pmull  v2.1q, v3.1d, v4.1d ; GHASH の掛け算']].forEach(([s, b], k) => {
-        S.text(b ? 48 : 60, 280 + k * 26, s, { cls: b ? 't-sm t-b' : 't-xs t-mono pre' }, b5);
+        const ti = S.text(b ? 48 : 60, 280 + k * 26, s, { cls: b ? 't-sm t-b' : 't-xs t-mono pre' }, b5);
+        if (k === 1) st.aesenc = ti;   // 掘り下げの印を付ける aesenc の行
       });
       S.text(490, 274, '1 コアで 1 秒に処理できる量（16 KB ずつ暗号化）', { cls: 't-sm t-b' }, b5);
       st.bars = SPEED.map(([n, v, c], k) => {
@@ -647,6 +655,12 @@
       st.kDrop = road(b6, 'M480,310 V400');
       st.kPkt = pkt(b6, '鍵 2b 7e 15 16 …', 'f-d');
       st.kCopy = pkt(b6, '写し', 'f-x');
+
+      // 掘り下げ（下の層へ）: 2ⁿ 通り（第4章）、ラウンド鍵や鍵の流れとの XOR（第4章）、命令の形（第6章）
+      YT.drill.mark(st.brute, { to: '04-ronri.html#s4.4', label: '2¹²⁸ 通り', at: [530, 416], steps: [1], bridge: '鍵が 2¹²⁸ 通りあるのは、n ビットで 2ⁿ 通りの n が 128 のとき' });
+      YT.drill.mark(st.g2[4], { to: '04-ronri.html#s3.5', label: 'AddRoundKey の XOR', at: [932, 300], steps: [2], bridge: 'AddRoundKey の XOR は、ビットごとに「どちらか一方だけ 1 なら 1」' });
+      YT.drill.mark(st.xorT, { to: '04-ronri.html#s3.5', label: '⊕ 平文（XOR）', at: [352, 400], steps: [4], bridge: '⊕ は XOR。鍵の流れと平文をビットごとに比べ、一方だけ 1 の桁を 1 にする' });
+      YT.drill.mark(st.aesenc, { to: '06-cpu.html#s2.6', label: 'aesenc（命令）', at: [318, 302], steps: [5], bridge: 'aesenc も aese も x86-64・ARMv8 の命令の 1 つ。形は足し算の命令と同じ' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -870,6 +884,9 @@
       st.road = road(gw, 'M190,436 H770');
       st.pA = pkt(gw, '', 'f-d');
       st.pB = pkt(gw, '', 'f-d');
+
+      // 掘り下げ（下の層へ）: 77 を 2 進で書く位取り（第4章）
+      YT.drill.mark(st.form1, { to: '04-ronri.html#s4.1', label: '77 の 2 進', at: [692, 396], steps: [2], bridge: '77 を 2 進で書くと 1001101。1 の桁の重み 64・8・4・1 の和になる' });
     },
     cards(i) {
       const L = [
@@ -1036,6 +1053,9 @@
       });
       S.line(740 + 84 * 0.45, 460, 740 + 84 * 0.45, 536, { cls: 's-x w15 dash' }, gv);
       S.text(744 + 84 * 0.45, 541, 'この証明書 84 日', { cls: 't-xs t-x t-b' }, gv);
+
+      // 掘り下げ: * がラベル 1 つ分に合う、名前のラベルの列（第17章。登録簿では上の層）
+      YT.drill.mark(st.rows[1].t, { to: '17-dns.html#s1.2', label: '名前の照らし合わせ', at: [524, 377], steps: [5], bridge: '* がラベル 1 つ分に合うのは、名前が点で区切ったラベルの列だから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1171,6 +1191,10 @@
         draw(g, y);
         return g;
       });
+
+      // 掘り下げ（下の層へ）: TCP と QUIC の接続の往復（第19章）
+      YT.drill.mark(st.rows[0], { to: '19-tcp.html#s2.4', label: 'TCP の 3-way', at: [232, 430], steps: [5], bridge: 'TCP ＋ TLS 1.3 で 2 往復なのは、3-way の 1 往復の後に ClientHello を送るから' });
+      YT.drill.mark(st.rows[1], { to: '19-tcp.html#s6.2', label: 'QUIC の Initial', at: [232, 474], steps: [5], bridge: 'QUIC で 1 往復なのは、最初の Initial パケットに ClientHello を入れて送るから' });
     },
     panel(i) {
       return [
@@ -1293,6 +1317,15 @@
       S.rect(30, 386, 900, 160, { rx: 8, cls: 'f-sf s-rule w1' }, gb);
       st.botT = S.text(46, 410, '', { cls: 't-sm t-b t-dim' }, gb);
       st.botR = [0, 1, 2, 3].map((k) => [S.text(46, 444 + k * 27, '', { cls: 't-xs t-b' }, gb), S.text(176, 444 + k * 27, '', { cls: 't-sm' }, gb)]);
+
+      // 掘り下げ（下の層へ）: レコードを運ぶ TCP（第19章）、ノンスの XOR（第4章）、外側のヘッダ（第18・19章）、ECH の鍵を配る DNS（第17章）
+      YT.drill.mark(st.rec[0].r, { to: '19-tcp.html#s3.1', label: 'レコードを運ぶ TCP', at: [60, 98], steps: [1], bridge: '46 バイトのレコードは、TCP のセグメントの中身として 1 バイトずつ番号を振って送る' });
+      YT.drill.mark(st.ncT[11], { to: '04-ronri.html#s3.5', label: 'IV ⊕ 番号', at: [612, 352], steps: [2], bridge: 'IV ⊕ 番号は、ビットごとの XOR。番号が 1 のビットだけ、IV のビットが反転する' });
+      YT.drill.mark(st.recNo, { to: '19-tcp.html#s3.3', label: '送らない番号', at: [750, 312], steps: [2], bridge: '番号を送らずに両端で数えられるのは、TCP が抜けを埋め、番号順に並べて渡すから' });
+      YT.drill.mark(st.botR[0][1], { to: '18-ip.html#s1.6', label: 'IP アドレス', at: [450, 440], steps: [4], bridge: '見える IP アドレスは、暗号の外側にある IPv4 ヘッダの送信元と宛先の欄' });
+      YT.drill.mark(st.botR[1][1], { to: '19-tcp.html#s1.1', label: 'ポート', at: [406, 467], steps: [4], bridge: '見えるポートは、TCP・UDP のヘッダの先頭 4 バイト。暗号はこの内側から始まる' });
+      YT.drill.mark(st.botR[2][1], { to: '17-dns.html#s6.6', label: 'ECH の鍵の配り方', at: [454, 494], steps: [5], bridge: 'ECH の公開鍵は、DNS の HTTPS レコードで接続のしかたと一緒に配る' });
+      YT.drill.mark(st.botR[0][1], { to: '19-tcp.html#s6.5', label: 'QUIC の見出し', at: [440, 440], steps: [6], bridge: 'パケット番号を別の鍵で隠すので、途中から読めるのは接続 ID と先頭 1 バイトの一部まで' });
     },
     rows(i) {
       if (i === 4) return ['ECH を使うと（www.youtube.com は 2026 年 10 月 12 日の時点で使っていない）', [['外側の SNI', '{d|共用の名前}（例 {m|cloudflare-ech.com}）'], ['本当の SNI', '{d|内側の ClientHello ごと暗号化される}'], ['鍵の配り方', 'DNS の HTTPS レコードの {m|ech=} に公開鍵を載せる'], ['www.youtube.com', '{x|HTTPS レコードは} {m|1 .}{x|（ech= なし）}']]];

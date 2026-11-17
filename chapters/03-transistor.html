@@ -402,6 +402,10 @@
       S.text(220, 36, 'S', { cls: 't-c t-xs t-dim' }, sy); S.text(220, 146, 'D', { cls: 't-c t-xs t-dim' }, sy); S.text(152, 84, 'G', { cls: 't-xs t-dim' }, sy);
       S.text(110, 120, 'nMOS', { cls: 't-b t-sm' }, sy); S.text(240, 120, 'pMOS', { cls: 't-b t-sm' }, sy);
       S.text(110, 134, 'G が高いとオン', { cls: 't-xs t-dim' }, sy); S.text(240, 134, 'G が低いとオン', { cls: 't-xs t-dim' }, sy);
+      // 掘り下げ（下の層へ）: 逆方向の接合（第2章 場面5）、コンデンサ（第1章 場面6）、抵抗と長さ・太さ（第1章 場面3）
+      YT.drill.mark(st.gJunc, { to: '02-handoutai.html#s5.2', label: '背中合わせの pn 接合', at: [704, 341], steps: [2], bridge: 'どちら向きでも止まるのは、2 つの接合の片方が必ず逆方向になり、空乏層が広がるから' });
+      YT.drill.mark(st.gOx, { to: '01-denshi.html#s6.4', label: 'ゲートの酸化膜', at: [880, 252], steps: [3], bridge: 'ゲートと基板は酸化膜を挟んで向かい合い、絶縁体を挟んだ 2 枚の板（コンデンサ）になる' });
+      YT.drill.mark(st.gDim, { to: '01-denshi.html#s3.3', label: 'ゲート長 L と幅 W', at: [480, 274], steps: [4], bridge: 'W/L が大きいほど流せるのは、導線と同じく、通り道が短く太いほど抵抗が小さいから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -459,8 +463,12 @@
       S.text(172, 84, '1.0 V', { cls: 't-xs t-mono t-dim', 'text-anchor': 'end' }, vp);
       st.status = S.text(480, 60, '', { cls: 't-c t-sm t-b' }, svg);
       st.flowTxt = S.text(480, 365, '', { cls: 't-c t-xs t-dim' }, svg);
-      // 掘り下げ（下の層へ）: チャネルの電子の出どころ（第2章 場面2 の n 型）
+      // 掘り下げ（下の層へ）: チャネルの電子の出どころ（第2章 場面2 の n 型）、逆方向の接合（第2章 場面5）、空乏層（第2章 場面4）、電子の数と電流・コンデンサ（第1章）
       YT.drill.mark(st.h.src, { to: '02-handoutai.html#s2.3', label: 'S の n 型', at: [200, 216], steps: [3, 4], bridge: 'チャネルの電子は、S と D の n 型（リンを混ぜたシリコン）から来る' });
+      YT.drill.mark(st.h.sub, { to: '02-handoutai.html#s5.2', label: '背中合わせの pn 接合', at: [480, 318], steps: [1], bridge: 'V_G = 0 で流れないのは、S と D の 2 つの接合の片方が必ず逆方向になるから' });
+      YT.drill.mark(st.dep, { to: '02-handoutai.html#s4.3', label: 'ゲート下の空乏層', at: [566, 250], steps: [2], bridge: '正孔が押し下げられた後に残るのは、pn 接合の空乏層と同じく、格子に固定された−イオン' });
+      YT.drill.mark(st.chanG, { to: '01-denshi.html#s4.1', label: 'チャネルの電子の数', at: [598, 252], steps: [4], bridge: 'チャネルの電子が増えると抵抗が下がるのは、動ける電子が多いほど大きな電流になるから' });
+      YT.drill.mark(st.gq, { to: '01-denshi.html#s6.4', label: 'ゲートの電荷', at: [636, 166], steps: [5], bridge: 'ゲートに電流が流れないのは、コンデンサと同じく、板の間の電圧が電源と等しくなると流れが止まるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -625,6 +633,12 @@
         st.stateTxt2.textContent = v ? 'オン抵抗 数百 Ω〜数 kΩ' : '漏れ電流 数 nA 以下';
       };
       st.setIn(0);
+      // 掘り下げ（下の層へ）: 輪が切れる（第1章 場面5）、チャネル（場面2）、充放電の時間・オームの法則（第1章）、p 型の正孔（第2章 場面3）
+      YT.drill.mark(st.sym.g, { to: '01-denshi.html#s5.2', label: 'オフの nMOS', at: [352, 230], steps: [2], bridge: 'nMOS が切れると電子が輪のどこも動かないのは、スイッチを開いたときと同じく押し合いの連鎖が切れるから' });
+      YT.drill.mark(st.sym.g, { to: '03-transistor.html#s2.3', label: 'オンの nMOS', at: [352, 230], steps: [3], bridge: 'ゲート 1 V で輪がつながるのは、しきい値を超えて S と D の間に反転層（チャネル）ができるから' });
+      YT.drill.mark(st.gWave, { to: '01-denshi.html#s6.5', label: '切り替えの時間', at: [820, 62], steps: [4], bridge: '1 回の切り替えが数十ピコ秒かかるのは、ゲートの容量の充放電に、抵抗と容量で決まる時間がかかるから' });
+      YT.drill.mark(st.gChain, { to: '01-denshi.html#s3.5', label: '抵抗とドレイン電圧', at: [640, 116], steps: [5], bridge: 'ドレインの電圧が入力の逆になるのは、電流が流れたときだけ抵抗 R に電圧がかかるから（オームの法則）' });
+      YT.drill.mark(st.pp.g, { to: '02-handoutai.html#s3.3', label: 'pMOS の正孔', at: [874, 256], steps: [6], bridge: 'pMOS で流れる正孔は、p 型の S・D で多数キャリアになっている、＋の粒として扱う空席' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -720,7 +734,7 @@
       // 容量
       S.line(560, 230, 600, 230, { cls: 's-fg w2' }, g);
       S.line(600, 230, 600, 258, { cls: 's-fg w2' }, g);
-      S.line(576, 258, 624, 258, { cls: 's-fg w3' }, g);
+      st.cap = S.line(576, 258, 624, 258, { cls: 's-fg w3' }, g);
       S.line(576, 270, 624, 270, { cls: 's-fg w3' }, g);
       S.line(600, 270, 600, 300, { cls: 's-fg w2' }, g);
       ground(g, 600, 300);
@@ -774,6 +788,12 @@
         if (instant) st.burst.age = 9;
       };
       st.apply(0, true);
+      // 掘り下げ（下の層へ）: ゲートの容量（場面1）、コンデンサの充電・放電と直列のスイッチ（第1章）、中途半端なオン（場面2）
+      YT.drill.mark(st.cap, { to: '03-transistor.html#s1.3', label: 'C（次の段のゲート）', at: [662, 262], steps: [1], bridge: '次の段のゲートが容量 C になるのは、ゲートが酸化膜を挟んで基板と向かい合う板だから' });
+      YT.drill.mark(st.cap, { to: '01-denshi.html#s6.4', label: 'C の充電', at: [662, 262], steps: [2], bridge: 'pMOS を通る充電は、電池でコンデンサを充電するのと同じ。電源（VDD）が電池に当たる' });
+      YT.drill.mark(st.cap, { to: '01-denshi.html#s6.5', label: 'C の放電', at: [662, 262], steps: [3, 5], bridge: 'nMOS を通る放電は、電池を外したコンデンサを抵抗につないで電荷を放すのと同じ' });
+      YT.drill.mark(st.nm.g, { to: '01-denshi.html#s5.5', label: '直列の pMOS と nMOS', at: [410, 262], steps: [4], bridge: 'VDD から GND への道は pMOS と nMOS の直列。どの入力でも片方がオフなので、両方閉じるときが無い' });
+      YT.drill.mark(st.nm.g, { to: '03-transistor.html#s2.4', label: '中途半端なオン', at: [410, 262], steps: [5], bridge: '切り替わりの途中は、pMOS も nMOS もゲートの電圧がしきい値を少し超え、薄いチャネルで少しずつ流す' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -892,6 +912,11 @@
       S.text(215, 400, '発熱 100〜200 W を、チップ面積 1〜4 cm² から逃がす', { cls: 't-c t-xs t-dim' }, st.gHeat);
       S.text(215, 420, '温度が上がる → 漏れ電流が増える → さらに発熱', { cls: 't-c t-xs t-x' }, st.gHeat);
       S.text(215, 440, '限界に近づくとクロックを下げる（サーマルスロットリング）', { cls: 't-c t-xs t-dim' }, st.gHeat);
+      // 掘り下げ（下の層へ）: 抵抗の発熱（第1章 場面3）、しきい値と V_G − V_th で増える電流（場面2）、トンネル効果（第5章 場面6）
+      YT.drill.mark(st.heatLbl, { to: '01-denshi.html#s3.6', label: '充放電の熱', at: [232, 400], steps: [1], bridge: '充放電の電流がトランジスタの抵抗を通るたびに出る熱は、抵抗の発熱 P = I²R と同じ' });
+      YT.drill.mark(st.pLines[3], { to: '03-transistor.html#s2.3', label: 'しきい値 V_th', at: [756, 168], steps: [3], bridge: 'VDD を V_th より下げられないのは、オンの入力（VDD）でゲートが V_th を超えないと反転層ができないから' });
+      YT.drill.mark(st.pLines[2], { to: '05-kioku.html#s6.2', label: 'ゲートのトンネル電流', at: [760, 142], steps: [4], bridge: 'ゲートの漏れは、酸化膜が薄いほど起きる。フラッシュで電子が酸化膜をすり抜けるのと同じトンネル効果' });
+      YT.drill.mark(st.pLines[0], { to: '03-transistor.html#s2.4', label: 'f を上げるのに要る V', at: [762, 90], steps: [6], bridge: 'f を上げるのに V も要るのは、速く充電するには大きな電流が要り、電流は V_G − V_th が大きいほど増えるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1109,6 +1134,10 @@
       });
       S.text(235, 450, '第4章：nMOS・pMOS を直列・並列に並べて NAND と NOR を作る', { cls: 't-c t-xs t-b' }, gn);
       S.text(235, 470, 'そこから加算器、第5章で記憶、第6章で CPU へ', { cls: 't-c t-xs t-dim' }, gn);
+      // 掘り下げ（下の層へ）: ドーピング（第2章 場面2）、導体と絶縁体の道（第1章 場面4）、ゲートとチャネル（場面2）
+      YT.drill.mark(st.implant[1], { to: '02-handoutai.html#s2.1', label: 'イオン注入', at: [842, 262], steps: [2], bridge: '打ち込んだ不純物が格子の一部を置き換え、その場所だけ n 型になる（ドーピング）' });
+      YT.drill.mark(st.gLayers, { to: '01-denshi.html#s4.4', label: '絶縁膜と銅の配線', at: [906, 420], steps: [3], bridge: '配線層は銅の道を絶縁膜で包んだもの。電線と同じく、電子は決めた道だけを通る' });
+      YT.drill.mark(st.gFin, { to: '03-transistor.html#s2.3', label: 'ゲートがチャネルを囲む', at: [560, 150], steps: [5], bridge: '囲む面が増えても原理は同じ。ゲートの電圧が酸化膜ごしに電子を集めて反転層を作る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

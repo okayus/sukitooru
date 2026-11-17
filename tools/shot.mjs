@@ -73,6 +73,8 @@ function launchChrome() {
       res();
     }));
     const kill = () => { ps.kill(); setTimeout(() => ps.kill('SIGKILL'), 5000).unref(); return gone; };
+    // timeout などで止められたときも Chrome を止めてプロファイルを消す（親を失った Chrome が残り続けないように）
+    for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.once(sig, () => { kill().then(() => process.exit(128 + os.constants.signals[sig])); });
     let buf = '', done = false;
     const timer = setTimeout(() => { if (!done) { done = true; kill().then(() => reject(new Error('Chrome が起動しない: ' + buf.slice(-400)))); } }, 15000);
     ps.stderr.on('data', (d) => {
@@ -90,6 +92,7 @@ class CDP {
       this.ws = new WebSocket(this.url);
       this.ws.addEventListener('open', () => resolve());
       this.ws.addEventListener('error', (e) => reject(e));
+      this.ws.addEventListener('close', () => { for (const p of this.pending.values()) p.rej(new Error('DevTools の接続が切れた')); this.pending.clear(); });
       this.ws.addEventListener('message', (ev) => {
         const msg = JSON.parse(ev.data);
         if (msg.id && this.pending.has(msg.id)) {
@@ -102,6 +105,7 @@ class CDP {
   }
   send(method, params = {}, sessionId) {
     const id = ++this.id;
+    if (this.ws.readyState !== 1) return Promise.reject(new Error('DevTools の接続が切れた'));
     return new Promise((res, rej) => { this.pending.set(id, { res, rej }); this.ws.send(JSON.stringify({ id, method, params, sessionId })); });
   }
   on(fn) { this.handlers.push(fn); }

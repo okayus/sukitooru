@@ -7,6 +7,8 @@
 
    - layers の col は図の列、row は列の中の高さ（0 が下。横断の列だけは左からの順）。
      同じ row の層は、だいたい同じ高さの抽象（例: OS と TCP・UDP・QUIC）。
+   - down は掘り下げの印の向き（tools/drillcheck.mjs の「下」「横」）と、輪が無いことの確かめ（layercheck）に使う。
+     2026-11-17 の P4 の棚卸しで、印が実際に頼っていた所を足した（ブラウザ・動画の圧縮 → 画面と音、伝送 → 論理回路）。
    - 場面の層は、章の既定（chapters）と、既定から外れる場面（scenes。'章-場面'）で書く。場面は層を 1 つ以上持つ。
      表紙・まとめと、場面を指さない章へのリンクは、章の既定になる。
    ブラウザでは window.YT_LAYERS、Node では module.exports。
@@ -31,15 +33,15 @@
       { id: 'display', name: '画面と音', col: 'pc', row: 7, home: '08-display.html', down: ['io', 'kioku', 'handoutai'] },
       { id: 'os', name: 'OS', col: 'pc', row: 8, home: '09-os.html', down: ['cpu', 'io', 'kioku'] },
       { id: 'runtime', name: '言語処理系', col: 'pc', row: 9, home: '10-browser.html#s5', down: ['os', 'cpu'] },
-      { id: 'browser', name: 'ブラウザ', col: 'pc', row: 10, home: '10-browser.html', down: ['runtime', 'os', 'http'] },
+      { id: 'browser', name: 'ブラウザ', col: 'pc', row: 10, home: '10-browser.html', down: ['runtime', 'os', 'http', 'display'] },
       { id: 'player', name: '動画の再生', col: 'pc', row: 11, home: '24-streaming.html#s4', down: ['codec', 'display', 'browser'] },
-      { id: 'phy', name: '伝送（電波・銅線・光）', short: '伝送', col: 'net', row: 2, home: '12-wifi.html#s1', down: ['denshi', 'handoutai'] },
+      { id: 'phy', name: '伝送（電波・銅線・光）', short: '伝送', col: 'net', row: 2, home: '12-wifi.html#s1', down: ['denshi', 'handoutai', 'ronri'] },
       { id: 'link', name: 'リンク（Wi-Fi・Ethernet・PON）', short: 'リンク', col: 'net', row: 6, home: '13-ethernet.html#s3', down: ['phy', 'io'] },
       { id: 'ip', name: 'IP と経路', col: 'net', row: 7, home: '18-ip.html', down: ['link'] },
       { id: 'transport', name: 'TCP・UDP・QUIC', col: 'net', row: 8, home: '19-tcp.html', down: ['ip', 'os'] },
       { id: 'tls', name: 'TLS', col: 'net', row: 9, home: '20-tls.html', down: ['transport'] },
       { id: 'http', name: 'HTTP と DNS', col: 'net', row: 10, home: '21-http.html', down: ['tls', 'transport'] },
-      { id: 'codec', name: '動画の圧縮', col: 'media', row: 6, home: '23-codec.html', down: ['cpu'] },
+      { id: 'codec', name: '動画の圧縮', col: 'media', row: 6, home: '23-codec.html', down: ['cpu', 'display'] },
       { id: 'delivery', name: '配信（CDN・負荷分散）', short: '配信', col: 'media', row: 9, home: '22-server.html', down: ['http', 'ip'] },
       { id: 'streaming', name: 'ストリーミング', col: 'media', row: 10, home: '24-streaming.html', down: ['http', 'codec'] },
       { id: 'type', name: '型とメモリ', col: 'cross', row: 0, home: '26-kata.html', down: ['kioku', 'cpu'] },

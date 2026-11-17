@@ -400,6 +400,12 @@
         L(7, 5, 'キーボードとマウス'), L(7, 1, 'バスの階層（USB）'), L(7, 3, '割り込み'), L(9, 1, 'カーネルとユーザー空間'), L(10, 5, 'JS とイベントループ'),
         L(10, 1, 'URL を打つ'), L(9, 3, 'システムコール'), L(9, 6, 'ネットワークスタック'), L(24, 6, '一時停止・再開'), L(8, 3, 'vsync と押してからの遅れ')
       ]);
+      // 掘り下げ（下の層へ）: 区間ごとの仕組み。USB の読み取り・割り込み（第7章）、click（第10章）、送信の道（第9章）、電波（第7章）
+      YT.drill.mark(st.lane[1], { to: '07-shuuhen.html#s5.3', label: 'USB の読み取り待ち', at: [400, 176], steps: [2], bridge: 'マウスは自分から送れず、USB ホストコントローラが 8 ms ごとに読みに来るのを待つ' });
+      YT.drill.mark(st.lane[2], { to: '07-shuuhen.html#s3.4', label: '割り込み 約 1 µs', at: [866, 236], steps: [3], bridge: '割り込みを受けた CPU は命令の切れ目で PC とフラグを保存し、ハンドラへ飛ぶ。ここまで約 1 µs' });
+      YT.drill.mark(st.lane[4], { to: '10-browser.html#s5.4', label: 'click → JS', at: [504, 316], steps: [4], bridge: '入力はタスクとして並び、メインスレッドがヒットテストで押された要素を決めて click を呼ぶ' });
+      YT.drill.mark(st.lane[5], { to: '09-os.html#s6.5', label: '名前を引く（DNS を UDP で）', at: [824, 338], steps: [5], bridge: 'DNS の問い合わせは UDP のシステムコールでカーネルに入り、UDP・IP のヘッダを付けてドライバへ進む' });
+      YT.drill.mark(st.lane[6], { to: '07-shuuhen.html#s6.5', label: '電波で送る', at: [674, 396], steps: [5], bridge: 'Wi-Fi カードの PHY がビットを電波の波形（OFDM）に変え、空いているのを確かめてから放つ' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -512,6 +518,12 @@
         L(21, 6, '実際の要求群'), L(17, 3, '再帰的な問い合わせ'), L(17, 4, 'キャッシュと TTL'), L(19, 2, '3-way ハンドシェイク'), L(20, 5, 'TLS 1.3 ハンドシェイク'),
         L(22, 3, '負荷分散（GFE）'), L(21, 4, 'HTTP/3 と Alt-Svc'), L(17, 6, 'HTTPS レコード'), L(19, 6, 'QUIC'), L(22, 5, '再生要求のサーバー側')
       ]);
+      // 掘り下げ（下の層へ）: 往復ごとの仕組み。名前（第17章）、TCP・QUIC（第19章）、TLS（第20章）、サーバーの中（第22章）
+      YT.drill.mark(st.gw.dns, { to: '17-dns.html#s4.3', label: '名前の往復', at: [150, 164], steps: [2], bridge: '名前の往復が 1 回で済むのは、ISP のフルリゾルバが答えを TTL の間覚えているから' });
+      YT.drill.mark(st.gw.tcp, { to: '19-tcp.html#s2.3', label: 'TCP の 1 往復', at: [210, 262], steps: [3], bridge: 'TCP の 1 往復は SYN と SYN/ACK。PC は ACK を返すと、すぐ続けて送れる' });
+      YT.drill.mark(st.gw.tls, { to: '20-tls.html#s5.4', label: 'TLS の 1 往復', at: [270, 262], steps: [4], bridge: 'TLS 1.3 は 1 往復で鍵と相手が決まり、ブラウザは Finished の直後に要求を送れる' });
+      YT.drill.mark(st.gw.req, { to: '22-server.html#s5.1', label: 'サーバーの中', at: [600, 342], steps: [5], bridge: 'サーバーの中では、GFE の奥のサーバーが動画の情報を集めて HTML を作る' });
+      YT.drill.mark(st.gg, { to: '19-tcp.html#s6.2', label: 'QUIC の 1 往復', at: [210, 262], steps: [6], bridge: 'QUIC は最初の送信に ClientHello を入れるので、接続と暗号が 1 往復でそろう' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -655,6 +667,14 @@
         L(11, 6, '1 つのパケットの旅'), L(12, 4, 'フレームと CSMA/CA'), L(14, 4, 'NAT'), L(14, 6, 'TTL と転送'), L(15, 4, 'PON'),
         L(15, 6, '光と電気の違い（遅延）'), L(16, 5, 'ルーターの転送'), L(18, 4, 'ホップごとに起きること'), L(16, 3, 'IX とピアリング'), L(18, 6, 'ping と traceroute')
       ]);
+      // 掘り下げ（下の層へ）: 区間ごとの仕組み。札は図の下の 2 行（st.c1・st.c2）の右と、IX の線の下
+      YT.drill.mark(st.c2, { to: '12-wifi.html#s4.3', label: 'Wi-Fi の待ち', at: [388, 390], steps: [2], bridge: '空きを待つのは、同じチャネルを全員で使うから。DIFS と乱数の分を待ってから送る' });
+      YT.drill.mark(st.c1, { to: '14-router.html#s4.2', label: 'R1 の書き換え（NAT）', at: [592, 368], steps: [2], bridge: '送信元の書き換えは NAT。内側と外側の番号の対応を表に残し、戻りをそれで戻す' });
+      YT.drill.mark(st.c1, { to: '15-hikari.html#s4.4', label: '上りの許可待ち', at: [572, 368], steps: [3], bridge: '上りは 32 軒の光が 1 本に合流するので、OLT が割り当てた時間枠の間だけ送る' });
+      YT.drill.mark(st.c1, { to: '16-internet.html#s5.4', label: '経路表を引く', at: [497, 368], steps: [4], bridge: '各ルーターは 142.250.196.110 と、いちばん長く一致する行（/15）の出口へ渡す' });
+      YT.drill.mark(st.rt.links[8], { to: '16-internet.html#s3.3', label: 'IX か直結', at: [664, 290], steps: [5], bridge: 'ISP と Google は IX か直結で BGP を張り、互いの範囲宛てを直接渡し合う' });
+      YT.drill.mark(st.c2, { to: '22-server.html#s3.3', label: '拠点の中の Maglev', at: [336, 390], steps: [5], bridge: '拠点に着いたパケットは、Maglev が 5 つ組のハッシュで選んだ GFE へ渡る' });
+      YT.drill.mark(st.c2, { to: '18-ip.html#s6.4', label: 'traceroute', at: [497, 390], steps: [6], bridge: 'traceroute は TTL を 1 から 1 ずつ増やして送り、手前のルーターから順に知らせを返させる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -712,12 +732,12 @@
       zoomAxis(svg, X4(1.6), X4(2.5), [1.6, 1.7, 1.8, 1.9, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5].map((v) => [v, v === 2.5 ? '2.5 秒' : v.toFixed(1)]), X4);
       S.text(112, ZY + 4, '拡大', { cls: 't-xs t-x t-b t-end' }, svg);
       /* 要求から受け取り終えるまでと、最初の画 */
-      S.rect(X4(RUN.post), 140, X4(RUN.postEnd) - X4(RUN.post), 16, { rx: 3, cls: 'f-d-soft s-d w1' }, svg);
+      st.respBar = S.rect(X4(RUN.post), 140, X4(RUN.postEnd) - X4(RUN.post), 16, { rx: 3, cls: 'f-d-soft s-d w1' }, svg);
       S.text((X4(RUN.post) + X4(RUN.postEnd)) / 2, 152, '応答 1.65 MB（約 1,400 個）', { cls: 't-c t-xs t-b' }, svg);
       S.text(X4(RUN.post), 172, '1.69 要求を出す', { cls: 't-xs t-mono' }, svg);
       S.text(X4(RUN.postEnd), 172, '2.29 受け取り終える', { cls: 't-xs t-mono t-end' }, svg);
       S.line(X4(RUN.first), 136, X4(RUN.first), 160, { cls: 's-x w2' }, svg);
-      S.text(X4(RUN.first) + 4, 172, '2.37 最初の画', { cls: 't-xs t-x t-b t-mono' }, svg);
+      st.firstTxt = S.text(X4(RUN.first) + 4, 172, '2.37 最初の画', { cls: 't-xs t-x t-b t-mono' }, svg);
       st.cur = S.line(X4(RUN.post), 136, X4(RUN.post), 160, { cls: 's-x w1 dash2' }, svg);
       /* 道と、区間のまとまりごとの片道（帰り）。断片を返すのは www.youtube.com ではなく配信元（例の名前） */
       st.rt = route(svg, ['配信元', 'rr1---sn-xxxxxxxx']);
@@ -741,6 +761,15 @@
         L(22, 5, '再生要求のサーバー側'), L(24, 3, 'ABR（形式を選ぶ）'), L(21, 6, '実際の要求群'), L(19, 4, 'ウィンドウと輻輳制御'), L(16, 6, 'Google に着くまで'),
         L(15, 4, 'PON（下りは放送）'), L(14, 4, 'NAT'), L(7, 4, 'DMA'), L(9, 6, 'ネットワークスタック'), L(24, 2, '断片の取得とバッファ')
       ]);
+      // 掘り下げ（下の層へ）: 送る速さ（第19章）、帰りの経路（第16章）、PON と NAT（第15・14章）、PC の中（第7・9章）、SourceBuffer（第24章）
+      YT.drill.mark(st.respBar, { to: '19-tcp.html#s4.3', label: '応答 1.65 MB', at: [740, 148], steps: [2], bridge: '1,400 個を一度には送らない。送り手は ACK が返るたびに、1 往復に送る量を広げていく' });
+      YT.drill.mark(st.glab[3], { to: '16-internet.html#s2.4', label: 'Google から局舎へ', at: [836, 218], steps: [3], bridge: '帰りの道は、ISP が広告した 203.0.113.0/24 の経路を、広告と逆向きにたどって決まる' });
+      YT.drill.mark(st.rt.nodes[1], { to: '14-router.html#s4.3', label: 'R1（宛先を戻す）', at: [202, 290], steps: [4], bridge: '戻りは外側のポートで変換表を引き、宛先を内側の番号に書き戻して LAN へ流す' });
+      YT.drill.mark(st.rt.nodes[2], { to: '15-hikari.html#s4.3', label: 'ONU（下り）', at: [263, 290], steps: [4], bridge: '下りの光は分岐の先の 32 軒に同じものが届き、ONU は自分の分だけを取り出す' });
+      YT.drill.mark(st.chain, { to: '07-shuuhen.html#s4.3', label: 'DMA でメモリへ', at: [356, 340], steps: [5], bridge: 'Wi-Fi カードは届いたフレームを、ディスクリプタが指すメモリへ自分で書く' });
+      YT.drill.mark(st.chain, { to: '07-shuuhen.html#s3.6', label: '割り込みを束ねる', at: [486, 340], steps: [5], bridge: '1 秒に 2,000 個を超えるので、何個分かをまとめて 1 回だけ割り込み、あとはまとめて読む' });
+      YT.drill.mark(st.chain, { to: '09-os.html#s6.3', label: 'IP・UDP を外す', at: [616, 340], steps: [5], bridge: 'カーネルはヘッダを外側から外し、プロトコル番号とポート番号で受け取るソケットを探す' });
+      YT.drill.mark(st.firstTxt, { to: '24-streaming.html#s2.2', label: '2.37 最初の画', at: [880, 168], steps: [6], bridge: '最初の画が応答の最後を待たないのは、届いたそばから SourceBuffer に入れるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -848,6 +877,14 @@
         L(20, 6, '暗号化された通信'), L(24, 2, '断片の取得とバッファ'), L(10, 6, 'video と MSE'), L(24, 4, 'デコード'), L(23, 1, '画素と色（YUV）'),
         L(24, 5, '表示と音声の時計'), L(8, 2, 'GPU と合成'), L(8, 3, '走査と vsync'), L(23, 6, '音声とコンテナ'), L(8, 6, '音（PCM → DAC）')
       ]);
+      // 掘り下げ（下の層へ）: 持ち場ごとの仕組み。AEAD（第20章）、MSE（第10章）、動き補償と MDCT（第23章）、vsync と DAC（第8章）、書き換えの選び方（第24章）
+      YT.drill.mark(st.b.dec, { to: '20-tls.html#s6.6', label: 'パケットをほどく（AEAD）', at: [282, 262], steps: [1], bridge: 'QUIC のパケットは 1 個ずつ、ハンドシェイクで作った鍵で開き、タグで改ざんを確かめる' });
+      YT.drill.mark(st.b.sbv, { to: '10-browser.html#s6.3', label: '映像の断片', at: [481, 258], steps: [2], bridge: 'JS は取り出した断片を appendBuffer で SourceBuffer に渡し、再生できる区間を増やす' });
+      YT.drill.mark(st.b.vdec, { to: '23-codec.html#s4.3', label: 'フレームに分けて解く', at: [679, 258], steps: [3], bridge: '解くとは、参照フレームからベクトルの指す所を写し、送られた差分を足して画を組み立てること' });
+      YT.drill.mark(st.b.comp, { to: '08-display.html#s3.4', label: 'RGB にして合成', at: [876, 258], steps: [4], bridge: '合成した 1 枚は、走査の切れ目（vsync）を待ってフロントとバックを入れ替えて出る' });
+      YT.drill.mark(st.b.adec, { to: '23-codec.html#s6.1', label: 'Opus を解く', at: [679, 336], steps: [5], bridge: 'Opus を解くとは、帯域ごとの MDCT の係数を戻し、48 kHz の標本の列に変え直すこと' });
+      YT.drill.mark(st.b.dac, { to: '08-display.html#s6.2', label: 'DAC → アンプ', at: [876, 360], steps: [5], bridge: 'PCM の数値は、音声チップが 48 kHz の速さで DAC に送り、電圧に戻す' });
+      YT.drill.mark(st.mk2, { to: '24-streaming.html#s5.4', label: '画面の書き換え', at: [766, 166], steps: [6], bridge: 'どの書き換えでどの画を出すかは、その 16.7 ms を最も長く覆う画で決める' });
     },
     onStep(ctx, i) {
       const st = ctx.state, b = st.b;
@@ -911,7 +948,7 @@
         st.rows[k] = g;
       });
       S.line(X6(RUN.first), 36, X6(RUN.first), 176, { cls: 's-x w2' }, svg);
-      S.text(X6(RUN.first) + 5, 48, '最初の画', { cls: 't-xs t-x t-b' }, svg);
+      st.firstLbl = S.text(X6(RUN.first) + 5, 48, '最初の画', { cls: 't-xs t-x t-b' }, svg);
       S.text(X6(RUN.first) + 5, 61, '2.37 秒', { cls: 't-xs t-x t-mono' }, svg);
       S.line(X6(0), 178, X6(2.5), 178, { cls: 's-mid w1' }, svg);
       [0, 0.5, 1, 1.5, 2, 2.5].forEach((t) => {
@@ -933,6 +970,13 @@
         }
       });
       S.text(150, 520, '時間はどれも第21章の回の実測（主なものだけ）で、「配信元へ」は generate_204 を出してから応答まで。', { cls: 't-xs t-dim' }, svg);
+      // 掘り下げ（下の層へ）: 時間軸の要所から、その区間を拡大した場面（場面2・4・5）と、下で働く CPU のクロック（第6章）・JS の実行（第10章）へ
+      YT.drill.mark(st.rows.conn, { to: '25-tooshi.html#s2.1', label: '接続（0〜0.13 秒）', at: [362, 50], steps: [1, 5], bridge: '最初の 0.13 秒は、名前・TCP・TLS・要求の 4 往復と、サーバーの中の時間' });
+      YT.drill.mark(st.firstLbl, { to: '06-cpu.html#s5.1', label: '最初の画 2.37 秒', at: [926, 54], steps: [2], bridge: '2.37 秒の間も、CPU は水晶と PLL が作るクロックの拍ごとに値を取り込んで進む' });
+      YT.drill.mark(st.rows.js, { to: '10-browser.html#s5.1', label: 'JS・CSS', at: [618, 102], steps: [3], bridge: '約 14 MB の JS は、V8 がバイトコードにして動かし、何度も走る関数を機械語にする' });
+      YT.drill.mark(st.rows.post, { to: '25-tooshi.html#s4.2', label: '断片（1.65 MB）', at: [640, 152], steps: [4], bridge: '断片の 1.65 MB は約 1,400 個のパケットに分かれ、来た道を逆にたどって家に届く' });
+      YT.drill.mark(st.rows.g204, { to: '25-tooshi.html#s2.6', label: '配信元へ', at: [736, 127], steps: [5], bridge: '配信元へは HTTPS レコードを見て最初から QUIC でつなぎ、接続と暗号が 1 往復でそろう' });
+      YT.drill.mark(st.firstLbl, { to: '25-tooshi.html#s5.1', label: '最初の画 2.37 秒', at: [926, 54], steps: [6], bridge: '断片が届いてから最初の画までに、暗号をほどき、SourceBuffer に入れ、解いて合成する' });
     },
     onStep(ctx, i) {
       const st = ctx.state, [rows, spans, [c0, c1]] = LIT6[i];

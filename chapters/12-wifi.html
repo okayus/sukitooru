@@ -275,7 +275,7 @@
       S.text(180, 70, '送信アンテナ', { cls: 't-c t-b' }, svg);
       S.text(180, 88, 'Wi-Fi カードの出口', { cls: 't-c t-xs t-dim' }, svg);
       st.tx = antenna(svg, 180, 110, 360, 9);
-      S.circle(180, 400, 22, { cls: 'f-sf s-fg w2' }, svg);
+      st.osc = S.circle(180, 400, 22, { cls: 'f-sf s-fg w2' }, svg);
       st.srcWave = S.path('', { cls: 'f-none s-e w2' }, svg);
       S.text(180, 440, '2.4 GHz の交流', { cls: 't-c t-xs t-dim' }, svg);
       S.text(180, 455, '（送信回路）', { cls: 't-c t-xs t-dim' }, svg);
@@ -331,6 +331,10 @@
       S.text((wx + wx2) / 2, 472, 'Wi-Fi 2.4 / 5 / 6 GHz（電子レンジ 2.45 GHz も）', { cls: 't-c t-xs t-x t-b' }, st.wifiBand);
       S.text(480, 548, '周波数（対数目盛）。受信回路は同調で自分の帯だけを選ぶ', { cls: 't-c t-xs t-dim' }, st.spec);
       st.f = 0.8; st.lambda = 70;
+      // 掘り下げ（下の層へ）: アンテナの電子の往復は交流（第1章 場面6）、2.4 GHz の作り方（第6章 場面5 の PLL）、受信アンテナの電流（第1章 場面2）
+      YT.drill.mark(st.tx.g, { to: '01-denshi.html#s6.1', label: '送信アンテナ', at: [200, 112], steps: [1], bridge: '2.4 GHz の交流も、電圧の向きが周期的に入れ替わり、導線の電子がその場で往復する' });
+      YT.drill.mark(st.osc, { to: '06-cpu.html#s5.1', label: '2.4 GHz の交流', at: [210, 380], steps: [1], bridge: '送信回路の 2.4 GHz も、水晶振動子の振動を PLL で数十倍にして作る' });
+      YT.drill.mark(st.rx.g, { to: '01-denshi.html#s2.3', label: '受信アンテナ', at: [782, 112], steps: [4], bridge: '受信アンテナの電流も、電波の電場に押された電子の平均の動き（ドリフト）' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -406,7 +410,7 @@
       }
       st.bitHl = S.rect(60, 48, 20, 28, { rx: 3, cls: 'f-none s-x w2' }, svg);
       // 波形
-      S.rect(60, 100, 540, 230, { rx: 6, cls: 'f-sf s-rule w1' }, svg);
+      st.wavePanel = S.rect(60, 100, 540, 230, { rx: 6, cls: 'f-sf s-rule w1' }, svg);
       S.line(70, 215, 590, 215, { cls: 's-rule w1' }, svg);
       st.symLines = S.g({}, svg);
       st.wave = S.path('', { cls: 'f-none s-r w2' }, svg);
@@ -445,6 +449,8 @@
       st.snrTxt = S.text(780, 394, '', { cls: 't-c t-xs t-x' }, svg);
       st.snrTxt2 = S.text(780, 410, '', { cls: 't-c t-xs t-x t-b' }, svg);
       st.errCount = 0;
+      // 掘り下げ（下の層へ）: I と Q の数値を電圧にする DAC（第8章 場面6）
+      YT.drill.mark(st.wavePanel, { to: '08-display.html#s6.2', label: '搬送波の波形', at: [584, 116], steps: [4], bridge: '送信側の I と Q の数値は、DAC が比例した電圧に変え、cos・sin の波の大きさになる' });
     },
     modeFor(i) {
       // 段階ごとに表示する方式（時間で巡回するものもある）
@@ -619,6 +625,9 @@
         S.text(360, y, r[2], { cls: 't-xs t-dim' }, st.formula);
       });
       S.text(380, 180, '980 × 10 × 5/6 ÷ 13.6 µs ≒ 600.5 Mbps　（2 ストリームで 1,201 Mbps、160 MHz・2 ストリームで 2,402 Mbps）', { cls: 't-c t-sm t-mono t-d' }, st.formula);
+      // 掘り下げ（下の層へ）: サブキャリア 1 本ずつに乗せる QAM（場面2）
+      YT.drill.mark(st.multi, { to: '12-wifi.html#s2.3', label: 'サブキャリアの値', at: [840, 130], steps: [2], bridge: 'サブキャリアは 1 本ずつ、シンボルごとに QAM の点を 1 つ選んで送る' });
+      YT.drill.mark(st.formula, { to: '12-wifi.html#s2.3', label: '1 サブキャリアのビット数', at: [600, 264], steps: [6], bridge: '1 サブキャリアの 10 ビットは、1024 点の QAM で 1 シンボルが運ぶビット数' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -847,6 +856,12 @@
         bx2 += w;
       });
       S.text(880, 545, '16 個まとめると本体の割合は約 63% に上がる', { cls: 't-xs t-x t-b', 'text-anchor': 'end' }, st.brk);
+      // 掘り下げ（下の層へ）: フレームを電波に乗せる OFDM（場面3）、聞く・混ざる・壊れる仕組み（場面1・2）、600 Mbps の出どころ（場面3）
+      YT.drill.mark(st.frameG, { to: '12-wifi.html#s3.2', label: '802.11 フレーム', at: [46, 373], steps: [1], bridge: 'フレームはプリアンブルから順に、OFDM のシンボルに分けてサブキャリアに乗せて送る' });
+      YT.drill.mark(st.nodes.A.g, { to: '12-wifi.html#s1.4', label: '端末 A が聞く', at: [212, 258], steps: [2, 3], bridge: 'チャネルを聞くのは、受信アンテナに届いた増幅前 µV〜mV の弱い信号を測ること' });
+      YT.drill.mark(st.nodes.AP.g, { to: '12-wifi.html#s1.5', label: 'AP での衝突', at: [542, 62], steps: [2], bridge: '同じチャネルの 2 台の電波は周波数が同じなので、受信側の同調では選り分けられない' });
+      YT.drill.mark(st.nodes.AP.g, { to: '12-wifi.html#s2.5', label: '雑音で壊れたフレーム', at: [542, 62], steps: [4], bridge: '雑音でフレームが壊れるのは、受信点がずれて隣の点と取り違えたビットが出るから' });
+      YT.drill.mark(st.brk, { to: '12-wifi.html#s3.6', label: 'データ 1,500 B の時間', at: [680, 337], steps: [6], bridge: '本体の 20 µs は 1,500 バイト ÷ 600 Mbps。この速度はサブキャリアの数とシンボル時間で決まる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -945,7 +960,7 @@
       st.mk = mk;
       const XS = 200, XA = 620;
       st.XS = XS; st.XA = XA;
-      box(svg, XS - 60, 30, 120, 40, '端末（PC）', 'MAC 3C:4D:…:81', 'f-sf s-rule w15');
+      st.staBox = box(svg, XS - 60, 30, 120, 40, '端末（PC）', 'MAC 3C:4D:…:81', 'f-sf s-rule w15');
       box(svg, XA - 60, 30, 120, 40, 'AP', 'BSSID 02:…:F0', 'f-fg s-fg w1', 't-sm t-sf');   // 第13章の無線部と同じ AP
       svg.lastChild.querySelectorAll('text')[1].setAttribute('class', 't-c t-xs t-sf');
       S.line(XS, 70, XS, 540, { cls: 's-rule w1', 'stroke-dasharray': '4 4' }, svg);
@@ -979,13 +994,17 @@
       S.rect(294, 420, 70, 40, { cls: 'f-sf s-rule w1' }, st.enc);
       S.text(329, 438, 'CCMP', { cls: 't-c t-xs t-b' }, st.enc);
       S.text(329, 452, 'PN 48 bit', { cls: 't-c t-xs t-dim' }, st.enc);
-      S.rect(366, 420, 250, 40, { cls: 'f-d-soft s-d w1' }, st.enc);
+      st.encBody = S.rect(366, 420, 250, 40, { cls: 'f-d-soft s-d w1' }, st.enc);
       st.cipher = S.text(491, 445, '', { cls: 't-c t-xs t-mono t-d' }, st.enc);
       S.text(491, 412, 'AES-CCMP で暗号化された中身', { cls: 't-c t-xs t-d t-b' }, st.enc);
       S.rect(618, 420, 50, 40, { cls: 'f-x-soft s-x w1' }, st.enc);
       S.text(643, 444, 'MIC', { cls: 't-c t-xs t-b' }, st.enc);
       S.text(60, 485, '盗聴者が見えるもの：ヘッダ（誰と誰が、いつ、何バイト）。見えないもの：中身。改ざんすると MIC が合わず捨てられる。', { cls: 't-xs t-dim' }, st.enc);
       S.text(60, 503, 'PN（パケット番号）は毎フレーム増え、同じ鍵でも同じ暗号文が二度と出ない。再生攻撃も PN で弾く。', { cls: 't-xs t-dim' }, st.enc);
+      // 掘り下げ（下の層へ）: スキャンは同調の切り替え（場面1）、暗号の中身（第20章 場面2・3）
+      YT.drill.mark(st.staBox, { to: '12-wifi.html#s1.5', label: '端末のスキャン', at: [268, 36], steps: [1], bridge: 'チャネルを順に聞くスキャンは、受信の同調を各チャネルの周波数へ順に合わせること' });
+      YT.drill.mark(st.encBody, { to: '20-tls.html#s2.4', label: 'AES-CCMP の中身', at: [604, 410], steps: [5], bridge: 'CCMP も、PN を含むノンスと番号のカウンタを AES で暗号化して XOR する。改ざん検知は GCM と別の計算' });
+      YT.drill.mark(st.keys.pmk, { to: '20-tls.html#s3.3', label: 'PMK（SAE）', at: [926, 166], steps: [6], bridge: 'SAE も楕円曲線の上で、秘密の数を見せずに両者が同じ点にたどり着き、そこから PMK を作る' });
     },
     msgList(i) {
       // [from, to, label, y] のリスト。from/to は 'S' か 'A'
@@ -1113,7 +1132,7 @@
       S.rect(78, 288, 44, 24, { rx: 4, cls: 'f-x-soft s-x w1' }, st.intf);
       S.text(100, 304, 'レンジ', { cls: 't-c t-xs t-b' }, st.intf);
       // 受信強度の表示
-      const mg = S.g({ transform: 'translate(40,450)' }, svg);
+      const mg = st.meter = S.g({ transform: 'translate(40,450)' }, svg);
       S.text(0, 0, '受信電力 RSSI', { cls: 't-xs t-dim' }, mg);
       S.rect(0, 8, 240, 12, { rx: 3, cls: 'f-in s-rule w1' }, mg);
       st.rssiBar = S.rect(0, 8, 0, 12, { rx: 3, cls: 'f-r' }, mg);
@@ -1212,6 +1231,10 @@
         S.text(16, y + 40, note, { cls: 't-xs t-dim' }, bg);
       });
       S.text(170, 392, '実測の転送速度 ≒ PHY 速度 × 0.5〜0.6', { cls: 't-c t-xs t-x t-b' }, bg);
+      // 掘り下げ（下の層へ）: 受信電力（場面1）、変調と雑音（場面2）、サブキャリアの本数（場面3）
+      YT.drill.mark(st.meter, { to: '12-wifi.html#s1.4', label: '受信電力 RSSI', at: [128, 446], steps: [1], bridge: 'RSSI（dBm）は、電波が受信アンテナの電子を揺らして生む信号の強さ' });
+      YT.drill.mark(st.tg, { to: '12-wifi.html#s2.5', label: 'MCS の必要 SNR', at: [926, 54], steps: [2], bridge: '必要 SNR が変調ごとに違うのは、点が密なほど小さな雑音で隣の点と取り違えるから' });
+      YT.drill.mark(st.cg, { to: '12-wifi.html#s3.6', label: 'チャネル幅', at: [900, 226], steps: [3], bridge: 'チャネル幅を倍にすると、同じ間隔のサブキャリアが倍の本数並び、PHY 速度も約 2 倍になる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

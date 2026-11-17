@@ -336,6 +336,12 @@
       st.wanPkt = pkt(svg, '外へ', 'f-d');
       st.info = S.text(480, 500, '', { cls: 't-c t-sm t-dim' }, svg);
       st.info2 = S.text(480, 522, '', { cls: 't-c t-sm t-dim' }, svg);
+      // 掘り下げ（下の層へ）: スイッチとブリッジ（第13章 場面4・6）、ONU（第15章 場面3）、設定を残すフラッシュ（第5章 場面6）
+      YT.drill.mark(st.sw, { to: '13-ethernet.html#s4.3', label: 'スイッチチップ', at: [584, 104], steps: [1], bridge: 'スイッチチップは届いたフレームの宛先 MAC で表を引き、1 ポートだけに転送する' });
+      YT.drill.mark(st.wl, { to: '12-wifi.html#s4.1', label: '無線部（アクセスポイント）', at: [746, 284], steps: [1], bridge: 'アクセスポイントは、パケットを 802.11 フレームに包み、プリアンブルを付けて電波に乗せる' });
+      YT.drill.mark(st.bridge, { to: '13-ethernet.html#s6.4', label: 'LAN 側のブリッジ', at: [815, 428], steps: [2], bridge: 'LAN 側のブリッジは、MAC 表を引いて無線と有線のポートへフレームを配る' });
+      YT.drill.mark(st.onu, { to: '15-hikari.html#s3.5', label: 'ONU', at: [136, 296], steps: [3], bridge: 'WAN ポートの先の ONU が扱うのは、光と電気の変換と PON の上でフレームを運ぶリンク層まで' });
+      YT.drill.mark(st.mem, { to: '05-kioku.html#s6.6', label: 'フラッシュの設定', at: [536, 284], steps: [4], bridge: '設定がフラッシュに残るのは、浮遊ゲートに閉じ込めた電子が電源を切っても出られないから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -431,6 +437,9 @@
       // 段階6: 行き先の札
       st.uses = S.g({ cls: 'fade hide' }, svg);
       [['自分の名前', 224], ['→ 場面3', 245], ['→ 場面3', 266], ['→ 第17章', 287]].forEach(([s, y]) => S.text(268, y + 4, s, { cls: 't-xs t-x t-b' }, st.uses));
+      // 掘り下げ（下の層へ）: 全員宛てと MAC 宛てのフレームをスイッチが配る仕組み（第13章 場面4）
+      YT.drill.mark(st.msgs[0].g, { to: '13-ethernet.html#s4.4', label: 'DISCOVER（全員宛て）', at: [580, 104], steps: [1], bridge: '全員宛ての DISCOVER は、スイッチが表に関係なく全ポートへ複製する' });
+      YT.drill.mark(st.msgs[1].g, { to: '13-ethernet.html#s4.3', label: 'OFFER（MAC 宛て）', at: [560, 174], steps: [2], bridge: 'PC の MAC 宛てのフレームは、スイッチが表で PC のポートだけに送る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -493,7 +502,7 @@
       // ネットワーク部は LAN 側の値（d）、一致しない相手は x、ホスト部は無色
       S.text(230, 40, '自分（PC）', { cls: 't-c t-sm t-b' }, svg);
       oct(svg, 120, 52, ['192', '168', '1', '10'], 'f-d-soft s-d w1', 'f-sf s-dim w1', 'IP');
-      oct(svg, 120, 86, ['255', '255', '255', '0'], 'f-in s-rule w1', 'f-in s-rule w1', 'AND マスク');
+      st.maskRow = oct(svg, 120, 86, ['255', '255', '255', '0'], 'f-in s-rule w1', 'f-in s-rule w1', 'AND マスク');
       S.line(110, 120, 370, 120, { cls: 's-fg w1' }, svg);
       oct(svg, 120, 126, ['192', '168', '1', '0'], 'f-d-soft s-d w1', 'f-in s-rule w1', '＝ ネットワーク');
       S.text(230, 174, 'ネットワーク部 24 ビット（/24）　ホスト部 8 ビット', { cls: 't-c t-xs t-dim' }, svg);
@@ -545,6 +554,10 @@
       S.text(580, 392, 'PC の経路表', { cls: 't-c t-xs t-b t-dim' }, st.routes);
       st.rtRt = table(st.routes, 720, 400, 200, [8, 118], ['宛先', '出口'], [['192.168.1.0/24', 'LAN（ブリッジ）'], ['0.0.0.0/0', 'WAN（ISP）']], { rh: 20 });
       S.text(820, 392, 'ルーターの経路表', { cls: 't-c t-xs t-b t-dim' }, st.routes);
+      // 掘り下げ（下の層へ）: ビットごとの AND（第4章 場面3）、宛先 MAC を調べる ARP とその届く範囲（第13章 場面5・4）
+      YT.drill.mark(st.maskRow, { to: '04-ronri.html#s3.3', label: 'AND マスク', at: [380, 99], steps: [1], bridge: 'IP とマスクのビットごとの AND は、1 桁ずつ AND ゲートに通すのと同じ。両方 1 の桁だけが 1 になる' });
+      YT.drill.mark(st.frame, { to: '13-ethernet.html#s5.2', label: '宛先 MAC', at: [226, 458], steps: [2, 4], bridge: '宛先 MAC は ARP で調べる。全員に IP を尋ね、その IP を持つ 1 台だけが MAC を答える' });
+      YT.drill.mark(st.sw, { to: '13-ethernet.html#s4.4', label: 'ブリッジの範囲', at: [386, 264], steps: [3], bridge: 'ARP はブロードキャストなので、届くのは同じブリッジ（L2 セグメント）の機器だけ' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -604,7 +617,7 @@
       S.rect(300, 70, 360, 360, { rx: 10, cls: 'f-in s-rule w15' }, svg);
       S.text(480, 60, 'ルーター', { cls: 't-c t-b t-lg' }, svg);
       S.text(308, 92, 'LAN 側 192.168.1.1', { cls: 't-xs t-b t-d' }, svg);
-      S.text(652, 92, 'WAN 側 203.0.113.5', { cls: 't-xs t-b', 'text-anchor': 'end' }, svg);
+      st.wanTxt = S.text(652, 92, 'WAN 側 203.0.113.5', { cls: 't-xs t-b', 'text-anchor': 'end' }, svg);
       S.line(210, 152, 300, 152, { cls: 's-e w3' }, svg);
       S.line(210, 292, 300, 292, { cls: 's-e w3' }, svg);
       S.path('M660,152 H760', { cls: 'f-none s-p w4' }, svg);
@@ -643,6 +656,9 @@
       S.text(845, 215, '隣の家にも 192.168.1.10', { cls: 't-c t-xs t-x' }, st.world);
       S.text(845, 231, '向かいの家にも 192.168.1.10', { cls: 't-c t-xs t-x' }, st.world);
       S.text(845, 247, '→ 宛先として使えない', { cls: 't-c t-xs t-x t-b' }, st.world);
+      // 掘り下げ（下の層へ）: WAN 側の IP の受け取り方（第15章 場面5）、表の引き方（第27章 場面3）
+      YT.drill.mark(st.wanTxt, { to: '15-hikari.html#s5.2', label: 'WAN 側 203.0.113.5', at: [672, 86], steps: [1], bridge: 'WAN 側の 203.0.113.5 は、回線をつなぐ手順（PPPoE なら認証の後）で ISP から受け取る' });
+      YT.drill.mark(st.tbl.g, { to: '27-algorithm.html#s3.2', label: 'NAT 変換表', at: [530, 318], steps: [3], bridge: '戻りを外側ポート 40001 で引くのも、鍵から置き場所を計算するハッシュ表なら 1 回で済む' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -756,6 +772,8 @@
       st.note = S.text(480, 498, '', { cls: 't-c t-sm t-dim' }, svg);
       st.note2 = S.text(480, 518, '', { cls: 't-c t-sm t-dim' }, svg);
       st.note3 = S.text(480, 538, '', { cls: 't-c t-sm t-dim' }, svg);
+      // 掘り下げ（下の層へ）: 状態表を照らし合わせる所（第9章 場面6 のネットワークスタック）
+      YT.drill.mark(st.tbl.g, { to: '09-os.html#s6.3', label: '状態表（conntrack）', at: [560, 368], steps: [2], bridge: '状態表は、ルーターの Linux がパケットを IP 層で受け取る途中で照らし合わせる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -887,6 +905,10 @@
       // 段階5 の流れる印
       st.cursor = S.rect(0, 0, 150, 60, { rx: 6, cls: 'f-none s-x w3', style: { opacity: 0 } }, svg);
       st.hopTxt = S.text(500, 342, '', { cls: 't-sm t-b t-x' }, svg);   // 点線の矢印の右に置く
+      // 掘り下げ（下の層へ）: 宛先 MAC で受け取る NIC（第7章 場面6）、タイプ欄（第13章 場面3）、次の区間の宛先 MAC（第13章 場面5）
+      YT.drill.mark(st.in.cells.dmac.g, { to: '07-shuuhen.html#s6.4', label: '宛先 MAC（自分）', at: [46, 115], steps: [1], bridge: '宛先 MAC が自分かは、ルーターの NIC が受け取るときに確かめ、合うものだけをメモリへ書く' });
+      YT.drill.mark(st.in.cells.type.g, { to: '13-ethernet.html#s3.4', label: 'タイプ IPv4', at: [312, 84], steps: [1], bridge: 'Ethernet をはがして IP として読むのは、タイプ欄が 0x0800（IPv4）だから' });
+      YT.drill.mark(st.out.cells.dmac.g, { to: '13-ethernet.html#s5.5', label: 'WAN 側の宛先 MAC', at: [46, 445], steps: [4], bridge: 'WAN 側の宛先 MAC も、家の中と同じく次のルーターのアドレスから調べる（IPoE なら ARP か NDP）' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

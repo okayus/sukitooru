@@ -278,6 +278,7 @@
       st.parts = S.g({ cls: 'fade hide' }, svg);
       const cw = 9.0, x0 = 88;
       const segs = [['スキーム', 0, 5, 'https', 'どう話すか。TLS の上の HTTP（第20・21章）'], ['ホスト', 8, 23, 'www.youtube.com', '誰に。DNS で IP アドレスへ（第17章）'], ['パス', 23, 29, '/watch', '何を。HTTP の要求に入る（第21章）'], ['クエリ', 29, 43, '?v=dQw4w9WgXcQ', '条件。動画の ID をサーバーに渡す']];
+      st.partNotes = [];   // 部品の説明の文（掘り下げの印を付ける）
       segs.forEach(([name, a, b, val, note], i) => {
         const xa = x0 + a * cw + 1, xb = x0 + b * cw - 1;
         S.line(xa, 86, xb, 86, { cls: 's-fg w3 round' }, st.parts);
@@ -285,7 +286,7 @@
         const y = 150 + i * 30;
         S.text(96, y, name, { cls: 't-sm t-b' }, st.parts);
         S.text(170, y, val, { cls: 't-mono t-sm' }, st.parts);
-        S.text(330, y, note, { cls: 't-sm t-dim' }, st.parts);
+        st.partNotes.push(S.text(330, y, note, { cls: 't-sm t-dim' }, st.parts));
       });
       // HSTS（段階3）
       st.hsts = S.g({ cls: 'fade hide', transform: 'translate(600,150)' }, svg);
@@ -304,9 +305,9 @@
       st.bOs = box(gp, 360, 452, 240, 64, 'OS カーネル', 'ソケット・NIC（第9章・第7章）', 'f-in s-rule w1');
       st.bWorld = box(gp, 660, 452, 240, 64, 'インターネット', 'Wi-Fi・光回線・ISP・Google（第11章〜）', 'f-in s-rule w1');
       // 矢印
-      S.path('M300,348 H356', { cls: 'f-none s-fg w2', 'marker-end': mk('fg') }, gp);   // 呼び出し・依頼は無彩色
+      st.ipcArrow = S.path('M300,348 H356', { cls: 'f-none s-fg w2', 'marker-end': mk('fg') }, gp);   // 呼び出し・依頼は無彩色
       S.text(328, 340, 'IPC', { cls: 't-c t-xs t-b' }, gp);
-      S.path('M460,400 V448', { cls: 'f-none s-fg w2', 'marker-end': mk('fg') }, gp);
+      st.sysArrow = S.path('M460,400 V448', { cls: 'f-none s-fg w2', 'marker-end': mk('fg') }, gp);
       S.text(510, 428, 'システムコール', { cls: 't-xs' }, gp);
       S.path('M600,476 H656', { cls: 'f-none s-dim w2', 'marker-end': mk('dim') }, gp);
       S.path('M656,492 H600', { cls: 'f-none s-dim w2', 'marker-end': mk('dim') }, gp);
@@ -321,6 +322,15 @@
       st.reqTok = token(gp, '要求', 'f-d');
       st.resTok = token(gp, '応答', 'f-d');
       st.flowTxt = S.text(480, 544, '', { cls: 't-c t-sm t-dim' }, gp);
+      // 掘り下げ（下の層へ）: 打った文字（第7章 キーボード）、ホストの DNS（第17章）、パスの要求行（第21章）、
+      // HSTS が避ける書き換え（第20章）、IPC とシステムコール（第9章）、レンダラのプロセス（第9章）
+      YT.drill.mark(st.urlTxt, { to: '07-shuuhen.html#s5.4', label: 'アドレスバーの文字', at: [100, 22], steps: [1], bridge: '打った 1 文字は、OS がキーコードを文字に直し、入力フォーカスのあるウィンドウへ渡したもの' });
+      YT.drill.mark(st.partNotes[1], { to: '17-dns.html#s1.1', label: 'ホスト', at: [548, 176], steps: [2], bridge: 'ホスト www.youtube.com は、接続の前に番号に変える。IP ヘッダの宛先欄には番号しか書けない' });
+      YT.drill.mark(st.partNotes[2], { to: '21-http.html#s1.1', label: 'パスとクエリ', at: [548, 206], steps: [2], bridge: 'パスとクエリ /watch?v=… は、HTTP の要求行の「対象」の欄にそのまま入る' });
+      YT.drill.mark(st.hsts, { to: '20-tls.html#s1.2', label: 'HSTS', at: [906, 142], steps: [3], bridge: '送る前に https:// に直すのは、平文の要求なら途中の機器が中身を書き換えて送り直せるから' });
+      YT.drill.mark(st.ipcArrow, { to: '09-os.html#s2.5', label: 'IPC（Mojo）', at: [330, 318], steps: [4], bridge: 'IPC はプロセスの間の通信。Mojo の命令は、カーネル経由のパイプや UNIX ドメインソケットで運ぶ' });
+      YT.drill.mark(st.sysArrow, { to: '09-os.html#s3.1', label: 'システムコール', at: [602, 426], steps: [4], bridge: 'ネットワークサービスがソケットを使うたびに、番号と引数をレジスタに置いて syscall を実行する' });
+      YT.drill.mark(st.bRend, { to: '09-os.html#s2.1', label: 'レンダラプロセス', at: [888, 328], steps: [5], bridge: 'サイトごとのレンダラは別々のプロセス。プロセスはそれぞれ自分の仮想アドレス空間を持つ' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -396,14 +406,14 @@
       const svg = ctx.svg, st = ctx.state;
       const mk = S.markers(svg);
       // 左: ソース
-      S.text(30, 44, 'HTML（ネットワークから届く）', { cls: 't-b t-md' }, svg);
+      st.srcTitle = S.text(30, 44, 'HTML（ネットワークから届く）', { cls: 't-b t-md' }, svg);
       S.rect(30, 56, 300, 352, { rx: 6, cls: 'f-sf s-rule w1' }, svg);
       st.hl = S.rect(34, 60, 292, 22, { rx: 3, cls: 'f-d-soft' }, svg);
       st.pre = S.rect(34, 60, 292, 22, { rx: 3, cls: 'f-none s-d w1 dash' }, svg);
       st.lineEls = codeLines(svg, 40, 75, LINES.map((l) => l[0]), 24);
       // 段階1: バイト列
       st.bytes = S.g({ cls: 'fade' }, svg);
-      S.text(30, 440, 'バイト列（16進）', { cls: 't-sm t-b' }, st.bytes);
+      st.bytesTitle = S.text(30, 440, 'バイト列（16進）', { cls: 't-sm t-b' }, st.bytes);
       const hex = '3C 21 64 6F 63 74 79 70 65 20 68 74 6D 6C 3E 0A 3C 68 74 6D 6C 3E'.split(' ');
       const chs = ['<', '!', 'd', 'o', 'c', 't', 'y', 'p', 'e', '␠', 'h', 't', 'm', 'l', '>', '␊', '<', 'h', 't', 'm', 'l', '>'];
       st.hexEls = hex.map((h, k) => S.text(30 + k * 27, 466, h, { cls: 't-mono t-sm t-dim' }, st.bytes));
@@ -416,7 +426,7 @@
       S.path('M330,100 H350', { cls: 'f-none s-dim w15', 'marker-end': mk('dim') }, gm);
       st.tokBox = S.rect(352, 110, 236, 84, { rx: 6, cls: 'f-sf s-d w15' }, gm);
       st.tokTxt = S.lines(470, 138, [''], { cls: 't-c t-sm t-mono' }, gm, 18);
-      box(gm, 352, 220, 236, 40, 'ツリー構築器', '開いている要素のスタック', 'f-in s-rule w1');
+      st.treeBox = box(gm, 352, 220, 236, 40, 'ツリー構築器', '開いている要素のスタック', 'f-in s-rule w1');
       S.path('M470,194 V216', { cls: 'f-none s-dim w15', 'marker-end': mk('dim') }, gm);
       S.path('M588,240 H608', { cls: 'f-none s-dim w15', 'marker-end': mk('dim') }, gm);
       st.stackTxt = S.lines(470, 290, [''], { cls: 't-c t-xs t-mono t-dim' }, gm, 14);
@@ -453,6 +463,13 @@
       S.text(616, 446, '→ div#player のノード。見た目はまだ無い', { cls: 't-xs t-dim' }, st.js);
       S.path('M700,398 V262 H818 V247', { cls: 'f-none s-x w15 dash', 'marker-end': mk('x') }, st.js);
       st.caption = S.text(480, 548, '', { cls: 't-c t-sm t-dim' }, svg);
+      // 掘り下げ（下の層へ）: 展開済みで届く HTML（第21章 Content-Encoding）、バイトの読み方（第26章）、開いている要素のスタック（第27章）、
+      // script を実行するメインスレッド（場面5）、getElementById の探し方（第36章）
+      YT.drill.mark(st.srcTitle, { to: '21-http.html#s1.4', label: '届く HTML', at: [230, 40], steps: [1], bridge: '展開の手がかりは応答のヘッダ。Content-Encoding が本文の圧縮の方式を伝える' });
+      YT.drill.mark(st.bytesTitle, { to: '26-kata.html#s1.1', label: 'バイト列', at: [136, 436], steps: [1], bridge: '3C を「<」と読むのは UTF-8 という読み方の決まり。バイトに読み方は書かれていない' });
+      YT.drill.mark(st.treeBox, { to: '27-algorithm.html#s5.5', label: '開いている要素のスタック', at: [356, 222], steps: [3], bridge: '開いている要素のスタックは、最後に積んだものから降ろす列（LIFO）。終了タグで降ろす' });
+      YT.drill.mark(st.stop, { to: '10-browser.html#s5.2', label: 'script の実行', at: [584, 334], steps: [4], bridge: 'player.js の実行も、パーサと同じメインスレッドの仕事。1 本なので、その間パースは進まない' });
+      YT.drill.mark(st.js, { to: '36-saba-js.html#s5.3', label: 'getElementById', at: [928, 410], steps: [5], bridge: 'getElementById の小さな実装は、DOM の木を根から再帰でたどり、id の一致するノードを返す' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -590,6 +607,8 @@
       S.text(612, 444, '変わった箱だけ計算し直す（dirty な部分木）', { cls: 't-xs t-dim' }, st.relayout);
       S.text(612, 466, 'JS で offsetWidth を読む → 直前の変更を今すぐ反映する', { cls: 't-xs t-dim' }, st.relayout);
       S.text(612, 482, '必要があり、強制同期レイアウトが起きる', { cls: 't-xs t-dim' }, st.relayout);
+      // 掘り下げ（下の層へ）: 動画の箱に貼るフレーム（第8章 GPU の合成）
+      YT.drill.mark(st.bPlayer, { to: '08-display.html#s2.3', label: '動画の箱', at: [918, 74], steps: [4], bridge: 'この 1280 × 720 の箱に、GPU が合成のときに動画のフレームを拡大縮小して貼る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -674,9 +693,9 @@
       st.tileNote = S.text(420, 428, '', { cls: 't-c t-xs t-dim' }, gl);
       // 右: コンポジタ → GPU → 画面
       const gr = st.gr = S.g({ cls: 'fade hide' }, svg);
-      box(gr, 730, 60, 210, 70, 'コンポジタスレッド', '位置・透明度・変形で重ねる');
+      st.compBox = box(gr, 730, 60, 210, 70, 'コンポジタスレッド', '位置・透明度・変形で重ねる');
       box(gr, 730, 170, 210, 70, 'GPU プロセス', 'ラスタライズ（Skia）と表示');
-      box(gr, 730, 280, 210, 70, 'OS のウィンドウ合成', '他の窓と重ねる（第8章）', 'f-in s-rule w1');
+      st.osBox = box(gr, 730, 280, 210, 70, 'OS のウィンドウ合成', '他の窓と重ねる（第8章）', 'f-in s-rule w1');
       S.path('M835,130 V166', { cls: 'f-none s-dim w2', 'marker-end': mk('dim') }, gr);
       S.path('M835,240 V276', { cls: 'f-none s-dim w2', 'marker-end': mk('dim') }, gr);
       S.path('M835,350 V376', { cls: 'f-none s-dim w2', 'marker-end': mk('dim') }, gr);
@@ -696,6 +715,11 @@
       st.vsCur = S.line(300, 506, 300, 534, { cls: 's-x w2' }, st.vs);
       S.text(300, 480, '垂直同期（60 Hz）', { cls: 't-xs t-b' }, st.vs);
       st.vsNote = S.text(300, 497, '', { cls: 't-xs t-dim' }, st.vs);
+      // 掘り下げ（下の層へ）: 画素の数値（第8章 場面1）、透明度の重ね方（第8章 場面2）、OS のウィンドウ合成と垂直同期（第8章）
+      YT.drill.mark(st.tiles, { to: '08-display.html#s1.2', label: 'タイルの画素', at: [600, 318], steps: [3], bridge: 'タイルを画素にすると、1 画素ごとに R・G・B の明るさを表す 0〜255 の数が 3 つ並ぶ' });
+      YT.drill.mark(st.compBox, { to: '08-display.html#s2.2', label: 'コンポジタ', at: [930, 66], steps: [4], bridge: '透明度に従って重ねるとは、画素ごとに 出力 = α×前景 + (1−α)×背景 を計算すること' });
+      YT.drill.mark(st.osBox, { to: '08-display.html#s2.1', label: 'OS のウィンドウ合成', at: [930, 286], steps: [5], bridge: 'ブラウザが渡した 1 枚を、OS のコンポジタが壁紙・ほかの窓・カーソルと重ねる' });
+      YT.drill.mark(st.vs, { to: '08-display.html#s3.4', label: '垂直同期', at: [412, 474], steps: [5], bridge: '垂直同期に合わせるとは、画面への送り出しの切れ目まで待ってから、表示する 1 枚を入れ替えること' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -762,7 +786,7 @@
       S.text(cx, cy - 4, 'イベントループ', { cls: 't-c t-sm t-b' }, ge);
       S.text(cx, cy + 14, 'メインスレッド 1 本', { cls: 't-c t-xs t-dim' }, ge);
       // 停留所（タスクキューは題を上、説明を下に置き、間に札を並べる）
-      S.rect(40, 290, 130, 120, { rx: 6, cls: 'f-sf s-rule w1' }, ge);
+      st.queueBox = S.rect(40, 290, 130, 120, { rx: 6, cls: 'f-sf s-rule w1' }, ge);
       S.text(105, 310, 'タスクキュー', { cls: 't-c t-sm t-b' }, ge);
       S.text(105, 401, '先頭から 1 つずつ', { cls: 't-c t-xs t-dim' }, ge);
       st.queueSlot = S.g({}, ge);
@@ -798,7 +822,7 @@
       const gc = st.gClick = S.g({ cls: 'fade hide' }, svg);
       S.text(620, 200, '再生ボタンのクリックが届くまで', { cls: 't-sm t-b' }, gc);
       const hops = [['USB → OS', '第7章・第9章'], ['ブラウザプロセス', '座標 (x, y) を受け取る'], ['レンダラ（IPC）', 'コンポジタ → メインスレッドへ'], ['入力のタスクを投入', '実行時にヒットテスト → click']];
-      hops.forEach(([a, b], k) => box(gc, 620, 216 + k * 66, 300, 50, a, b, k === 3 ? 'f-d-soft s-d w1' : 'f-sf s-rule w1', 't-sm'));
+      st.hopBoxes = hops.map(([a, b], k) => box(gc, 620, 216 + k * 66, 300, 50, a, b, k === 3 ? 'f-d-soft s-d w1' : 'f-sf s-rule w1', 't-sm'));
       for (let k = 0; k < 3; k++) S.path(`M770,${266 + k * 66} V${280 + k * 66}`, { cls: 'f-none s-dim w2', 'marker-end': mk('dim') }, gc);
       // 札の道: 箱の下を回ってタスクキューの末尾（下端）へ。レンダリングの箱を横切らない
       st.clickPath = S.path('M770,273 V500 H105 V416', { cls: 'f-none s-none' }, gc);
@@ -807,7 +831,7 @@
       // 段階5: fetch
       const gf = st.gFetch = S.g({ cls: 'fade hide' }, svg);
       S.text(620, 200, 'fetch(segmentUrl)', { cls: 't-sm t-b t-mono' }, gf);
-      box(gf, 620, 216, 300, 50, 'ネットワークサービス', 'DNS と接続はホストごと初回だけ（第17〜21章）', 'f-sf s-rule w1', 't-sm');
+      st.fNet = box(gf, 620, 216, 300, 50, 'ネットワークサービス', 'DNS と接続はホストごと初回だけ（第17〜21章）', 'f-sf s-rule w1', 't-sm');
       box(gf, 620, 300, 300, 50, '応答のストリーム', '届いた分から読める（ReadableStream）', 'f-sf s-rule w1', 't-sm');
       box(gf, 620, 384, 300, 50, 'Promise の解決 → then()', 'マイクロタスクで続きが走る', 'f-d-soft s-d w1', 't-sm');
       S.path('M770,266 V296', { cls: 'f-none s-dim w2', 'marker-end': mk('dim') }, gf);
@@ -838,6 +862,15 @@
       S.text(770, 458, '→ 入力への反応と 60 fps を保てる', { cls: 't-c t-xs t-dim' }, gw);
       // キューの札
       st.qTokens = ['click', 'timer', 'fetch 応答'].map((s, k) => { const g = token(st.queueSlot, s, 'f-d', 76); g.setAttribute('transform', `translate(105,${330 + k * 22})`); return g; });
+      // 掘り下げ（下の層へ）: 機械語（第6章）、型の記録で決め打ちにする最適化（第26章）、16.7 ms の画面の周期（第8章）、
+      // タスクキュー（第27章）、クリックの道（第7章）、IPC（第9章）、Worker のスレッド（第9章）
+      YT.drill.mark(st.v8Boxes[4], { to: '06-cpu.html#s2.5', label: '機械語', at: [930, 54], steps: [1], bridge: 'JIT が作る機械語も、オペコードとオペランドのビット列。アセンブリと 1 対 1 に対応する' });
+      YT.drill.mark(st.v8Boxes[3], { to: '26-kata.html#s4.5', label: '最適化コンパイラ', at: [744, 54], steps: [1], bridge: '型の統計とは、同じ Map の物が続いた記録。最適化コンパイラはそれを前提に機械語を決め打ちにする' });
+      YT.drill.mark(st.gLong, { to: '08-display.html#s3.1', label: '1 目盛 16.7 ms', at: [918, 330], steps: [2], bridge: '1 目盛の 16.7 ms は、60 Hz の画面が 1 枚を送り出す周期。間に合わない回は前の画のまま' });
+      YT.drill.mark(st.queueBox, { to: '27-algorithm.html#s5.1', label: 'タスクキュー', at: [168, 292], steps: [3], bridge: 'タスクキューは来た順に取り出す列（FIFO）。後ろに足し、前から出す' });
+      YT.drill.mark(st.hopBoxes[0], { to: '07-shuuhen.html#s5.6', label: 'USB → OS', at: [912, 220], steps: [4], bridge: 'クリックは、マウスのレポートが USB で届き、割り込みでドライバが受け取ってから OS に入る' });
+      YT.drill.mark(st.fNet, { to: '09-os.html#s2.5', label: 'fetch の依頼（IPC）', at: [912, 220], steps: [5], bridge: 'fetch の依頼は Mojo の IPC。命令はカーネル経由の通信路で、大きなデータは共有メモリで運ぶ' });
+      YT.drill.mark(st.gWorker, { to: '09-os.html#s2.2', label: 'Web Worker', at: [912, 222], steps: [6], bridge: 'Worker は同じレンダラの中の別のスレッド。メインスレッドと同時に、別のコアで走れる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -981,6 +1014,12 @@
       stops.forEach((s, k) => box(st.road, 50 + k * 88, 500, 80, 26, s, null, 'f-in s-rule w1', 't-xs'));
       st.roadPath = S.path('M90,528 H880', { cls: 'f-none s-none' }, st.road);
       st.roadTok = token(st.road, '要求', 'f-d', 40);
+      // 掘り下げ（下の層へ）: 断片を運ぶ応答（第21章）、容器（第23章）、合成層に貼るフレーム（第8章）、PTS（第23章）、包み方（第11章）
+      YT.drill.mark(st.pFetch, { to: '21-http.html#s6.4', label: '断片の fetch', at: [922, 60], steps: [3], bridge: '断片の fetch は googlevideo.com への POST。1 つの応答に映像と音声の断片が数個ずつ入る' });
+      YT.drill.mark(st.pDemux, { to: '23-codec.html#s6.5', label: 'デマルチプレクサ', at: [922, 208], steps: [4], bridge: '容器を解くとは、断片の MP4（moof と mdat）や WebM の入れ子をたどり、フレームの符号を取り出すこと' });
+      YT.drill.mark(st.pComp, { to: '08-display.html#s2.3', label: '合成層へ', at: [786, 364], steps: [4], bridge: '合成層に貼るフレームは YUV 4:2:0 のまま。GPU が合成のときに RGB へ直し、大きさを合わせる' });
+      YT.drill.mark(st.ptsTxt, { to: '23-codec.html#s6.6', label: 'PTS', at: [916, 446], steps: [5], bridge: 'PTS は容器の中でフレームごとに持つ時刻。MP4 では断片の始まりの時刻に長さを足して求める' });
+      YT.drill.mark(st.road, { to: '11-sou.html#s3.1', label: 'HTTP・TLS・QUIC', at: [706, 486], steps: [6], bridge: 'fetch の要求は、HTTP・TLS・QUIC・IP と各層がヘッダを外側へ付けて包む（第11章の例は TCP）' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

@@ -419,6 +419,13 @@
       // ---- 動く荷札（上りは小さな無地の札を連ねて、送信が続く様子にする）
       st.upPk = [0, 1, 2, 3].map(() => pkt(svg, '', { w: 14, h: 10 }));
       st.chunkPk = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => pkt(svg, String(k + 1), { w: 22 }));
+      // 掘り下げ（下の層へ）: 塊と復号・縮小・符号化の中身（第23章）、縮小の補間（第24章 場面5）
+      YT.drill.mark(st.filmChunks, { to: '23-codec.html#s4.5', label: '塊（GOP）', at: [604, 104], steps: [2], bridge: '塊を別々の機械で変換できるのは、どの塊もキーフレームで始まり、前のフレームなしで復号を始められるから' });
+      YT.drill.mark(bDec.rect, { to: '23-codec.html#s2.5', label: '復号（1 回）', at: [371, 364], steps: [3], bridge: '塊を画素に戻す復号は、符号化の手順を逆にたどる。量子化で丸めた端数は戻らない' });
+      YT.drill.mark(bSc.rect, { to: '24-streaming.html#s5.2', label: '縮小', at: [454, 364], steps: [3], bridge: '縮小も拡大と同じく、新しい画素の値を元の画像の周りの画素から計算して作る' });
+      YT.drill.mark(st.pCodec, { to: '23-codec.html#s5.5', label: '符号化の重さ', at: [446, 282], steps: [4], bridge: '新しいコーデックの符号化が重いのは、試す候補（ブロックの分け方・予測・変換）が多いから' });
+      YT.drill.mark(st.pVCU, { to: '23-codec.html#s4.2', label: '符号化の回路', at: [572, 314], steps: [5], bridge: '回路 1 個が受け持つ符号化の計算の多くは、参照フレームから似たブロックを探す動き探索' });
+      YT.drill.mark(st.pPop, { to: '23-codec.html#s5.5', label: '計算を多くかける', at: [568, 306], steps: [6], bridge: '人気の動画に計算をかけるのは、候補を多く試すほど同じ画質に要るビットが減るから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -611,6 +618,9 @@
       st.dots = [];
       for (let k = 0; k < 9; k++) st.dots.push(S.circle(0, 0, 5, { cls: 'f-d', style: { opacity: 0 } }, svg));
       st.copyPk = [0, 1, 2].map(() => pkt(svg, '', { w: 14, h: 10 }));
+      // 掘り下げ（下の層へ）: 中身を持つ記憶（第5章 フラッシュ）、ラックごと消える理由（場面6 の ToR）
+      YT.drill.mark(st.rackLbl, { to: '05-kioku.html#s6.6', label: 'D ファイルサーバー', at: [776, 138], steps: [2], bridge: 'D の中身は電源を切っても消えない記憶に置く。よく読まれる分はフラッシュ（SSD）に置く' });
+      YT.drill.mark(st.racks[3].rect, { to: '22-server.html#s6.2', label: 'ラック 4', at: [342, 138], steps: [4], bridge: 'ラックの機械は上のスイッチ（ToR）1 台で網につながる。ToR が止まれば全部が消える' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -767,6 +777,15 @@
       st.pRpc = pkt(svg, 'RPC', { w: 36 });
       st.pResp = pkt(svg, '応答');
       st.all = st.pAdv.concat([st.pReq, st.pRpc, st.pResp], st.pConn);
+      // 掘り下げ（下の層へ）: 道の選び方と経路表（第16章）、ハッシュ（第27章）、包む（第11章）、暗号と HTTP（第20・21章）、IP ヘッダ（第18章）
+      YT.drill.mark(st.isp, { to: '16-internet.html#s2.3', label: 'ISP の道の選び方', at: [170, 342], steps: [1], bridge: 'ISP のルーターは、同じ 142.250.0.0/15 の候補から規則を順に当てて 1 つの道を選ぶ' });
+      YT.drill.mark(st.router, { to: '16-internet.html#s5.4', label: 'ルーター（ECMP）', at: [428, 244], steps: [2], bridge: '拠点のルーターも宛先で経路表を引く。ECMP は、一致した行に同じコストの出口が複数ある形' });
+      YT.drill.mark(st.mg[1], { to: '27-algorithm.html#s3.2', label: 'Maglev のハッシュ', at: [588, 184], steps: [3], bridge: '5 つ組から計算で GFE を選ぶのは、鍵から置き場所を計算するハッシュ表と同じ考え' });
+      YT.drill.mark(st.mg[1], { to: '11-sou.html#s3.3', label: 'GRE で包む', at: [588, 256], steps: [3], bridge: 'GRE で包むと、届いたパケットの外側に、GFE 宛ての IP ヘッダがもう 1 枚付く' });
+      YT.drill.mark(st.gf[1], { to: '20-tls.html#s6.1', label: 'GFE（暗号をほどく）', at: [756, 127], steps: [4], bridge: 'GFE は届いたレコードを 1 つずつ鍵で開き、中の HTTP の要求を取り出す' });
+      YT.drill.mark(st.gf[1], { to: '21-http.html#s1.5', label: 'GFE（パスで振り分け）', at: [756, 197], steps: [4], bridge: 'GFE が見る URL のパスは、HTTP/2・3 では擬似ヘッダ :path に入っている' });
+      YT.drill.mark(st.dsr, { to: '18-ip.html#s1.6', label: 'DSR の応答', at: [688, 50], steps: [5], bridge: '応答の IP ヘッダの送信元の欄に、GFE は 142.250.196.110 を書いて直接出す' });
+      YT.drill.mark(st.mg[1], { to: '16-internet.html#s2.5', label: 'Maglev 2 の停止', at: [588, 184], steps: [6], bridge: 'Maglev 2 が止まると、そこから聞いた経路が消え、ルーターは残りの候補へ送る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -937,6 +956,11 @@
       st.pCopy = pkt(svg, 'コピー');
       st.pAdv = pkt(svg, '/24', { cls: 'f-d-soft s-d w1', tcls: 't-d' });
       st.all = [st.pSeg, st.pReq, st.pFill, st.pCopy, st.pAdv];
+      // 掘り下げ（下の層へ）: IX とピアリング・経路表・BGP（第16章）、置き場の追い出し（第6章 キャッシュ）
+      YT.drill.mark(st.lIX, { to: '16-internet.html#s3.3', label: 'IX か直結', at: [464, 143], steps: [1, 4], bridge: 'IX では ISP と Google が BGP で互いの範囲を教え合い、パケットを直接渡す' });
+      YT.drill.mark(st.ggc.rect, { to: '16-internet.html#s5.2', label: 'GGC（ISP の建物）', at: [372, 236], steps: [2], bridge: 'GGC の 198.51.100.80 は ISP の中の範囲の番号。ISP のルーターの表で中への行に一致する' });
+      YT.drill.mark(st.lGGC, { to: '16-internet.html#s2.1', label: 'ISP → GGC の BGP', at: [252, 204], steps: [3], bridge: 'ISP は GGC にも、BGP の UPDATE で範囲（203.0.113.0/24）を広告する' });
+      YT.drill.mark(st.ggcSlots[7], { to: '06-cpu.html#s6.5', label: 'GGC の置き場', at: [376, 300], steps: [6], bridge: '容量の小さい置き場は、入れるたびにどれかを追い出す。よく見られる断片ほど残る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1074,6 +1098,13 @@
       st.pPost = pkt(svg, 'POST（状態）');
       st.pUmp = pkt(svg, 'UMP（音声＋映像）');
       st.all = [st.pGet, st.pHtml, st.pQuic, st.pPost, st.pUmp];
+      // 掘り下げ（下の層へ）: 署名と暗号（第20章）、名前を引く（第17章）、HTTP/3（第21章）、プレーヤーが送る欄（第24章 場面3）
+      YT.drill.mark(st.stage[0].r, { to: '20-tls.html#s6.6', label: 'QUIC・TLS をほどく', at: [532, 314], steps: [6], bridge: '配信元は QUIC のパケットを 1 つずつ、ハンドシェイクで作った鍵で開く' });
+      YT.drill.mark(st.stage[1].r, { to: '20-tls.html#s6.3', label: 'URL の署名', at: [628, 314], steps: [2, 6], bridge: '署名は、鍵を知らない者には合う値を作れない検算値。URL を書き換えると確かめで合わない' });
+      YT.drill.mark(st.dns, { to: '17-dns.html#s3.1', label: 'DNS で引く', at: [396, 450], steps: [3], bridge: 'PC はこの名前もルーターに 1 回聞くだけで、CNAME の先まではフルリゾルバがたどる' });
+      YT.drill.mark(st.node.rect, { to: '21-http.html#s4.5', label: '配信元（HTTP/3）', at: [244, 316], steps: [3], bridge: '最初から HTTP/3 なのは、配信元の名前の HTTPS レコードに alpn="h3" があるから' });
+      YT.drill.mark(st.tok.path.g, { to: '21-http.html#s4.1', label: 'POST /videoplayback', at: [646, 240], steps: [4], bridge: 'この POST も QUIC のストリーム 1 本に乗る。本文の protobuf は DATA フレームで運ぶ' });
+      YT.drill.mark(st.stage[2].r, { to: '24-streaming.html#s3.6', label: '返す形式を決める', at: [724, 316], steps: [5, 6], bridge: '配信元が形式を選ぶ材料は、プレーヤーが POST の本文に入れる帯域の見積もりや溜めた区間' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1205,10 +1236,10 @@
       AGG_X.forEach((ax) => SP_X.forEach((sx) => S.line(ax + 45, 166, sx + 70, 110, { cls: 's-p w15' }, st.fiber)));
       st.tors = [];
       for (let k = 0; k < 12; k++) st.tors.push(S.rect(TOR_X(k), 254, 28, 16, { rx: 2, cls: 'f-sf s-fg w1' }, gB));
-      S.text(716, 292, 'ToR（ラックごとに 1 台。下に機械）', { cls: 't-c t-xs t-dim' }, gB);
+      st.torLbl = S.text(716, 292, 'ToR（ラックごとに 1 台。下に機械）', { cls: 't-c t-xs t-dim' }, gB);
       st.aggs = AGG_X.map((x) => box(gB, x, 166, 90, 30, '集約', '', { tcls: 't-xs' }));
       st.spines = SP_X.map((x) => box(gB, x, 80, 140, 30, '背骨（スパイン）', '', { tcls: 't-xs' }));
-      S.text(716, 66, 'のちに光のまま切り替えるスイッチ（OCS）で集約どうしを直結', { cls: 't-c t-xs t-dim' }, gB);
+      st.ocsTxt = S.text(716, 66, 'のちに光のまま切り替えるスイッチ（OCS）で集約どうしを直結', { cls: 't-c t-xs t-dim' }, gB);
       S.label(gB, 640, 137, '光ファイバー', { cls: 't-xs t-p t-b', box: 'f-in s-none', h: 16, pad: 8 });
       st.rNet = road(gB, `M${TOR_X(1) + 14},254 L${AGG_X[0] + 45},196 V166 L${SP_X[0] + 70},110 L${AGG_X[3] + 45},166 V196 L${TOR_X(10) + 14},254`);
       // ================= 下：電力の流れと PUE =================
@@ -1221,7 +1252,7 @@
       [178, 360, 542].forEach((x) => S.path(`M${x},377 H${x + 28}`, { cls: 'f-none s-e w2', 'marker-end': mk('e') }, st.power));
       S.path('M467,400 V418 H574', { cls: 'f-none s-e w2', 'marker-end': mk('e') }, st.power);
       st.coolBox = box(st.power, 578, 408, 150, 22, '冷却（ポンプ・送風機など）', '', { tcls: 't-xs', rx: 4 });
-      S.text(740, 377, '→ ほぼすべて熱に', { cls: 't-xs t-p t-b' }, st.power);
+      st.heatTxt = S.text(740, 377, '→ ほぼすべて熱に', { cls: 't-xs t-p t-b' }, st.power);
       // 粒は矢印の区間だけを流す（箱の文字の上を通らないように）
       st.rPow = [road(gC, 'M180,377 H206'), road(gC, 'M362,377 H388'), road(gC, 'M544,377 H570'), road(gC, 'M467,402 V418 H572')];
       // PUE の棒（計算機の電力を 1 とした長さ）
@@ -1239,6 +1270,11 @@
       st.airDots = [...Array(8)].map((_, k) => S.circle(0, 0, 4, { cls: k < 4 ? 'f-dim' : 'f-p', style: { opacity: 0 } }, gA));
       st.netDots = [...Array(4)].map(() => S.circle(0, 0, 4.5, { cls: 'f-d', style: { opacity: 0 } }, gB));
       st.powDots = [...Array(12)].map(() => S.circle(0, 0, 3.5, { cls: 'f-e', style: { opacity: 0 } }, gC));
+      // 掘り下げ（下の層へ）: スイッチ（第13章）、光ファイバー（第15章）、変圧器（第1章）、熱になる電力（第3章）
+      YT.drill.mark(st.torLbl, { to: '13-ethernet.html#s4.3', label: 'ToR', at: [612, 290], steps: [2], bridge: 'ToR もスイッチで、届いたものを宛先で表から引き、その機械のポートにだけ送る' });
+      YT.drill.mark(st.ocsTxt, { to: '15-hikari.html#s1.3', label: '光のまま直結', at: [880, 62], steps: [3], bridge: '集約どうしを結ぶ光は、ガラスの芯の中を全反射で閉じ込められて進む' });
+      YT.drill.mark(st.pboxes[1].rect, { to: '01-denshi.html#s6.2', label: '変電所・変圧器', at: [350, 342], steps: [4], bridge: '電圧を下げるのは変圧器。高い電圧で受けるのは、同じ電力なら電流が小さく線で失う熱が減るから' });
+      YT.drill.mark(st.heatTxt, { to: '03-transistor.html#s5.1', label: 'ほぼすべて熱に', at: [842, 372], steps: [5], bridge: '計算機の電力が熱になるのは、トランジスタが切り替わるたびに充放電の C·V² が熱になるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

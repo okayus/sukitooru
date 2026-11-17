@@ -409,7 +409,7 @@
       S.text(0, 4, '＋14', { cls: 't-c t-b t-sm t-h' }, ga);
       S.text(0, 228, '電子 14 個 = 2 + 8 + 4', { cls: 't-c t-sm t-dim t-mono' }, ga);
       S.text(0, 248, '外側の 4 個（価電子）が結合に使われる', { cls: 't-c t-sm t-dim' }, ga);
-      S.text(200, -150, '価電子 ×4', { cls: 't-e t-b t-sm' }, ga);
+      st.valLbl = S.text(200, -150, '価電子 ×4', { cls: 't-e t-b t-sm' }, ga);
       // 結晶
       const gl = st.gl = S.g({ cls: 'fade hide' }, svg);
       S.text(460, 40, 'シリコンの結晶（一部）', { cls: 't-c t-b t-lg' }, gl);
@@ -433,6 +433,9 @@
       S.text(380, 160, '空席（正孔）は左へ', { cls: 't-c t-sm t-h t-b' }, st.dirLbl);
       S.arrow(st.dirLbl, 240, 268, 520, 268, 'e', { cls: 's-e w3' });
       S.text(380, 288, '電子は 1 個ずつ右へ', { cls: 't-c t-sm t-e t-b' }, st.dirLbl);
+      // 掘り下げ（下の層へ）: 外側の電子の結びつき（第1章 場面1）、自由電子の数と電流（第1章 場面4）
+      YT.drill.mark(st.valLbl, { to: '01-denshi.html#s1.2', label: '価電子（外側の 4 個）', at: [760, 136], steps: [1], bridge: '価電子は、銅なら原子を離れて自由電子になる、いちばん外側の電子に当たる' });
+      YT.drill.mark(st.eLbl, { to: '01-denshi.html#s4.1', label: '自由電子の数', at: [626, 496], steps: [3], bridge: '自由電子の数が電流の大きさを決める。比べている銅は、原子 1 個に 1 個の自由電子を持つ導体' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -500,8 +503,9 @@
       st.cur = S.g({ cls: 'fade hide' }, svg);
       S.arrow(st.cur, 300, 478, 620, 478, 'e', { cls: 's-e w3' });
       S.text(460, 468, '電子のドリフト（− → ＋）', { cls: 't-c t-sm t-e t-b' }, st.cur);
-      // 掘り下げ（下の層へ）: 外れた電子は、金属の自由電子と同じふるまい（第1章 場面1）
-      YT.drill.mark(st.ps[0].ring, { to: '01-denshi.html#s1.3', label: '外れた電子', steps: [3, 4], bridge: '外れた電子は、金属の自由電子と同じく結晶の中を飛び回り、電圧で流れになる' });
+      // 掘り下げ（下の層へ）: 外れた電子は、金属の自由電子と同じく原子に縛られない（第1章 場面1。速さの由来は違うので書かない）
+      YT.drill.mark(st.ps[0].ring, { to: '01-denshi.html#s1.3', label: '外れた電子', steps: [3, 4], bridge: '外れた電子は、金属の自由電子と同じく原子に縛られずに結晶の中を動き、電圧で流れになる' });
+      YT.drill.mark(st.cur, { to: '01-denshi.html#s2.3', label: '電子のドリフト', at: [546, 461], steps: [4], bridge: 'n 型の電子のドリフトは、銅の導線の自由電子が電場に押されて＋極の側へ進むのと同じ動き' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -588,6 +592,9 @@
       S.rect(0, 0, 170, 70, { rx: 6, cls: 'f-sf s-rule w1' }, st.energy);
       S.text(85, 24, '隣の電子が空席へ移るのに要る', { cls: 't-c t-xs t-dim' }, st.energy);
       S.text(85, 52, '0.045 eV', { cls: 't-c t-b t-xl t-mono' }, st.energy);
+      // 掘り下げ（下の層へ）: イオンの電荷（第1章 場面1）、電流の向きの約束（第1章 場面2）
+      YT.drill.mark(st.minus[1], { to: '01-denshi.html#s1.1', label: 'ホウ素の−イオン', at: [654, 188], steps: [2], bridge: 'ホウ素が−になるのは、電子を 1 個受け取って、陽子の＋より電子の−が 1 個多くなるから' });
+      YT.drill.mark(st.cur, { to: '01-denshi.html#s2.4', label: '正孔のドリフトの向き', at: [586, 461], steps: [4], bridge: '正孔が電流と同じ向きに進むのは、電流の向きを電子の動きと逆に決めた約束だから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -670,6 +677,11 @@
       S.text(700, 502, 'n 側：低い', { cls: 't-c t-sm t-dim' }, st.hill);
       st.hillDot = S.circle(700, 503, 5, { cls: 'f-e glow' }, st.hill);
       S.text(480, 552, '電子は坂を上れずに戻る。正孔にとっては上下が逆の同じ坂', { cls: 't-c t-xs t-dim' }, st.hill);
+      // 掘り下げ（下の層へ）: 拡散（第1章 場面1 のでたらめな動き）、固定イオン（場面2）、電場が電子を押す向き・電位の高さ（第1章 場面2）
+      YT.drill.mark(st.bar.g, { to: '01-denshi.html#s1.4', label: '拡散', at: [480, 124], steps: [2], bridge: '拡散は、濃い側から出ていく粒が多いため、でたらめな動きを足しても流れが 0 にならないこと' });
+      YT.drill.mark(st.bar.ions, { to: '02-handoutai.html#s2.3', label: '固定イオン', at: [480, 124], steps: [3], bridge: '空乏層の−イオンはホウ素、＋イオンは電子を手放して格子に残ったリン' });
+      YT.drill.mark(st.field, { to: '01-denshi.html#s2.3', label: '空乏層の電場', at: [538, 136], steps: [4], bridge: 'イオンの電場が電子を n 側へ押し戻すのは、電場が電子を＋の側へ押すから' });
+      YT.drill.mark(st.hill, { to: '01-denshi.html#s2.5', label: '電子にとっての坂', at: [306, 388], steps: [5], bridge: '電子の坂は、電位差 0.7 V を電子のエネルギーで表したもの。電子は−なので、電位の高さとは上下が逆' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -823,6 +835,9 @@
       S.text(700, 470, '帯のある側がカソード', { cls: 't-c t-sm t-dim' }, gs);
       S.text(700, 492, '長さ 5 mm ほど。1 A・1,000 V 耐圧の整流用など', { cls: 't-c t-xs t-dim' }, gs);
       st.zonePrev = 50;
+      // 掘り下げ（下の層へ）: 空乏層の坂（場面4）、交流（第1章 場面6）
+      YT.drill.mark(st.bar.zone, { to: '02-handoutai.html#s4.5', label: '空乏層の坂', at: [480, 96], steps: [1, 2], bridge: '順方向と逆方向で変わるのは、pn 接合の電子にとっての 0.7 eV の坂の高さ' });
+      YT.drill.mark(st.ac, { to: '01-denshi.html#s6.1', label: '交流', at: [480, 296], steps: [4], bridge: '整流で半分だけ通るのは、交流の電圧の向きが 1 周期に 2 回入れ替わるから' });
     },
     onStep(ctx, i, prev) {
       const st = ctx.state;
@@ -1009,6 +1024,10 @@
       S.text(425, 84, 'レーザー：鏡の間を往復するうちに誘導放出がそろった光を増やし、半透明の鏡から細い光が出る。', { cls: 't-c t-sm t-dim' }, st.ldNote);
       S.text(425, 108, '光ファイバーの細い芯（直径 9 µm）に光を入れ、長い距離を飛ばすには、このそろった光が要る。', { cls: 't-c t-sm t-dim' }, st.ldNote);
       S.text(425, 132, '読み出し用の赤いレーザー（DVD 650 nm、BD 405 nm）も同じ部品。', { cls: 't-c t-sm t-dim' }, st.ldNote);
+      // 掘り下げ（下の層へ）: 順方向の再結合（場面5）、光で電子正孔対（場面1）、空乏層の電場（場面4）
+      YT.drill.mark(st.led.zone, { to: '02-handoutai.html#s5.1', label: 'LED の再結合', at: [366, 66], steps: [1, 2], bridge: 'LED の光は、順方向で境目に次々と渡った電子と正孔が再結合するときに出る' });
+      YT.drill.mark(st.lampG, { to: '02-handoutai.html#s1.4', label: '光で電子正孔対', at: [338, 252], steps: [3], bridge: '光で対ができるのは、熱で結合が切れるのと同じく、光子が結合を切るエネルギーを与えるから' });
+      YT.drill.mark(st.pd.zone, { to: '02-handoutai.html#s4.4', label: '空乏層の電場', at: [300, 458], steps: [3], bridge: '電子を n 側、正孔を p 側へ引き離すのは、固定イオンが作る空乏層の電場' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

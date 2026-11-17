@@ -364,7 +364,7 @@
       /* NIC（パケットの入口） */
       S.rect(588, 398, 52, 26, { rx: 4, cls: 'f-in s-dim w1' }, gp);
       S.text(614, 415, 'NIC', { cls: 't-c t-xs t-b' }, gp);
-      S.text(580, 415, 'ドライバ → IP → UDP／TCP（第9章）', { cls: 't-xs t-dim t-end' }, gp);
+      st.drvT = S.text(580, 415, 'ドライバ → IP → UDP／TCP（第9章）', { cls: 't-xs t-dim t-end' }, gp);
 
       /* 中段右: 相手 */
       const gh = st.hosts = S.g({ cls: 'fade' }, svg);
@@ -424,6 +424,11 @@
         f.g = pkt(svg, f.text, 'f-d');
         return f;
       });
+
+      // 掘り下げ（下の層へ）: IP ヘッダのプロトコル欄（第18章）、NAT の書き換え（第14章）、カーネルが層を上がる道（第9章）
+      YT.drill.mark(st.cells.proto.r, { to: '18-ip.html#s1.4', label: 'プロトコル 17', at: [192, 95], steps: [1], bridge: 'プロトコル 17 は、IPv4 ヘッダの TTL の隣にある 8 ビットの欄' });
+      YT.drill.mark(st.nat, { to: '14-router.html#s4.2', label: 'NAT の後の 1 行', at: [920, 352], steps: [4], bridge: 'サーバーから見た 203.0.113.5:40001 は、家のルーターが出るときに書き換えた送信元' });
+      YT.drill.mark(st.drvT, { to: '09-os.html#s6.3', label: 'ドライバ → IP → UDP', at: [368, 411], steps: [5], bridge: 'カーネルが 5 つ組で表を引く前に、Ethernet と IP のヘッダを外して UDP・TCP へ振り分ける' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -582,6 +587,10 @@
         [['fin1', 0, 1.2], ['ack1', 1.2, 1.2], ['fin2', 1.6, 1.2], ['ack2', 2.8, 1.2]]
       ];
       st.dot2 = S.circle(0, 0, 6, { cls: 'f-d s-sf w2' }, lyDot);
+
+      // 掘り下げ（下の層へ）: MSS 1,460 の出どころ（第18章 MTU）、往復の時間が距離で決まること（第15章）
+      YT.drill.mark(st.opt, { to: '18-ip.html#s5.5', label: 'MSS 1460', at: [262, 128], steps: [1], bridge: 'SYN の MSS 1,460 は、MTU 1,500 から IPv4 と TCP のヘッダ 40 バイトを引いた値' });
+      YT.drill.mark(st.rtt, { to: '15-hikari.html#s6.4', label: '往復の時間', at: [108, 128], steps: [4], bridge: '遠いサーバーほど往復が伸びるのは、距離の遅れが光の速さで決まり、回線を速くしても縮まないから' });
     },
     onStep(ctx, i) {
       const st = ctx.state, m = st.m;
@@ -665,7 +674,7 @@
       const svg = ctx.svg, st = ctx.state;
       st.plans = [0, 1, 2, 3, 4, 5].map(plan3);
       /* 送り手と受け手の枠 */
-      S.text(100, 30, '送り手：YouTube のサーバー（送信バッファ、1 個 1,460 バイト）', { cls: 't-xs t-b' }, svg);
+      st.sendT = S.text(100, 30, '送り手：YouTube のサーバー（送信バッファ、1 個 1,460 バイト）', { cls: 't-xs t-b' }, svg);
       S.text(100, 476, '受け手：PC 192.168.1.10:51235（受信バッファ）', { cls: 't-xs t-b' }, svg);
       const slot = (k, y) => {
         const g = S.g({}, svg);
@@ -678,7 +687,7 @@
       st.recvSlots = [0, 1, 2, 3, 4, 5].map((k) => slot(k, 412));
       /* 途中のルーター */
       S.line(96, 250, 756, 250, { cls: 's-dim w1 dash' }, svg);
-      S.text(22, 246, '途中の', { cls: 't-xs t-dim' }, svg);
+      st.rtrT = S.text(22, 246, '途中の', { cls: 't-xs t-dim' }, svg);
       S.text(22, 260, 'ルーター', { cls: 't-xs t-dim' }, svg);
       S.text(22, 150, 'データ ↓', { cls: 't-xs t-b t-d' }, svg);
       S.text(22, 350, 'ACK ↑', { cls: 't-xs t-b t-d' }, svg);
@@ -718,6 +727,12 @@
       st.dPool = [0, 1, 2, 3, 4, 5, 6].map(() => pkt(svg, '0000', 'f-d'));
       st.aPool = [0, 1, 2, 3, 4, 5, 6].map(() => pkt(svg, 'ACK 0000', 'f-sf s-d w15', 't-d'));
       st.xPool = [0, 1, 2].map(() => S.text(0, 0, '×', { cls: 't-c t-xl t-b t-x' }, svg));
+
+      // 掘り下げ（下の層へ）: MSS（第18章）、入れ替わりと損失が起きる所（第11・18章）、再送タイマーを数える割り込み（第9章）
+      YT.drill.mark(st.sendT, { to: '18-ip.html#s5.5', label: '1 個 1,460 バイト', at: [432, 26], steps: [1], bridge: '1 個の 1,460 バイト（MSS）は、MTU 1,500 から IPv4・TCP のヘッダ 40 バイトを引いた値' });
+      YT.drill.mark(st.rtrT, { to: '11-sou.html#s5.3', label: '途中のルーター（遅れ）', at: [78, 236], steps: [3], bridge: '2921 番だけが遅れて着くのは、IP がパケットを 1 個ずつ運び、順番を保証しないから' });
+      YT.drill.mark(st.rtrT, { to: '18-ip.html#s4.5', label: '途中のルーター（損失）', at: [78, 236], steps: [4, 5, 6], bridge: 'ルーターでセグメントが捨てられるのは、出口の待ち行列があふれたとき' });
+      YT.drill.mark(st.gRto, { to: '09-os.html#s5.2', label: '再送タイマー', at: [920, 246], steps: [5], bridge: '再送タイマーの期限も、タイマ割り込みを受けたカーネルが確かめる' });
     },
     onStep(ctx, i) {
       S.fade(ctx.state.gRto, i === 4);
@@ -942,6 +957,10 @@
       st.lCubic = S.text(330, 267, 'CUBIC：7 割に減らし、元の高さへ急いで戻る', { cls: 't-xs t-b' }, gg);
       st.lBbr = S.text(560, 420, 'BBR：満杯の量に保ち、時々少し増やして測る', { cls: 't-xs t-b t-d' }, gg);
       st.cur = S.circle(0, 0, 6, { cls: 'f-x s-sf w2' }, gg);
+
+      // 掘り下げ（下の層へ）: 受信バッファを空けるブラウザの読み出し（第9章）、ルーターの待ち行列（第18章）
+      YT.drill.mark(st.bufBox, { to: '09-os.html#s6.4', label: '受信バッファ', at: [132, 46], steps: [2], bridge: '受信バッファの空きが戻るのは、ブラウザがシステムコールでユーザー空間へ写し出したとき' });
+      YT.drill.mark(st.gq, { to: '18-ip.html#s4.5', label: 'ルーターの待ち行列', at: [612, 44], steps: [4], bridge: '待ち行列は出口の線が使用中の間に並ぶ所。あふれると後から来たパケットが捨てられる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1075,11 +1094,11 @@
       const gm = st.gm = S.g({ cls: 'fade' }, svg);
       S.text(30, 226, 'データグラムの届き方：失われても入れ替わっても、UDP は何もしない', { cls: 't-xs t-b' }, gm);
       S.text(930, 226, '1〜6 は説明用（UDP のヘッダに番号は無い）', { cls: 't-xs t-dim t-end' }, gm);
-      box(gm, 30, 240, 110, 70, '送り手', 'sendto() を 6 回', { scls: 't-dim' });
+      st.sndBox = box(gm, 30, 240, 110, 70, '送り手', 'sendto() を 6 回', { scls: 't-dim' });
       box(gm, 820, 240, 110, 70, '受け手', 'recvfrom()', { scls: 't-dim t-mono' });
       S.line(140, 275, 820, 275, { cls: 's-rule w2' }, gm);
       S.line(480, 248, 480, 302, { cls: 's-dim w15 dash' }, gm);
-      S.text(480, 318, '途中のルーター', { cls: 't-c t-xs t-dim' }, gm);
+      st.rtr5 = S.text(480, 318, '途中のルーター', { cls: 't-c t-xs t-dim' }, gm);
       st.dg = [0, 1, 2, 3, 4, 5].map((k) => {
         const g = pkt(gm, String(k + 1), 'f-d', 't-sf', 11);
         return { g, k, t0: 0.45 * k, dur: 2.0, lost: k === 2, extra: k === 4 ? 0.9 : 0 };
@@ -1119,6 +1138,12 @@
       S.text(930, 540, '外（YouTube）', { cls: 't-xs t-dim t-end' }, gn);
       st.nPkt = pkt(gn, '', 'f-d');
       st.nX = S.text(738, 514, '×', { cls: 't-c t-xl t-b t-x' }, gn);
+
+      // 掘り下げ（下の層へ）: チェックサムの計算（第18章）、sendto() の下の道（第9章）、IP が順番も到着も約束しないこと（第11章）、変換表の寿命（第14章）
+      YT.drill.mark(st.uF[3], { to: '18-ip.html#s1.5', label: 'UDP のチェックサム', at: [456, 85], steps: [1], bridge: 'UDP のチェックサムも、IP ヘッダの検算と同じく 16 ビットずつ足して反転する' });
+      YT.drill.mark(st.sndBox, { to: '09-os.html#s6.5', label: 'sendto()', at: [127, 253], steps: [2], bridge: 'sendto() 1 回で、カーネルの中では UDP と IP がヘッダを付け、ドライバが 1 個送る' });
+      YT.drill.mark(st.rtr5, { to: '11-sou.html#s5.3', label: '途中のルーター', at: [532, 314], steps: [2], bridge: 'UDP が何もしない損失と入れ替わりは、IP が届くことも順番も保証しないから起きる' });
+      YT.drill.mark(st.row, { to: '14-router.html#s4.5', label: '変換表の 1 行', at: [918, 402], steps: [4], bridge: '変換表の行が時間で消えるのは、UDP に終わりの合図が無く、ルーターが寿命で片付けるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1213,14 +1238,16 @@
           S.text(x0 + 8, 64, 'ブラウザ（ユーザー空間）', { cls: 't-xs t-dim' }, g);
           S.line(x0, 200, x0 + 432, 200, { cls: 's-dim w1 dash' }, g);
           S.text(x0 + 8, 214, 'カーネル（OS）', { cls: 't-xs t-dim' }, g);
-          items.forEach(([s0, y0, y1, c]) => {
-            S.rect(x0 + 60, y0, 312, y1 - y0, { rx: 5, cls: c }, g);
+          const rs = items.map(([s0, y0, y1, c]) => {
+            const r = S.rect(x0 + 60, y0, 312, y1 - y0, { rx: 5, cls: c }, g);
             S.lines(x0 + 216, (y0 + y1) / 2 + 4 - (s0.length - 1) * 8, s0, { cls: 't-c t-sm t-b' }, g, 16);
+            return r;
           });
           S.text(x0 + 216, 322, note, { cls: 't-c t-xs t-b' }, g);
+          return rs;   // 層の箱（掘り下げの印を付ける）
         };
         col(CX[0], [[['HTTP/2'], 72, 106, 'f-sf s-rule w1'], [['TLS 1.3：暗号'], 112, 146, 'f-sf s-rule w1'], [['TCP：番号・再送・輻輳制御'], 222, 258, 'f-in s-mid w15'], [['IP'], 264, 296, 'f-in s-rule w1']], '改良は OS の更新を待つ');
-        col(CX[1], [[['HTTP/3'], 72, 106, 'f-sf s-rule w1'], [['QUIC：番号・再送・輻輳制御・ストリーム', '＋ TLS 1.3 の暗号'], 112, 190, 'f-d-soft s-d w15'], [['UDP：ポートと長さだけ'], 222, 258, 'f-in s-mid w15'], [['IP'], 264, 296, 'f-in s-rule w1']], '改良はブラウザとサーバーの更新で配れる');
+        st.quicCol = col(CX[1], [[['HTTP/3'], 72, 106, 'f-sf s-rule w1'], [['QUIC：番号・再送・輻輳制御・ストリーム', '＋ TLS 1.3 の暗号'], 112, 190, 'f-d-soft s-d w15'], [['UDP：ポートと長さだけ'], 222, 258, 'f-in s-mid w15'], [['IP'], 264, 296, 'f-in s-rule w1']], '改良はブラウザとサーバーの更新で配れる');
         /* 途中の機器が通すもの（列をまたぐ） */
         st.mbBg = S.rect(16, 346, 928, 196, { rx: 8, cls: 'f-sf s-rule w1' }, g);
         S.text(30, 366, '途中の NAT・ファイアウォールが通すもの（IP ヘッダのプロトコル番号で見分ける）', { cls: 't-xs t-b' }, g);
@@ -1331,7 +1358,7 @@
           const pB = [[x0 + 246, 470], [LB, 352], [LB, 300], [LB, 164]];
           S.poly(pA, { cls: 'f-none s-rule w3 round' }, g);
           S.poly(pB, { cls: 'f-none s-rule w3 round' }, g);
-          box(g, x0 + 16, 300, 148, 52, '家の Wi-Fi', '203.0.113.5:40001');
+          const wifi = box(g, x0 + 16, 300, 148, 52, '家の Wi-Fi', '203.0.113.5:40001');
           box(g, x0 + 268, 300, 148, 52, 'テザリング', '192.0.2.77:61000');
           box(g, x0 + 136, 470, 160, 40, 'PC', '');
           const cut = S.g({}, g);
@@ -1339,7 +1366,7 @@
           S.text(x0 + 154, 434, 'Wi-Fi から外れた', { cls: 't-xs t-b t-x' }, cut);
           const res = S.text(x0 + 206, 200, '', { cls: 't-c t-sm t-b' }, g);
           const pk = pkt(g, '', 'f-d', 't-sf');
-          return { x0, key, pA, pB, cut, res, pk, c };
+          return { x0, key, pA, pB, cut, res, pk, c, wifi };
         });
         S.text(CX[1] + 216, 536, '規格の仕組み。使うかどうかは実装による', { cls: 't-c t-xs t-dim' }, g);
         S.text(CX[0] + 216, 536, '同じ相手でも、つなぎ直して 2 往復待つ', { cls: 't-c t-xs t-dim' }, g);
@@ -1357,7 +1384,8 @@
           S.text(x0 + 8, 64, '1 個のパケットの欄（上から順に）', { cls: 't-xs t-dim' }, g);
           rs.forEach(([s0, seen], r) => {
             const y = 72 + r * 40;
-            S.rect(x0 + 8, y, 416, 32, { rx: 4, cls: seen ? 'f-x-soft s-x w1' : 'f-d-soft s-d w1' }, g);
+            const rr = S.rect(x0 + 8, y, 416, 32, { rx: 4, cls: seen ? 'f-x-soft s-x w1' : 'f-d-soft s-d w1' }, g);
+            if (c === 0 && r === 3) st.tcpFlagRow = rr;   // 掘り下げの印を付ける TCP のフラグの行
             S.text(x0 + 20, y + 21, s0, { cls: 't-xs t-b' }, g);
             S.text(x0 + 412, y + 21, seen ? '途中から読める' : '暗号化', { cls: 't-xs t-b t-end ' + (seen ? 't-x' : 't-d') }, g);
           });
@@ -1397,7 +1425,7 @@
         const [qa] = ends(CX[1], 300, 446);
         const wx = CX[1] + 216;
         S.rect(wx - 5, 290, 10, 100, { rx: 2, cls: 'f-mid' }, g);
-        S.text(wx, 406, 'UDP 443 を捨てる機器', { cls: 't-c t-xs t-dim' }, g);
+        st.dropT = S.text(wx, 406, 'UDP 443 を捨てる機器', { cls: 't-c t-xs t-dim' }, g);
         const bR = [[300, 'Initial'], [342, 'Initial（再送）']].map(([y, label]) => {
           S.line(qa, y, wx - 8, y + 14, { cls: 's-d w2' }, lyL);
           S.text(wx + 16, y + 20, '×', { cls: 't-c t-xl t-b t-x' }, lyL);
@@ -1414,6 +1442,12 @@
         st.ytRuns = [legs(aL, 0.5, 0.8), legs(aR, 0, 0.8), legs(bL, 0, 0.8), legs(bR, 0, 1.2)];
         st.ytDots = st.ytRuns.map(() => S.circle(0, 0, 5, { cls: 'f-d s-sf w2' }, lyD));
       }
+
+      // 掘り下げ（下の層へ）: カーネルは UDP まで（第9章）、NAT の外側の番号（第14章）、TCP のフラグを読む機器（第14章）、UDP を止める規則（第14章）
+      YT.drill.mark(st.quicCol[2], { to: '09-os.html#s6.4', label: 'カーネルの UDP', at: [860, 240], steps: [1], bridge: 'カーネルは UDP のヘッダを外して受信キューに入れるだけ。復号と組み立てはブラウザで' });
+      YT.drill.mark(st.mig[0].wifi, { to: '14-router.html#s4.2', label: '203.0.113.5:40001', at: [176, 294], steps: [4], bridge: '家の Wi-Fi で見える 203.0.113.5:40001 は、ルーターの NAT が書き換えた送信元' });
+      YT.drill.mark(st.tcpFlagRow, { to: '14-router.html#s5.2', label: 'TCP のフラグ', at: [464, 208], steps: [5], bridge: '途中の機器が TCP のフラグを読む例が、SYN と ACK を見て状態を進める家のルーター' });
+      YT.drill.mark(st.dropT, { to: '14-router.html#s5.3', label: 'UDP 443 を捨てる機器', at: [792, 402], steps: [6], bridge: 'UDP 443 を捨てるのは、ファイアウォールの規則に外向きの UDP 443 を止める行があるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

@@ -286,7 +286,7 @@
       S.rect(120, 138, 680, 44, { cls: 'f-soft' }, gm);       // コア
       S.line(120, 138, 800, 138, { cls: 's-mid w1' }, gm);
       S.line(120, 182, 800, 182, { cls: 's-mid w1' }, gm);
-      S.rect(40, 136, 70, 48, { rx: 5, cls: 'f-sf s-fg w15' }, gm);
+      st.laser = S.rect(40, 136, 70, 48, { rx: 5, cls: 'f-sf s-fg w15' }, gm);
       S.text(75, 164, 'レーザー', { cls: 't-c t-sm t-b' }, gm);
       S.text(812, 83, '被覆（樹脂）', { cls: 't-sm t-dim' }, gm);
       S.text(812, 112, 'クラッド', { cls: 't-sm t-b' }, gm);
@@ -414,6 +414,8 @@
       S.path(bump(852, 488, [16], 28, 5), { cls: 'f-none s-p w2' }, p3);
       S.text(891, 420, 'にじむ', { cls: 't-c t-xs t-x t-b' }, p3);
       S.text(891, 508, 'そろう', { cls: 't-c t-xs t-b' }, p3);
+      // 掘り下げ（下の層へ）: 向きのそろった光を出すレーザーダイオード（第2章 場面6）
+      YT.drill.mark(st.laser, { to: '02-handoutai.html#s6.5', label: 'レーザー', at: [75, 120], steps: [3], bridge: 'コアに閉じ込められるのは軸から約 5° 以内の光。レーザーダイオードは向きのそろった細い光を出す' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -635,6 +637,10 @@
       st.readBits = CODE.map((b, k) => S.text(X0 + k * UW + UW / 2, 501, String(b), { cls: 't-c t-md t-mono t-b t-d', style: { opacity: 0 } }, rd));
       st.cursor = S.line(X0, 236, X0, 512, { cls: 's-x w15 dash', style: { opacity: 0 } }, gw);
       st.X0 = X0; st.UW = UW;
+      // 掘り下げ（下の層へ）: LD と PD の pn 接合（第2章 場面6）、しきい値で読む（第4章 場面1）
+      YT.drill.mark(st.cb.ld, { to: '02-handoutai.html#s6.5', label: 'LD', at: [350, 66], steps: [1, 2], bridge: 'LD の電流がしきい値を超えると、再結合の光が誘導放出で増え、そろった光になる' });
+      YT.drill.mark(st.cb.pd, { to: '02-handoutai.html#s6.3', label: 'PD', at: [652, 64], steps: [4], bridge: 'PD の電流は、光子が作った電子正孔対が空乏層の電場で引き離されて流れるもの' });
+      YT.drill.mark(st.cb.dec, { to: '04-ronri.html#s1.2', label: 'しきい値で 1 ／ 0', at: [936, 66], steps: [5], bridge: 'しきい値より上なら 1 と読むのは、論理回路の入力がしきい値で 0 と 1 を読むのと同じ判定' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -810,6 +816,10 @@
         });
       });
       S.text(776, 551, '色の付いた層まで読む（第11章の 5 層。ルーターの NAT はポート番号も書き換える）', { cls: 't-xs t-dim', 'text-anchor': 'end' }, st.layers);
+      // 掘り下げ（下の層へ）: LD と PD（場面2）、家側の 1000BASE-T（第13章 場面2）
+      YT.drill.mark(st.bosa, { to: '15-hikari.html#s2.1', label: 'BOSA', at: [352, 94], steps: [1], bridge: 'BOSA の LD は電流の強弱で光を点滅させ、PD は届いた光を電流に戻す' });
+      YT.drill.mark(st.ldBox, { to: '15-hikari.html#s2.2', label: '上りの LD', at: [336, 396], steps: [4], bridge: '枠の外で消したレーザーは、点けた直後に発振が遅れ、すぐには形のそろった点滅にならない' });
+      YT.drill.mark(st.phy, { to: '13-ethernet.html#s2.3', label: 'Ethernet PHY', at: [776, 194], steps: [5], bridge: 'ONU とルーターの間の 1000BASE-T は、4 対の線に 5 段階の電圧を同時に送る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1070,6 +1080,11 @@
       lab(1578, 428, '下り 10G-EPON（1577）', 'end');
       lab(1555, 452, '映像（1550 帯）', 'end');
       S.text(36, 538, '上りの 2 つは波長が重なるので、時間で分ける（下りは波長で分ける）', { cls: 't-xs t-dim' }, pf);
+      // 掘り下げ（下の層へ）: 導波路の全反射（場面1）、重なった光と PD（場面2）、光の速さ（場面6）、周波数で選り分ける（第12章 場面1）
+      YT.drill.mark(st.pa, { to: '15-hikari.html#s1.3', label: '導波路', at: [860, 478], steps: [1], bridge: 'スプリッタの導波路も、屈折率の高い芯に光を全反射で閉じ込めて運び、それを Y 字に分ける' });
+      YT.drill.mark(st.pd, { to: '15-hikari.html#s2.4', label: 'OLT の受信', at: [118, 482], steps: [4], bridge: '2 軒の光が重なると、PD の電流は 2 つの光の強さの和になり、どちらの 1 と 0 も読めない' });
+      YT.drill.mark(st.pe, { to: '15-hikari.html#s6.1', label: '片道の時間', at: [848, 408], steps: [5], bridge: '片道の時間の差は、距離の差を光が秒速約 20 万 km（1 km を約 5 µs）で進む時間' });
+      YT.drill.mark(st.pf, { to: '12-wifi.html#s1.5', label: '波長で分ける', at: [384, 535], steps: [6], bridge: '波長の違う光を分けられるのは、電波と同じく、周波数の違う波はフィルタで選り分けられるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1302,6 +1317,9 @@
       pack(422, 'MAP-E（v6プラスなど）', 'IPv4 送信元 203.0.113.5:40001', 'NAT は家のルーター');
       pack(462, 'DS-Lite（transix など）', 'IPv4 送信元 192.168.1.10:51234', 'NAT は VNE の装置');
       S.text(40, 526, 'MAP-E は 1 つの IPv4 アドレスを複数の家でポートの範囲に分けて共有する。どちらも IPv6 の中身は VNE の出口で取り出される', { cls: 't-xs' }, q5);
+      // 掘り下げ（下の層へ）: 光をビットに戻す受け手（場面2）、行列の待ち時間（場面6）
+      YT.drill.mark(st.q0, { to: '15-hikari.html#s2.5', label: '光をフレームに戻す', at: [748, 494], steps: [1], bridge: 'OLT は届いた光を PD で電流に、TIA で電圧に変え、しきい値でビットを読んでフレームに戻す' });
+      YT.drill.mark(st.q2, { to: '15-hikari.html#s6.5', label: '行列で待たされる', at: [856, 464], steps: [3], bridge: 'あふれたパケットは装置の行列で順番を待ち、その待ち時間がそのまま遅延に加わる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1498,6 +1516,9 @@
         S.rect(x3, 531, 10, 10, { rx: 2, cls: c3 }, d);
         S.text(x3 + 14, 540, t3, { cls: 't-xs t-dim' }, d);
       });
+      // 掘り下げ（下の層へ）: 電場が導線を伝わる速さ（第1章 場面2）、抵抗で熱になる損失（第1章 場面3）
+      YT.drill.mark(st.pA, { to: '01-denshi.html#s2.2', label: 'LAN ケーブルの信号', at: [278, 192], steps: [1], bridge: 'LAN ケーブルの信号の速さは、導線に沿って電場が広がる速さ（真空の光速の 6〜7 割）' });
+      YT.drill.mark(st.pB, { to: '01-denshi.html#s3.2', label: '銅線の弱まり', at: [826, 212], steps: [2], bridge: '銅線で信号が弱まる分の多くは、電子がイオンにぶつかって熱に変わるエネルギー' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

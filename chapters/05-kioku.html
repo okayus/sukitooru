@@ -337,6 +337,10 @@
         { a: 'S', b: 'Qb', out: 'Q', pend: null, paths: [st.wQ, st.wQf], pulses: [st.p1, st.p1b] },
         { a: 'R', b: 'Q', out: 'Qb', pend: null, paths: [st.wQb, st.wQbf], pulses: [st.p2, st.p2b] }
       ];
+      // 掘り下げ（下の層へ）: 「どちらかが 0 なら 1」は並列の pMOS（第4章 場面2）、ゲートの遅延は容量の充放電（第4章 場面1）
+      YT.drill.mark(G.g, { to: '04-ronri.html#s2.3', label: 'NAND（どちらかが 0）', at: [452, 202], steps: [1], bridge: '「どちらかが 0 なら必ず 1」になるのは、並列の pMOS のどちらかが閉じれば出力が VDD につながるから' });
+      YT.drill.mark(G2.g, { to: '04-ronri.html#s2.3', label: 'ラッチの NAND', at: [452, 462], steps: [2, 3, 4, 5], bridge: '入力に 0 を持つ NAND の出力が必ず 1 になるのは、並列の pMOS の片方が閉じて VDD につながるから' });
+      YT.drill.mark(st.oQ.g, { to: '04-ronri.html#s1.4', label: 'Q が変わるまでの遅延', at: [836, 200], steps: [3, 4], bridge: '出力が遅れて変わるのは、導線と次のゲートの入力の容量を充放電するのに時間がかかるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -470,6 +474,9 @@
       st.chainIn = [3, 5, 2, 7, 4, 6, 1, 8];
       // 掘り下げ（下の層へ）: ラッチの中身の NAND は、4 個のスイッチ（第4章 場面2）
       YT.drill.mark(st.symBox, { to: '04-ronri.html#s2.1', label: 'ラッチの中の NAND', at: [284, 62], bridge: 'ラッチの中身は NAND の輪（場面1）。NAND は 4 個のスイッチでできている' });
+      // 論理の遅延の代表は加算器の桁上がり（第4章 場面6）
+      YT.drill.mark(st.gz, { to: '04-ronri.html#s6.4', label: '論理の遅延', at: [918, 504], steps: [4], bridge: '論理の遅延の代表は加算器の桁上がり。段の数だけ遅れ、周期 0.33 ns に収まらないこともある' });
+      YT.drill.mark(st.chain[2].r, { to: '04-ronri.html#s6.3', label: '＋1 の論理回路', at: [556, 458], steps: [5], bridge: '＋1 の回路の途中の揺れは、加算器で桁上がりが右から左へ伝わる間、答えが決まらないこと' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -598,7 +605,7 @@
       };
       st.pA = port(60, 120, '読みポート A', 'f-in s-fg w15');
       st.pB = port(60, 230, '読みポート B', 'f-in s-fg w15');
-      st.pW = port(730, 170, '書きポート', 'f-x-soft s-x w15');
+      st.pW = port(740, 156, '書きポート', 'f-x-soft s-x w15');   // 段階5 の PC・SP・汎用の札（x 680〜750）に重ねない
       S.text(145, 198, 'アドレス 4 bit → デコーダ', { cls: 't-c t-xs t-dim' }, gf);
       S.text(145, 212, '→ 1 本の選択線', { cls: 't-c t-xs t-dim' }, gf);
       st.pathA = S.path('', { cls: 'f-none s-fg w2', 'marker-end': mk('fg') }, gf);
@@ -614,6 +621,11 @@
       });
       st.readSeq = [[1, 2, 3], [3, 4, 0], [2, 7, 5], [5, 1, 6], [0, 3, 2], [6, 5, 4], [4, 2, 1], [7, 0, 7]];
       st.writeVals = ['0x0000_0000_0040_12A4', '0x0000_0000_0000_0102', '0x0000_7F3B_2C10_0008', '0x0000_0000_0000_0004', '0x0000_0000_0000_0203', '0x7FFF_F2A0_1C40_87F0', '0x0000_0000_0040_12A8', '0x0000_0000_0000_0011'];
+      // 掘り下げ（下の層へ）: D-FF（場面2）、選択回路とデコーダは積和形（第4章 場面3）
+      YT.drill.mark(st.ffs[7].r, { to: '05-kioku.html#s2.3', label: 'D-FF（bit 0）', at: [866, 230], steps: [1, 2, 3], bridge: '1 ビット分の箱は、ラッチ 2 段で立ち上がりの瞬間だけ D を取り込む D フリップフロップ' });
+      YT.drill.mark(st.muxes[7], { to: '04-ronri.html#s3.6', label: '選択回路', at: [842, 160], steps: [2], bridge: '選択回路も、出力が 1 になる行ごとに入力の AND を作り OR でまとめる積和形で作れる' });
+      YT.drill.mark(st.gf, { to: '04-ronri.html#s3.6', label: 'デコーダ', at: [232, 205], steps: [4], bridge: 'デコーダの選択線 1 本は、番号のビットの AND（0 のビットは NOT してから）。積和形の 1 行分' });
+      YT.drill.mark(st.cpuTags, { to: '05-kioku.html#s2.3', label: 'PC・SP・汎用レジスタ', at: [772, 128], steps: [5], bridge: '1 ビットに数十個のトランジスタを使うのは、各ビットがラッチ 2 段の D フリップフロップだから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -652,7 +664,7 @@
         const rowY = (n) => st.rows[n].y + 17;
         st.pathA.setAttribute('d', `M230,150 H270 V${rowY(a)} H300`);
         st.pathB.setAttribute('d', `M230,260 H260 V${rowY(b)} H300`);
-        st.pathW.setAttribute('d', `M730,200 H690 V${rowY(w)} H660`);
+        st.pathW.setAttribute('d', `M740,186 H670 V${rowY(w)} H660`);   // 縦線は札の左（x 670）を通す
         st.pA.textContent = `r${a} を読む`; st.pB.textContent = `r${b} を読む`; st.pW.textContent = `r${w} に書く`;
         const flash = f < 0.2;
         st.rows.forEach((r, n) => {
@@ -887,10 +899,11 @@
       // 電源と接地の目印、インバータ
       const inv = (x, y, right) => {
         const d = right ? `M${x},${y - 26} L${x + 60},${y} L${x},${y + 26} Z` : `M${x},${y - 26} L${x - 60},${y} L${x},${y + 26} Z`;
-        S.path(d, { cls: 'f-sf s-fg w2 round' }, g);
+        const p = S.path(d, { cls: 'f-sf s-fg w2 round' }, g);
         S.circle(right ? x + 67 : x - 67, y, 7, { cls: 'f-sf s-fg w2' }, g);
+        return p;
       };
-      inv(400, 215, true); inv(560, 335, false);
+      st.invQb = inv(400, 215, true); inv(560, 335, false);   // 上のインバータは Q を受けて Q̄ を出す（掘り下げの印を付ける）
       // 節点 Q（左）、Q̄（右）
       st.wA1 = wire(g, 'M360,275 V215 H400', 1);       // Q → 上インバータ入力
       st.wB1 = wire(g, 'M474,215 H600 V275', 0);       // 上インバータ出力 → Q̄
@@ -957,7 +970,7 @@
       }
       st.saOut = [0, 1, 2, 3].map((c) => S.text(360 + c * 130, 483, '', { cls: 't-c t-mono t-b t-sm' }, gr));
       // 行デコーダ
-      S.rect(80, 120, 150, 330, { rx: 6, cls: 'f-sf s-rule w15' }, gr);
+      st.dec = S.rect(80, 120, 150, 330, { rx: 6, cls: 'f-sf s-rule w15' }, gr);
       S.text(155, 145, '行デコーダ', { cls: 't-c t-b t-sm' }, gr);
       st.addrTxt = S.text(155, 170, '', { cls: 't-c t-mono' }, gr);
       S.text(155, 190, 'アドレス 2 bit → 4 本', { cls: 't-c t-xs t-dim' }, gr);
@@ -967,6 +980,11 @@
       st.Z = makeZoom(svg, [st.gw, st.cnt]);
       st.Z.add('cell', buildCell);
       st.Z.add('mos', buildMos);
+      // 掘り下げ（下の層へ）: インバータ・nMOS のスイッチ・トランジスタの強さ（第3章）、デコーダは積和形（第4章 場面3）。YT.zoom の板が開いている間は札が出ない（一覧には出る）
+      YT.drill.mark(st.invQb, { to: '03-transistor.html#s4.3', label: 'インバータ', at: [436, 168], steps: [1], bridge: 'Q = 1 を受けたインバータが Q̄ = 0 を出すのは、nMOS がオンで出力が GND につながるから' });
+      YT.drill.mark(st.swL.g, { to: '03-transistor.html#s3.3', label: 'アクセス用 nMOS', at: [305, 304], steps: [2, 3], bridge: 'WL = 1 で輪がビット線につながるのは、アクセス用 nMOS のゲートが 1 になってチャネルができるから' });
+      YT.drill.mark(st.swL.g, { to: '03-transistor.html#s1.4', label: 'アクセス用 nMOS の強さ', at: [305, 304], steps: [4], bridge: 'アクセス用 nMOS を輪の pMOS より強く nMOS より弱く作るのは、ゲート幅 W の選び方' });
+      YT.drill.mark(st.dec, { to: '04-ronri.html#s3.6', label: '行デコーダ', at: [212, 140], steps: [5], bridge: '行デコーダの WL 1 本は、アドレスのビットの AND（0 のビットは NOT してから）。積和形の 1 行分' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1072,7 +1090,7 @@
       st.gate = wire(g, 'M262,150 V221', 0, 'w15');
       st.wA = wire(g, 'M200,230 H249', 0, 'w2'); st.wB = wire(g, 'M275,230 H340 V300', 0, 'w2');
       // コンデンサ
-      S.rect(300, 300, 80, 8, { cls: 'f-fg' }, g); S.rect(300, 330, 80, 8, { cls: 'f-fg' }, g);
+      st.cap = S.rect(300, 300, 80, 8, { cls: 'f-fg' }, g); S.rect(300, 330, 80, 8, { cls: 'f-fg' }, g);
       S.path('M340,338 V380 M320,380 H360 M328,388 H352 M336,396 H344', { cls: 'f-none s-fg w2' }, g);
       S.text(395, 324, 'コンデンサ', { cls: 't-sm t-b' }, g);
       S.text(395, 340, '20〜30 fF', { cls: 't-xs t-dim t-mono' }, g);
@@ -1144,7 +1162,7 @@
       st.rowBuf = [0, 1, 2, 3, 4, 5, 6, 7].map((c) => S.text(300 + c * 72, 462, '', { cls: 't-c t-mono t-b' }, gr));
       S.text(260, 462, '行バッファ', { cls: 't-xs t-b', 'text-anchor': 'end' }, gr);
       S.text(260, 476, '(センスアンプ列)', { cls: 't-xs t-dim', 'text-anchor': 'end' }, gr);
-      S.rect(60, 90, 140, 350, { rx: 6, cls: 'f-sf s-rule w15' }, gr);
+      st.dec = S.rect(60, 90, 140, 350, { rx: 6, cls: 'f-sf s-rule w15' }, gr);
       S.text(130, 114, '行デコーダ', { cls: 't-c t-b t-sm' }, gr);
       st.arrAddr = S.text(130, 138, '', { cls: 't-c t-mono t-sm' }, gr);
       st.colSel = []; for (let c = 0; c < 8; c++) st.colSel.push(S.rect(300 + c * 72 - 32, 434, 64, 44, { rx: 5, cls: 'f-none s-x w2', style: { opacity: 0 } }, gr));
@@ -1165,6 +1183,12 @@
       S.text(260, 470, 'L1 32〜48 KB、約 1 ns', { cls: 't-c t-sm' }, gc);
       S.text(700, 492, '8〜32 GB、70〜100 ns', { cls: 't-c t-sm' }, gc);
       S.text(480, 530, 'どちらも電源を切ると消える（揮発性）', { cls: 't-c t-sm t-x t-b' }, gc);
+      // 掘り下げ（下の層へ）: nMOS のスイッチと漏れ（第3章）、コンデンサの充電・放電（第1章 場面6）、デコーダは積和形（第4章 場面3）
+      YT.drill.mark(st.sw.g, { to: '03-transistor.html#s3.3', label: 'nMOS（ワード線）', at: [262, 262], steps: [1, 2], bridge: 'WL を上げるとコンデンサとビット線がつながるのは、nMOS のゲートが 1 になりチャネルができるから' });
+      YT.drill.mark(st.cap, { to: '01-denshi.html#s6.4', label: 'コンデンサ', at: [282, 318], steps: [1, 2], bridge: 'DRAM の 1 は、コンデンサの板に電荷が溜まり、板の間に電圧が生まれている状態' });
+      YT.drill.mark(st.sw.g, { to: '03-transistor.html#s5.4', label: 'nMOS の漏れ電流', at: [262, 262], steps: [4], bridge: '切り離しても電荷が逃げるのは、オフの nMOS にもわずかに電流が流れるから（漏れ電流）' });
+      YT.drill.mark(st.gl, { to: '01-denshi.html#s6.5', label: '電荷の減り方', at: [826, 130], steps: [4], bridge: '漏れで減る電荷の曲線は、コンデンサの放電と同じ形。減る速さは抵抗と容量の積で決まる' });
+      YT.drill.mark(st.dec, { to: '04-ronri.html#s3.6', label: '行デコーダ', at: [182, 110], steps: [5], bridge: '行アドレスで WL を 1 本選ぶ行デコーダは、アドレスのビットの AND を行ごとに作る積和形' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1371,6 +1395,10 @@
       S.text(210, 266, '傷んだブロックを避けて書く', { cls: 't-c t-xs t-dim' }, gsd);
       S.text(210, 300, '通電なしの保持：新品時 約 10 年（書き換えで短くなる）', { cls: 't-c t-sm t-b' }, gsd);
       st.pe = 0; st.peCycle = -1;
+      // 掘り下げ（下の層へ）: 浮いたゲートとしきい値（第3章 場面1・2）、直列の nMOS（第4章 場面2）
+      YT.drill.mark(st.fg, { to: '03-transistor.html#s1.3', label: '浮遊ゲート', at: [460, 294], steps: [1], bridge: '浮遊ゲートは、MOSFET のゲートとチャネルの間に足した板。ゲートと同じく、絶縁膜の上に浮いている' });
+      YT.drill.mark(st.gv, { to: '03-transistor.html#s2.3', label: 'しきい値 V_th', at: [836, 130], steps: [3], bridge: '浮遊ゲートの電子が上げる V_th は、ゲートの電圧で反転層（チャネル）ができ始める電圧' });
+      YT.drill.mark(st.gn, { to: '04-ronri.html#s2.4', label: 'NAND 列（直列）', at: [196, 88], steps: [5], bridge: 'NAND 列が流れるのは全部のセルが閉じたときだけ。NAND ゲートの直列の nMOS と同じ' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

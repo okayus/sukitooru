@@ -78,7 +78,7 @@
     <p class="sh-meta"><span class="chip">load / store</span><span class="chip">0xFEB0_0000</span></p>
   </header>
   <div class="col a-left">
-    <p class="prose a-lead">CPU が装置と話す方法は 1 つしかない。装置の中の小さな記憶（レジスタ）に<b>アドレス</b>を付け、メモリと同じ load/store で読み書きする。</p>
+    <p class="prose a-lead">CPU が装置と話す方法は、いまはほぼ 1 つ。装置の中の小さな記憶（レジスタ）に<b>アドレス</b>を付け、メモリと同じ load/store で読み書きする。</p>
     <div class="narr-slot a-panel"></div>
     <div class="prose a-after">
       <p class="note">PCIe 装置のレジスタの範囲（BAR）は起動時にファームウェアと OS が決めて割り当てる。x86 にはメモリとは別の 64K 個の I/O ポート空間（in/out 命令）も残っているが、現代の装置はほぼ MMIO を使う。ARM にはメモリマップしかない。</p>
@@ -162,7 +162,7 @@
   </div>
   <figure class="anim-fig a-fig">
     <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="NIC の内部（PCIe、DMA、リング、MAC、PHY）を通ってフレームが電線の信号になる流れと、Wi-Fi カードの構成"></svg></div>
-    <figcaption>図6　上段が有線の NIC。メモリのフレームが DMA で入り、MAC が FCS を付け、PHY が信号にする。下段が Wi-Fi カードで、PHY の先がアンテナになる。</figcaption>
+    <figcaption>図6　上段が有線の NIC。メモリのフレームが DMA で入り、MAC が FCS を付け、PHY が信号にする（波形は 2 ビットを 4 段で描いた模式）。下段が Wi-Fi カードで、PHY の先がアンテナになる。</figcaption>
   </figure>
 </section>
 
@@ -314,6 +314,11 @@
       st.netTag = S.g({ cls: 'fade' }, g);
       S.rect(690, 282, 230, 166, { rx: 8, cls: 'f-none s-d w2' }, st.netTag);
       S.text(805, 462, 'ここがネットワークの入口（場面 6）', { cls: 't-c t-xs t-d t-b' }, st.netTag);
+      // 掘り下げ（下の層へ）。差動線は第13章にしか無い（登録簿の io の下に phy が無いので向きは「横」）
+      YT.drill.mark(st.roads.mem.g, { to: '04-ronri.html#s1.5', label: 'メモリバス（並列）', at: [214, 118], steps: [1], bridge: '並列の道は 1 ビットに 1 本の線を並べ、シリアルの道は少ない線にビットを時間順に流す' });
+      YT.drill.mark(st.boxes.mem.rect, { to: '05-kioku.html#s5.5', label: 'メモリ（DDR5）', at: [607, 68], steps: [2], bridge: 'DDR5 の DDR は、行バッファから取り出す動作をクロックの両エッジで行うこと' });
+      YT.drill.mark(st.boxes.cpu.rect, { to: '06-cpu.html#s6.3', label: 'キャッシュ', at: [262, 216], steps: [2], bridge: 'キャッシュに無いデータとは、L1・L2・L3 のどれにも無かった（ミスした）データ。DRAM まで降りて取ってくる' });
+      YT.drill.mark(st.pcieTbl, { to: '13-ethernet.html#s1.2', label: 'PCIe のレーン（差動線）', at: [846, 474], steps: [3], bridge: 'レーンの差動線も、2 本の電圧の差で 1 と 0 を送る。下の例は LAN ケーブルの対' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -408,9 +413,15 @@
       S.path('M145,104 V118', { cls: 'f-none s-fg w2', 'marker-end': mk('fg') }, st.sys);
       S.text(160, 114, 'システムコール', { cls: 't-xs' }, st.sys);
       S.path('M250,77 C330,77 400,120 400,395', { cls: 'f-none s-x w2 dash', 'marker-end': mk('x') }, st.sys);
-      S.text(300, 150, '直接は不可（保護）', { cls: 't-xs t-x t-b' }, st.sys);
+      st.denyTxt = S.text(300, 150, '直接は不可（保護）', { cls: 't-xs t-x t-b' }, st.sys);
       S.text(300, 164, 'ページテーブルに無い', { cls: 't-xs t-x' }, st.sys);
       st.pollCount = 0;
+      // 掘り下げ（下の層へ）
+      YT.drill.mark(st.regs[0].g, { to: '05-kioku.html#s3.1', label: '装置のレジスタ', at: [896, 158], steps: [1], bridge: '装置のレジスタも CPU のレジスタと同じく、クロックを共通にした D-FF の束' });
+      YT.drill.mark(st.mmioRect, { to: '05-kioku.html#s3.4', label: 'MMIO の範囲', at: [310, 462], steps: [2], bridge: 'アドレスで RAM か装置かが決まるのは、番号から 1 本の選択線を選ぶデコーダと同じ考え' });
+      YT.drill.mark(st.cpu.rect, { to: '06-cpu.html#s1.4', label: 'store 命令', at: [236, 214], steps: [3], bridge: 'store は、番地をアドレスバスに、値をデータバスに出して「書け」と合図する命令' });
+      YT.drill.mark(st.regs[0].g, { to: '05-kioku.html#s3.3', label: '制御レジスタ', at: [896, 158], steps: [3], bridge: '書いた瞬間に送信回路が動くのは、レジスタの Q がいつも回路の入力に出ているから' });
+      YT.drill.mark(st.denyTxt, { part: 'cpu-mode', step: 4, label: '保護（直接は不可）', at: [284, 146], steps: [5], bridge: 'カーネルモードだけが触れるのは、読み書きのたびに CPU がモードとページの印を照らし合わせるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -543,8 +554,11 @@
       st.hpc = S.rect(600, 168, 76, 48, { rx: 5, cls: 'f-none s-x w3', style: { opacity: 0 } }, g);
       st.latency = S.text(600, 240, '', { cls: 't-xs t-dim t-mono' }, g);
       // 段階6: 頻度の表
-      st.rateTbl = table(g, 600, 420, [10, 150], [['発生源', '回数／秒'], ['タイマ', '250〜1,000'], ['キーボード', '< 10'], ['NIC 10 Gb/s', '最大 数十万 → 束ねる']], 24, { head: true, w: 320, mono: true });
+      st.rateTbl = table(g, 600, 420, [10, 150], [['発生源', '回数／秒'], ['タイマ', '250〜1,000'], ['キーボード', '< 10'], ['NIC 10 Gb/s', '数十万 → 束ねる']], 24, { head: true, w: 320, mono: true });
       st.rateTbl.classList.add('fade');
+      // 掘り下げ（下の層へ）。割り込みの入口は部品 cpu-mode の syscall・sysret と同じ仕組みで見せる（例が違う）
+      YT.drill.mark(st.cpuMode, { part: 'cpu-mode', step: 3, label: 'カーネルモードへ', at: [904, 338], steps: [4], bridge: 'カーネルモードへの切り替えは、決まった入口へ飛ぶ拍に M を 0 にすること。部品は syscall の例' });
+      YT.drill.mark(st.hand[3], { part: 'cpu-mode', step: 5, label: 'iret', at: [904, 158], steps: [5], bridge: 'iret でユーザーに戻るときも、PC を戻すのと同じ拍で M を 1 にする。部品は sysret の例' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -649,7 +663,7 @@
       st.busyTxt = S.text(220, 270, '', { cls: 't-xs t-mono', 'text-anchor': 'end' }, g);
       // メモリ
       S.text(480, 50, 'メモリ（DRAM）', { cls: 't-c t-b' }, g);
-      S.rect(360, 60, 240, 440, { rx: 6, cls: 'f-sf s-rule w15' }, g);
+      st.memRect = S.rect(360, 60, 240, 440, { rx: 6, cls: 'f-sf s-rule w15' }, g);
       st.cells = [];
       for (let k = 0; k < 7; k++) {
         const y = 74 + k * 34;
@@ -658,7 +672,7 @@
         st.cells.push({ r, fill: S.rect(372, y, 0, 28, { rx: 3, cls: 'f-d' }, g) });
       }
       S.text(480, 318, '受信バッファ（空き）', { cls: 't-c t-xs t-dim' }, g);
-      S.text(372, 346, 'ディスクリプタのリング', { cls: 't-xs t-b' }, g);
+      st.ringLbl = S.text(372, 346, 'ディスクリプタのリング', { cls: 't-xs t-b' }, g);
       st.desc = [0, 1, 2].map((k) => {
         const y = 356 + k * 44;
         const r = S.rect(372, y, 216, 38, { rx: 3, cls: 'f-in s-rule w1' }, g);
@@ -708,6 +722,10 @@
       S.text(760, 480, 'キャッシュとの一貫性：', { cls: 't-xs t-dim' }, st.iommu);
       S.text(760, 496, '装置の書き込みは CPU のキャッシュ', { cls: 't-xs t-dim' }, st.iommu);
       S.text(760, 512, 'の古い行を無効化（スヌープ）', { cls: 't-xs t-dim' }, st.iommu);
+      // 掘り下げ（下の層へ）。リングの仕組みは第27章にしか無い（登録簿の io の下に algo が無いので向きは「横」）
+      YT.drill.mark(st.cpu.rect, { to: '06-cpu.html#s4.2', label: 'CPU が運ぶ（load/store）', at: [206, 186], steps: [1], bridge: '1 語ずつ運ぶ間、値は必ず CPU のレジスタを通る。下の例はメモリの値を足して戻すループ' });
+      YT.drill.mark(st.ringLbl, { to: '27-algorithm.html#s5.2', label: 'ディスクリプタのリング', at: [500, 340], steps: [2], bridge: 'ディスクリプタを輪に並べるのは、置き場所を動かさず番号だけを進めるリングバッファの形' });
+      YT.drill.mark(st.memRect, { to: '05-kioku.html#s5.2', label: '受信バッファ（DRAM）', at: [614, 90], steps: [3], bridge: 'DMA の書き込みも、最後は DRAM のセルのコンデンサをビット線の電圧で充放電すること' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -852,7 +870,7 @@
         }
         return gg;
       };
-      grid(420, 348, 0); grid(540, 348, 1);
+      st.img0 = grid(420, 348, 0); grid(540, 348, 1);
       S.text(462, 452, '前の画像', { cls: 't-c t-xs t-dim' }, st.mouseG);
       S.text(582, 452, '次の画像（1 列ずれ）', { cls: 't-c t-xs t-dim' }, st.mouseG);
       S.path('M508,390 H536', { cls: 'f-none s-x w2', 'marker-end': mk('x') }, st.mouseG);
@@ -874,6 +892,11 @@
       });
       st.clickNote = S.text(420, 470, '', { cls: 't-xs t-mono' }, st.clickG);
       S.text(420, 500, '合計で数ミリ秒。第10章でブラウザの中の続きを追う', { cls: 't-xs t-dim' }, st.clickG);
+      // 掘り下げ（下の層へ）
+      YT.drill.mark(st.keys[4].g, { to: '01-denshi.html#s5.3', label: 'キー（スイッチ）', at: [100, 150], steps: [1], bridge: 'キーを押すと行と列の線がつながり、電圧をかけた行から列へ電流が流れる。スイッチを閉じると流れるのと同じ' });
+      YT.drill.mark(st.scanTxt, { to: '04-ronri.html#s1.2', label: '列の電圧を読む', at: [358, 432], steps: [2], bridge: '列の電圧を 1 か 0 と読むのは、しきい値より高いか低いかで決める受け手の約束' });
+      YT.drill.mark(st.img0, { to: '02-handoutai.html#s6.3', label: '光学センサ', at: [522, 360], steps: [5], bridge: 'センサの 1 画素はフォトダイオード。受けた光の強さに比例した電流が流れる' });
+      YT.drill.mark(st.mouseRep, { to: '04-ronri.html#s6.5', label: 'dx・dy（符号付き）', at: [916, 418], steps: [5], bridge: 'dy = −1 のような負の値は 2 の補数で表す。下の例は 4 ビットの −3' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1001,7 +1024,7 @@
       st.wifiG = S.g({ cls: 'fade' }, g);
       S.rect(40, 330, 880, 140, { rx: 10, cls: 'f-in s-rule w15' }, st.wifiG);
       S.text(60, 352, 'Wi-Fi カード', { cls: 't-b t-lg' }, st.wifiG);
-      [[60, 'PCIe / USB', 'ホストとの窓口'], [240, 'MAC', 'フレーム・CSMA/CA・暗号'], [420, 'ベースバンド（PHY）', 'ビット ⇄ OFDM の波形'], [600, 'RF', '2.4 / 5 / 6 GHz に変換']].forEach(([x, t, sub]) => box(st.wifiG, x, 370, 160, 80, t, sub, 'f-sf s-rule w15'));
+      st.wb = [[60, 'PCIe / USB', 'ホストとの窓口'], [240, 'MAC', 'フレーム・CSMA/CA・暗号'], [420, 'ベースバンド（PHY）', 'ビット ⇄ OFDM の波形'], [600, 'RF', '2.4 / 5 / 6 GHz に変換']].map(([x, t, sub]) => box(st.wifiG, x, 370, 160, 80, t, sub, 'f-sf s-rule w15'));
       [[220, 240], [400, 420], [580, 600]].forEach(([x1, x2]) => S.line(x1, 410, x2, 410, { cls: 's-rule w6 round' }, st.wifiG));
       S.line(760, 410, 800, 410, { cls: 's-rule w6 round' }, st.wifiG);
       S.line(800, 410, 800, 360, { cls: 's-fg w3' }, st.wifiG);
@@ -1017,6 +1040,14 @@
       });
       S.text(480, 500, '電線に出るのは一続きのビット列。受け取る側がこの入れ子として読む（第11章 層モデル）', { cls: 't-c t-xs t-dim' }, st.nestG);
       st.bits = S.text(480, 520, '', { cls: 't-c t-xs t-mono t-d' }, st.nestG);
+      // 掘り下げ（下の層へ）。札はフレームの札が通る帯（y 172〜196）より下に置く
+      YT.drill.mark(st.blk.mac.rect, { to: '13-ethernet.html#s3.6', label: 'MAC（FCS）', at: [508, 210], steps: [2, 4], bridge: 'MAC が末尾に付ける FCS は、受け手が同じ計算をして壊れたフレームを見つけるための値' });
+      YT.drill.mark(st.blk.phy.rect, { to: '13-ethernet.html#s2.3', label: 'PHY（PAM-5）', at: [688, 210], steps: [3], bridge: 'PHY の 5 段階の電圧は、4 対の組で 1 バイトより多い通りを持ち、余りを誤り訂正に使う' });
+      YT.drill.mark(st.blk.rj.rect, { to: '13-ethernet.html#s1.2', label: 'RJ45・4 対の銅線', at: [868, 210], steps: [3], bridge: '4 対のそれぞれは、2 本の線の電圧の差で送る差動信号。同じだけ乗るノイズは差を取ると消える' });
+      YT.drill.mark(st.blk.phy.rect, { to: '13-ethernet.html#s2.5', label: 'PHY（電圧 → ビット）', at: [688, 210], steps: [4], bridge: 'PHY がビットに戻すのは、拍を合わせ、各拍の電圧をしきい値と比べて段階を決める仕事' });
+      YT.drill.mark(st.wb[1].rect, { to: '12-wifi.html#s4.3', label: 'MAC（CSMA/CA）', at: [386, 382], steps: [5], bridge: 'CSMA/CA の「空いているか聞いてから送る」は、空きが続いた後さらに乱数の時間だけ待つ手順' });
+      YT.drill.mark(st.wb[2].rect, { to: '12-wifi.html#s3.2', label: 'ベースバンド（OFDM）', at: [566, 382], steps: [5], bridge: 'OFDM の波形は、帯域を多数のサブキャリアに分け、それぞれにゆっくり送る形' });
+      YT.drill.mark(st.wb[3].rect, { to: '12-wifi.html#s1.1', label: 'RF・アンテナ', at: [746, 382], steps: [5], bridge: 'RF 回路が 2.4 GHz などの交流をアンテナに流し、往復する電子が電波を出す' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

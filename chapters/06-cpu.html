@@ -269,8 +269,8 @@
       aMem: 'M460,254 H590 V300 H656'
     };
     S.rect(24, 48, 592, 480, { rx: 10, cls: 'f-sf s-fg w15' }, g);
-    S.rect(648, 48, 292, 480, { rx: 10, cls: 'f-sf s-fg w15' }, g);
-    S.path('M430,122 H648', { cls: 'f-none s-rule w6' }, g);
+    H.memBox = S.rect(648, 48, 292, 480, { rx: 10, cls: 'f-sf s-fg w15' }, g);
+    H.busA = S.path('M430,122 H648', { cls: 'f-none s-rule w6' }, g);
     S.path('M540,300 H648', { cls: 'f-none s-rule w6' }, g);
     S.path('M590,122 V300', { cls: 'f-none s-rule w6' }, g);
     ['irAddr', 'memALU', 'aALU', 'aluA', 'aMem'].forEach((k) => S.path(P[k], { cls: 'f-none s-rule w2' }, g));
@@ -744,6 +744,13 @@
       st.Z.add('reg', buildREG).set({ name: 'A', d: 0x05, q0: 0x00, src: '← バス', dst: '→ ALU' });
       st.Z.add('alu', buildALU).set({ a: 0x05, m: 0x03 });
       st.Z.add('dec', buildDEC).set({ cycle: INIT_MEM.slice(0, 8) });
+      // 掘り下げ（下の層へ）。段階2・3・5 は板が開くと札が隠れ、説明欄の下の一覧からだけ開ける
+      YT.drill.mark(st.H.a.bg, { to: '05-kioku.html#s3.1', label: 'レジスタ A', at: [444, 294], steps: [2], bridge: 'レジスタ A の 8 ビットは、クロックを共通にした D-FF 8 個に 1 ビットずつ入る' });
+      YT.drill.mark(st.H.alu.bg, { to: '04-ronri.html#s6.3', label: 'ALU', at: [584, 378], steps: [3], bridge: 'ALU の足し算は全加算器を桁の数だけ並べたもの。桁上がりが右の桁から順に伝わる' });
+      YT.drill.mark(st.H.busA, { to: '04-ronri.html#s1.5', label: 'アドレスバス・データバス', at: [632, 96], steps: [4], bridge: 'アドレスバスもデータバスも、1 ビットに 1 本の導線を並べた束。8 本で 1 バイトを同時に運ぶ' });
+      YT.drill.mark(st.H.memBox, { to: '05-kioku.html#s5.5', label: 'メモリ（DRAM）', at: [918, 70], steps: [4], bridge: 'YT-8 の 1 番地は 1 行に縮めた模式。実物の DRAM は行を開いてから列アドレスで取り出す' });
+      YT.drill.mark(st.H.clk.bg, { to: '05-kioku.html#s2.5', label: 'クロック', at: [266, 438], steps: [5], bridge: '1 拍ごとに 1 つの動作が進むのは、FF の間の論理回路が次のエッジまでに計算を終えるから' });
+      YT.drill.mark(st.H.ctrl.bg, { to: '04-ronri.html#s3.6', label: '制御装置', at: [264, 114], steps: [5], bridge: '制御装置の解読は、命令ごとに AND を 1 個置き、0 の桁は NOT してから入れる配線' });
     },
     onStep(ctx, i) {
       const H = ctx.state.H;
@@ -823,7 +830,7 @@
       S.text(44, 476, 'n はオペランドの番地（0〜15）。Z は直前の ADD / SUB の結果が 0 なら 1。', { cls: 't-xs t-dim' }, gt);
       // 右: メモリの中身
       const gm = st.gm = S.g({}, svg);
-      S.rect(500, 48, 440, 480, { rx: 10, cls: 'f-sf s-fg w15' }, gm);
+      st.memBg = S.rect(500, 48, 440, 480, { rx: 10, cls: 'f-sf s-fg w15' }, gm);
       S.text(516, 72, 'メモリ', { cls: 't-b t-lg' }, gm);
       S.text(560, 94, '番地', { cls: 't-xs t-dim t-end' }, gm);
       st.hMach = S.text(578, 94, '機械語（CPU が読む）', { cls: 't-xs t-dim' }, gm);
@@ -866,6 +873,10 @@
         st.isaRows.forEach((bg, r) => { bg.setAttribute('class', highlightIsa && ISA[r][0] === b.slice(0, 4) ? 'f-d-soft' : 'f-sf'); });
       };
       st.cur = -1;
+      // 掘り下げ（下の層へ）
+      YT.drill.mark(st.argTxt, { to: '04-ronri.html#s4.1', label: 'オペランド 1011', at: [414, 176], steps: [1], bridge: '1011 が 11 番地なのは、右の桁から重み 1・2・4・8 を付け、1 の桁の重みを足すから' });
+      YT.drill.mark(st.opTxt, { to: '06-cpu.html#s3.3', label: 'オペコード 0010', at: [186, 176], steps: [1], bridge: '「配線で決め打ち」の中身は、オペコードの 4 本を NOT と AND で 1 本の合図に変える解読' });
+      YT.drill.mark(st.memBg, { to: '06-cpu.html#s3.2', label: 'PC を 1 増やす', at: [530, 322], steps: [3], bridge: 'PC を 1 増やすのは、PC + 1 を常に用意する小さな加算器。フェッチの 2 拍めに PC へ入る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -944,6 +955,14 @@
       st.Z.add('alu', buildALU).set({ a: st.base.a, m: st.base.mem[11] });
       st.Z.add('reg', buildREG).set({ name: 'A', d: st.after.a, q0: st.base.a, src: '← ALU', dst: '→ ALU' });
       st.Z.add('inc', buildINC).set({ pc: st.base.pc });
+      // 掘り下げ（下の層へ）。段階2・3・5 は板が開くと札が隠れ、説明欄の下の一覧からだけ開ける
+      YT.drill.mark(st.H.memBox, { to: '05-kioku.html#s5.5', label: 'メモリ（行を選ぶ）', at: [918, 70], steps: [1, 4], bridge: '番地の行を選ぶのは行デコーダ。実物の DRAM は行を開いてから列アドレスで取り出す' });
+      YT.drill.mark(st.H.ir.bg, { to: '05-kioku.html#s3.2', label: 'IR', at: [546, 160], steps: [2], bridge: 'IR が取り込むのは Load = 1 の拍の立ち上がりだけ。ほかの拍は自分の Q を保つ' });
+      YT.drill.mark(st.H.pc.bg, { to: '04-ronri.html#s5.2', label: 'PC + 1 の加算器', at: [444, 104], steps: [2], bridge: 'PC + 1 の各桁は、PC のビットと右からの桁上がりの 2 つを足す半加算器' });
+      YT.drill.mark(st.H.ctrl.bg, { to: '04-ronri.html#s3.6', label: '制御装置（解読）', at: [264, 114], steps: [3], bridge: '0010 を ADD と判定する配線は、1 の桁はそのまま、0 の桁は NOT してから AND に入れる' });
+      YT.drill.mark(st.H.a.bg, { to: '05-kioku.html#s3.3', label: 'A → ALU の入力 1', at: [444, 294], steps: [4], bridge: 'A の値がいつも ALU に届いているのは、レジスタの Q が常に出力線に出ているから' });
+      YT.drill.mark(st.H.alu.bg, { to: '04-ronri.html#s6.3', label: 'ALU（0 + 3）', at: [584, 378], steps: [5], bridge: '0 + 3 も、全加算器の列を桁上がりが右から 1 段ずつ伝わって確定する。下の例は 5 + 3' });
+      YT.drill.mark(st.H.memBox, { to: '05-kioku.html#s5.6', label: 'メモリを待つ拍', at: [918, 70], steps: [6], bridge: 'メモリを待つ拍が遅いのは、DRAM が行を開き、増幅し、書き戻す手順を踏むから' });
     },
     onStep(ctx, i) {
       const st = ctx.state, H = st.H;
@@ -1019,6 +1038,11 @@
       st.H.note.textContent = '';
       st.lap = S.text(40, 546, '', { cls: 't-mono t-sm t-x t-b' }, ctx.svg);
       st.shown = -1;
+      // 掘り下げ（下の層へ）
+      YT.drill.mark(st.H.mem[1].bg, { to: '06-cpu.html#s3.1', label: 'ADD 11（1 番地）', at: [632, 140], steps: [2], bridge: 'ADD 11 の 1 命令も、取り出し・解読・実行の 5 拍で進む。場面3 は同じ A = 0 から 3 を作る' });
+      YT.drill.mark(st.H.alu.bg, { to: '04-ronri.html#s6.5', label: 'SUB（3 − 1）', at: [584, 378], steps: [3], bridge: 'SUB 12 の 3 − 1 は、1 を 2 の補数にして足す。下の例は 5 − 3' });
+      YT.drill.mark(st.H.pc.bg, { to: '06-cpu.html#s3.3', label: 'JNZ（PC ← 0）', at: [444, 104], steps: [3], bridge: 'JNZ が PC を書き換えるのは、JNZ の AND が「PC ← 番地」の合図を出すから。下の例は ADD' });
+      YT.drill.mark(st.H.z.bg, { to: '06-cpu.html#s1.3', label: 'Z（結果が 0 なら 1）', at: [548, 238], steps: [5], bridge: 'Z は和の 8 本の OR を NOT したもの。全部の桁が 0 のときだけ 1。下の例は Z = 0' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1139,11 +1163,16 @@
       const pts = [[1993, 0.06, 'Pentium 60 MHz'], [1997, 0.3, 'Pentium II 300 MHz'], [2000, 1.5, 'Pentium 4 1.5 GHz'], [2004, 3.8, 'Pentium 4 3.8 GHz'], [2008, 3.2, 'Core i7 3.2 GHz'], [2015, 4.0, 'Core i7 4.0 GHz'], [2023, 6.0, 'Core i9 最高 6.0 GHz']];
       S.poly(pts.map(([yr, g]) => [X(yr), Y(g)]), { cls: 'f-none s-fg w2 round' }, gh);
       pts.forEach(([yr, g, l], k) => { S.circle(X(yr), Y(g), 4, { cls: 'f-fg' }, gh); S.text(X(yr) + (k === pts.length - 1 ? -8 : 8), Y(g) - 8, l, { cls: 't-xs ' + (k === pts.length - 1 ? 't-end' : '') }, gh); });
-      S.rect(X(2004), 200, X(2025) - X(2004), 20, { rx: 3, cls: 'f-x-soft' }, gh);
+      st.wall = S.rect(X(2004), 200, X(2025) - X(2004), 20, { rx: 3, cls: 'f-x-soft' }, gh);
       S.text(X(2014.5), 214, '頭打ち：発熱の壁 → マルチコアへ（2005 年 Pentium D から）', { cls: 't-c t-xs t-x t-b' }, gh);
-      S.text(600, 330, 'P ≈ α · C · V² · f', { cls: 't-mono t-md t-b' }, gh);
+      st.pEq = S.text(600, 330, 'P ≈ α · C · V² · f', { cls: 't-mono t-md t-b' }, gh);
       S.lines(600, 350, ['α 動く割合　C 充放電する容量', 'V 電源電圧　f 周波数'], { cls: 't-xs t-dim' }, gh, 14);
       st.sched = null;
+      // 掘り下げ（下の層へ）
+      YT.drill.mark(st.clkWave, { to: '05-kioku.html#s2.3', label: 'クロック', at: [938, 98], steps: [1], bridge: 'レジスタが立ち上がりでだけ取り込むのは、D-FF が立ち上がりの瞬間の D だけを Q に移すから' });
+      YT.drill.mark(st.grid, { to: '05-kioku.html#s2.5', label: 'パイプラインの段', at: [150, 186], steps: [3], bridge: '段ごとに別の命令を持てるのは、段の間の FF が毎拍の立ち上がりで値を次の段へ渡すから' });
+      YT.drill.mark(st.pEq, { to: '03-transistor.html#s5.2', label: 'P ≈ α·C·V²·f', at: [768, 326], steps: [6], bridge: '電力が f に比例するのは、0→1→0 の 1 往復ごとに C·V² が熱になるから' });
+      YT.drill.mark(st.wall, { to: '03-transistor.html#s5.6', label: '頭打ち（発熱の壁）', at: [894, 210], steps: [6], bridge: '2004 年の頭打ちは、f を上げると必要な V も上がり、発熱が空冷の限界に達したから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1311,6 +1340,9 @@
       S.text(380, 300, 'DRAM だけなら毎回 200 拍。95% ヒットで約 14 倍速い。', { cls: 't-sm t-dim' }, g5);
       S.text(380, 324, '同じ命令数でも、番地の並び方で速さが 10 倍変わる理由がこれ。', { cls: 't-sm t-dim' }, g5);
       st.lastKey = null;
+      // 掘り下げ（下の層へ）
+      YT.drill.mark(st.lv[4].bg, { to: '05-kioku.html#s5.6', label: 'DRAM（200 拍以上）', at: [352, 438], steps: [1], bridge: 'DRAM が 70〜100 ns かかるのは、行を開き、増幅し、書き戻す手順があるから' });
+      YT.drill.mark(st.lv[2].bg, { to: '05-kioku.html#s4.5', label: 'L1・L2・L3（SRAM）', at: [314, 246], steps: [2], bridge: 'L1〜L3 の SRAM が速いのは、セルの輪が自分で値を支え、待たずに読めるから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
