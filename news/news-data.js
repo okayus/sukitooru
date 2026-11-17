@@ -1,6 +1,7 @@
 /* このファイルは tools/build-news.mjs が news/ の Markdown から作る（手で直さない）。
    ノートごとに slug・日付・題・日刊か・中心の層・層（assets/layers.js の id。中心が先頭）・リンクしている章の場面（'章-場面'、場面を指さないリンクは '章'）・教材に無い概念 */
 window.YT_NEWS = [
+{"slug":"2026-11-16-optimizely-snippet-malware-injection","date":"2026-11-16","title":"Optimizely Web の配る JavaScript に悪意のコードが入った事故","daily":true,"center":"browser","layers":["browser","tls","http","delivery"],"scenes":["10-2","20-4","21-5","22-4"],"missing":["CSP（Content Security Policy）"]},
 {"slug":"2026-11-15-clice-cpp-language-server-v1","date":"2026-11-15","title":"C++ の言語サーバー clice の 1.0 版","daily":true,"center":"compiler","layers":["compiler","os"],"scenes":["9-2","28-1","28-2","28-3","28-6"],"missing":["モジュール","1 ファイルずつ作る（分割コンパイル）"]},
 {"slug":"2026-11-14-rust-parallel-frontend-nightly","date":"2026-11-14","title":"Rust のコンパイラの並列フロントエンドを nightly の既定にする変更","daily":true,"center":"compiler","layers":["compiler","os"],"scenes":["9-2","9-5","28-2","28-3","28-6"],"missing":["再現可能なビルド","インクリメンタルコンパイル"]},
 {"slug":"2026-11-08-dtl-nand-chip-reverse-engineering","date":"2026-11-08","title":"1960 年代の論理 IC「Signetics ST680A」の解析","daily":true,"center":"ronri","layers":["ronri","transistor","handoutai","denshi"],"scenes":["1-3","2-2","2-3","2-4","2-5","3-1","3-3","3-4","3-6","4-1","4-2","4-3"],"missing":["バイポーラトランジスタ"]},
