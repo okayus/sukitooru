@@ -720,3 +720,131 @@ table.gloss th .sw { margin-right: 0.4rem; }
   .fit .scene.enter { animation: none; }
   .fade { transition: none; }
 }
+
+/* ============================================================
+   掘り下げ（engine.js の YT.drill）と埋め込み（?embed=1）
+   ============================================================ */
+
+/* 図の要素の角の印（x の枠と ↓）。押すか Enter で板を開く */
+svg .drill-badge { cursor: pointer; }
+svg .drill-badge rect { fill: var(--surface); stroke: var(--c-x); stroke-width: 1.5; }
+svg .drill-badge text { fill: var(--c-x); font-size: 14px; font-weight: 700; text-anchor: middle; }
+svg .drill-badge:hover rect, svg .drill-badge:focus-visible rect { fill: color-mix(in srgb, var(--c-x) 16%, var(--surface)); stroke-width: 2.5; }
+svg .drill-badge:focus { outline: none; }
+svg.zoom-open .drill-badges { display: none; }   /* YT.zoom の板が開いている間は、元の図の印を出さない */
+
+/* 説明欄の下の、この段階の印の一覧（縦読み版でも出す。ホバーに頼らない） */
+.drill-list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 0.5rem 0.8rem 0.55rem; }
+.drill-list[hidden] { display: none; }
+.dl-head { font-size: 0.72rem; color: var(--fg-dim); }
+.drill-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--fg);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--c-x);
+  border-radius: 4px;
+  padding: 2px 9px;
+  cursor: pointer;
+}
+.drill-item:hover { background: color-mix(in srgb, var(--c-x) 10%, var(--surface)); }
+.dl-arrow { color: var(--c-x); font-weight: 700; }
+.dl-label { font-weight: 600; }
+.dl-to { color: var(--fg-dim); }
+.dl-to:not(.solo)::before { content: '→ '; }
+
+/* 板。縦読み版は画面いっぱいに重ね、1画面版は場面の領域（上部バーの下）に重ねる */
+.drill-layer { position: fixed; inset: 0; z-index: 60; background: var(--bg); }
+.drill-layer[hidden] { display: none; }
+html.drill-on:not(.fit) body { overflow: hidden; }
+.drill-panel { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--bg); }
+.drill-panel[hidden] { display: none; }
+.drill-panel:focus { outline: none; }
+.dp-head {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "crumbs acts" "bridge bridge";
+  gap: 2px 16px;
+  align-items: center;
+  padding: 8px 16px 9px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--rule);
+}
+.dp-crumbs { grid-area: crumbs; display: flex; align-items: baseline; gap: 0 6px; min-width: 0; font-size: 0.8rem; line-height: 1.6; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }   /* 縦読み版は 1 行で横に送る（engine.js が右端へ送る） */
+.dp-crumb {
+  font: inherit;
+  color: var(--fg-dim);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+}
+.dp-crumb:hover { color: var(--fg); }
+.dp-sep { color: var(--fg-dim); }
+.dp-cur { font-weight: 600; }
+.dp-acts { grid-area: acts; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.dp-open { font-size: 0.78rem; color: var(--fg-mid); }
+.dp-open[hidden] { display: none; }
+.dp-close {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.dp-close:hover { border-color: var(--fg-dim); }
+.dp-esc { display: none; }
+.dp-bridge { grid-area: bridge; font-size: 0.8rem; line-height: 1.6; color: var(--fg-mid); }
+.dp-bridge:empty { display: none; }
+.dp-bridge::before { content: '↓ '; color: var(--c-x); font-weight: 700; }
+.dp-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.dp-frame .dp-body { overflow: hidden; }
+.dp-iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--bg); }
+/* 部品の板（縦読み版）: 図・説明欄・注記の順に縦に並べる */
+.dp-part .dp-body { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; gap: 1rem; align-content: start; padding: 1rem 16px 2rem; }   /* max-content: overflow:hidden の説明欄が行の残りに縮められないように */
+.dp-part .dp-left { display: contents; }
+.dp-part .dp-fig { order: -1; }
+.dp-ctrls { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.5rem 0.8rem; }
+.dp-note[hidden] { display: none; }
+
+/* 1画面版 */
+.fit .drill-layer { position: absolute; inset: 0; z-index: 5; background: transparent; }
+.fit .drill-panel { inset: 6px 10px 10px; border: 1.5px solid var(--c-x); border-radius: 10px; box-shadow: 0 4px 18px var(--shade); overflow: hidden; }
+.fit .dp-crumbs { flex-wrap: wrap; white-space: normal; overflow: visible; }
+.fit .dp-head { padding: 8px 18px 9px; }
+.fit .dp-crumbs, .fit .dp-bridge { font-size: 13px; }
+.fit .dp-open, .fit .dp-close { font-size: 12.5px; }
+.fit .dp-esc { display: inline; color: var(--fg-dim); }
+.fit .drill-item { font-size: 12.5px; }
+.fit .dl-head { font-size: 11.5px; }
+.fit .dp-part .dp-body { grid-template-columns: 37fr 63fr; column-gap: 32px; padding: 16px 22px 14px; overflow: hidden; }
+.fit .dp-part .dp-left { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.fit .dp-part .dp-left > * { flex: none; }
+.fit .dp-part .dp-fig { order: 0; }
+
+/* 埋め込み（板の iframe の中）: 場面の見出し・上部バー・ほかの場面を出さない */
+.embed .topbar, .embed .a-sh { display: none; }
+.embed .scene:not(.on) { display: none; }
+.embed .scene { padding-top: 1rem; }
+.embed .scene + .scene { margin-top: 0; border-top: 0; }
+.embed.fit .app { grid-template-rows: minmax(0, 1fr); }
+.embed.fit .scene { padding-top: 20px; }
+.embed.fit .sc-anim, .embed.fit .sc-split { grid-template-rows: minmax(0, 1fr); grid-template-areas: "left fig"; }
+.embed.fit .sc-step { grid-template-rows: minmax(0, 1fr); grid-template-areas: "left state"; }
+/* 上部バーが無いので、説明欄の「前へ」「次へ」を出す（親の上部バーの ‹ › と ←→ でも動く） */
+.embed.fit .ctrls .st-prev, .embed.fit .ctrls .st-next { display: inline-block; }
+.embed.fit .ctrls .hint { display: none; }

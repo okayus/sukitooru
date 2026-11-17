@@ -459,6 +459,8 @@
       S.text(172, 84, '1.0 V', { cls: 't-xs t-mono t-dim', 'text-anchor': 'end' }, vp);
       st.status = S.text(480, 60, '', { cls: 't-c t-sm t-b' }, svg);
       st.flowTxt = S.text(480, 365, '', { cls: 't-c t-xs t-dim' }, svg);
+      // 掘り下げ（下の層へ）: チャネルの電子の出どころ（第2章 場面2 の n 型）
+      YT.drill.mark(st.h.src, { to: '02-handoutai.html#s2.3', label: 'S の n 型', at: [200, 216], steps: [3, 4], bridge: 'チャネルの電子は、S と D の n 型（リンを混ぜたシリコン）から来る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

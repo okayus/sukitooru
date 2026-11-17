@@ -423,6 +423,8 @@
       st.nand = buildGate(st.gN, false);
       st.nor = buildGate(st.gR, true);
       st.note = S.text(480, 545, '', { cls: 't-c t-sm t-dim' }, svg);
+      // 掘り下げ（下の層へ）: nMOS が閉じる仕組み（第3章 場面2 の反転層）
+      YT.drill.mark(st.nand.sw.N1.g, { to: '03-transistor.html#s2.3', label: 'nMOS（N1）', at: [522, 310], steps: [1, 2, 3, 4, 6], bridge: 'nMOS が閉じるのは、ゲートの電圧で S と D の間に電子の道（チャネル）ができるから' });
 
       /* 回路図を組み立てる。nor が真なら上が直列・下が並列 */
       function buildGate(parent, nor) {

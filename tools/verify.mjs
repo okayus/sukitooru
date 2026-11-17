@@ -25,6 +25,10 @@
                         違いは「注意」として出し、失敗にはしない（乱数で動く部品があると違いが出ることがある）
        --overlap        各段階で時刻を 15 秒まで進めながら 0.25 秒ごとに、止まっている文字どうしの重なりと、図の外へ出た文字を調べる
                         （動く札が最初の位置や止まる位置で箱の題を隠す誤りは、段階に入った直後の写真だけでは見落とす）。注意だけで、失敗にはしない
+       --drill          掘り下げの印（YT.drill）を 1 つずつ開き、板が出るか（部品は読み込めたか、埋め込みは段階の通知が来たか）、
+                        JS のエラー（iframe の中も）、板の中のはみ出し（埋め込みは全段階）、縦読み版の板の横はみ出しを調べる。
+                        部品の板は、部品の中の印も開き、時刻送り・段階の行き来・文字の重なり（--nav / --overlap と同じ）を通す。
+                        --shots と一緒なら、開いた板（1920x880 と縦読み版）と部品の全段階を撮る
    終了コード: エラーかはみ出しがあれば 1
    ============================================================ */
 import { spawn } from 'node:child_process';
@@ -36,7 +40,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-const opt = { sizes: 'two', shots: null, phone: true, steps: true, allSteps: false, dark: false, nav: false, overlap: false, pages: [] };
+const opt = { sizes: 'two', shots: null, phone: true, steps: true, allSteps: false, dark: false, nav: false, overlap: false, drill: false, pages: [] };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--sizes') opt.sizes = args[++i];
@@ -47,6 +51,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--dark') opt.dark = true;
   else if (a === '--nav') opt.nav = true;
   else if (a === '--overlap') opt.overlap = true;
+  else if (a === '--drill') opt.drill = true;
   else opt.pages.push(a);
 }
 if (!opt.pages.length) { console.error('usage: node tools/verify.mjs [--sizes all] [--shots DIR] <page.html>...'); process.exit(2); }
@@ -217,7 +222,7 @@ const MEASURE_PHONE = `(() => {
    章によっては YT.motion.playing を見て、止めているときは決まった姿を描く。両方の分岐を通すため、
    止めたときと、動いているが速さ 0（エンジンの時計は進まず、時刻はここで進める）のときの 2 回回す */
 const SWEEP = `(async () => {
-  const os = window.oneScreen;
+  const os = window.__os || window.oneScreen;
   if (!os) return [];
   if (os.motion && os.motion.playing) { const b = document.querySelector('#mo-play'); if (b) b.click(); else os.motion.playing = false; }
   const DT = 0.05, K = 400, out = [];
@@ -251,7 +256,7 @@ const SWEEP = `(async () => {
 /* 段階の行き来: 順に進めたときの見た目と、別の段階から飛んできたときの見た目を比べる。
    見た目は、表示の有無（hide クラス・display・opacity の指定）と文字だけで要約する（位置は乱数や積算で変わるので比べない） */
 const NAV = `(async () => {
-  const os = window.oneScreen;
+  const os = window.__os || window.oneScreen;
   if (!os) return [];
   if (os.motion && os.motion.playing) { const b = document.querySelector('#mo-play'); if (b) b.click(); else os.motion.playing = false; }
   const out = [];
@@ -293,7 +298,7 @@ const NAV = `(async () => {
    止まって見える時刻を拾うのは、動きを止めた人と動きを減らす設定の人には、段階の始めの見た目がそのまま残るため。
    止めたとき（章によっては決まった姿を描く）と、動いているが速さ 0 のとき（時刻はここで進める）の 2 回調べる */
 const OVERLAP = `(async () => {
-  const os = window.oneScreen;
+  const os = window.__os || window.oneScreen;
   if (!os) return [];
   if (os.motion && os.motion.playing) { const b = document.querySelector('#mo-play'); if (b) b.click(); else os.motion.playing = false; }
   const off = (a) => { const st = a.style; if (st && (st.display === 'none' || st.visibility === 'hidden' || (st.opacity !== '' && Number(st.opacity) < 0.02))) return true; if (!a.getAttribute) return false; const o = a.getAttribute('opacity'); return a.getAttribute('display') === 'none' || a.getAttribute('visibility') === 'hidden' || (o !== null && Number(o) < 0.02); };
@@ -385,6 +390,105 @@ const OVERLAP = `(async () => {
   }
   if (os.motion) { os.motion.playing = false; os.motion.speed = 1; }
   return out;
+})()`;
+
+/* 掘り下げ（--drill）: ページの中に置く手伝い。list で全場面・全段階の印を集め（出るはずの札が出ているかも見る）、
+   open で印を 1 つ開いて板の準備を待ち、measure で板の中のはみ出しと iframe の中の JS のエラーを測る */
+const DRILL_HELP = `(() => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const os = window.oneScreen;
+  const D = window.__drill = {};
+  const fitp = () => document.documentElement.classList.contains('fit');
+  D.list = async () => {
+    const out = [], seen = new Set(), probs = [];
+    if (!os || !os.drill) return { out, probs };
+    const secs = [...document.querySelectorAll('section.scene')];
+    for (let i = 0; i < os.count; i++) {
+      os.show(i); await wait(60);
+      if (!fitp() && secs[i]) { secs[i].scrollIntoView({ block: 'start' }); await wait(200); }   // 縦読み版は画面に入った場面から組み立てる
+      const c = os.ctx(i); if (!c) continue;
+      const N = c.steps ? c.steps.length : 1;
+      for (let s = 0; s < N; s++) {
+        if (c.steps) { c.goStep(s); await wait(20); }
+        for (const m of os.drill.marks(i)) {
+          const vis = !m.steps || m.steps.indexOf(s + 1) >= 0;
+          if (vis && !m.shown) probs.push(c.id + ' 段階' + (s + 1) + ' 印「' + (m.label || m.to || m.part) + '」の札が出ない（要素の位置を測れない。at で書く）');
+          if (vis && !seen.has(m.id)) { seen.add(m.id); out.push({ i, s, id: m.id, sid: c.id, label: m.label, to: m.to, part: m.part, step: m.step }); }
+        }
+      }
+      if (c.steps) c.goStep(0);
+    }
+    return { out, probs };
+  };
+  const ready = async () => {
+    let st = [];
+    for (let k = 0; k < 80; k++) { st = os.drill.stack(); if (st.length && st[st.length - 1].ready) break; await wait(100); }
+    const top = st[st.length - 1];
+    if (!top) return '板が開かない';
+    if (!top.ready) return '板の準備ができない（' + (top.part ? '部品 ' + top.part + ' を読めない' : '埋め込みから段階の通知が来ない') + '）';
+    await wait(350);
+    return '';
+  };
+  D.open = async (i, s, id) => {
+    os.drill.close(0);
+    os.show(i); await wait(40);
+    const c = os.ctx(i); if (c && c.steps) { c.goStep(s); await wait(30); }
+    if (!os.drill.open(id)) return { err: '印が見つからない' };
+    const e = await ready();
+    return e ? { err: e } : D.measure();
+  };
+  D.partMarks = () => { const c = os.drill.top(); return c ? (c.marks || []).map((m) => ({ id: m.id, label: m.o.label || '', to: m.o.to || null, part: m.o.part || null, steps: m.o.steps || null })) : []; };
+  D.openInPart = async (id, steps) => {
+    const c = os.drill.top(); if (!c) return { err: '部品の板が無い' };
+    if (steps && steps.length && c.steps) { c.goStep(steps[0] - 1); await wait(30); }
+    if (!os.drill.open(id)) return { err: '印が見つからない' };
+    const e = await ready();
+    const r = e ? { err: e } : D.measure();
+    os.drill.close(1);
+    return r;
+  };
+  D.measure = async () => {
+    const p = os.drill.panel(), r = { kind: '', over: [], errs: [], note: '' };
+    if (!p) return { err: '板が無い' };
+    const body = p.querySelector('.dp-body'), f = os.drill.frame();
+    const pr = p.getBoundingClientRect();
+    if (pr.width < 50 || pr.height < 50) r.over.push('板が小さい ' + Math.round(pr.width) + 'x' + Math.round(pr.height));
+    if (f) {
+      r.kind = 'frame';
+      try {
+        const d = f.contentDocument, w = f.contentWindow, ifit = d.documentElement.classList.contains('fit');
+        r.note = (ifit ? '1画面版 倍率 ' + Number(getComputedStyle(d.documentElement).getPropertyValue('--s')).toFixed(3) : '縦読み版');
+        const sc = d.querySelector('section.scene.on'), c = w.oneScreen && w.oneScreen.ctx([...d.querySelectorAll('section.scene')].indexOf(sc));
+        const N = c && c.steps ? c.steps.length : 1, s0 = c && c.steps ? c.step : 0;
+        for (let k = 0; k < N; k++) {
+          if (c && c.steps) { c.goStep(k); await wait(30); }
+          if (ifit) { const oy = sc.scrollHeight - sc.clientHeight, ox = sc.scrollWidth - sc.clientWidth; if (oy > 0 || ox > 0) r.over.push('埋め込みの場面 段階' + (k + 1) + (oy > 0 ? ' 縦' + oy + 'px' : '') + (ox > 0 ? ' 横' + ox + 'px' : '')); }
+          else { const hx = d.documentElement.scrollWidth - d.documentElement.clientWidth; if (hx > 0) r.over.push('埋め込み 段階' + (k + 1) + ' 横スクロール ' + hx + 'px'); }
+        }
+        if (c && c.steps) { c.goStep(s0); await wait(30); }
+        (w.__errs || []).forEach((e) => r.errs.push('iframe ' + e.pos + ': [' + e.kind + '] ' + e.msg));
+      } catch (e) { r.errs.push('iframe を測れない: ' + e.message); }
+    } else {
+      r.kind = 'part';
+      const c = os.drill.top(), N = c && c.steps ? c.steps.length : 1, s0 = c ? c.step : 0;
+      for (let k = 0; k < N; k++) {
+        if (c && c.steps) { c.goStep(k); await wait(20); }
+        if (fitp()) {
+          const oy = body.scrollHeight - body.clientHeight, ox = body.scrollWidth - body.clientWidth;
+          if (oy > 0 || ox > 0) r.over.push('部品の板 段階' + (k + 1) + (oy > 0 ? ' 縦' + oy + 'px' : '') + (ox > 0 ? ' 横' + ox + 'px' : ''));
+          const L = p.querySelector('.dp-left'), bb = body.getBoundingClientRect();
+          if (L && L.getBoundingClientRect().bottom > bb.bottom + 1) r.over.push('部品の説明の列 段階' + (k + 1) + ' が板の下へ ' + Math.round(L.getBoundingClientRect().bottom - bb.bottom) + 'px');
+        } else {
+          for (const e of body.querySelectorAll('*')) { if (e.closest('.fig-scroll')) continue; const b = e.getBoundingClientRect(); if (b.width && b.right > pr.right + 0.5) { r.over.push('部品の板 段階' + (k + 1) + ' 横にはみ出す ' + e.tagName.toLowerCase() + '.' + String(e.className).split(' ')[0]); break; } }
+        }
+      }
+      if (c && c.steps) c.goStep(s0);
+    }
+    if (!fitp()) { const vr = [window.innerWidth, window.innerHeight]; if (Math.abs(pr.width - vr[0]) > 2 || Math.abs(pr.height - vr[1]) > 2) r.over.push('縦読み版の板が画面を覆わない ' + Math.round(pr.width) + 'x' + Math.round(pr.height)); }
+    return r;
+  };
+  D.close = () => { os.drill.close(0); return 1; };
+  return 1;
 })()`;
 
 /* 未定義のクラス: 図の要素に付いた f-/s-/t-/w… の語のうち、読み込んだ CSS のどこにも無いもの */
@@ -502,6 +606,66 @@ async function checkPage(cdp, sid, base, page, report) {
       ov.slice(0, 40).forEach((e) => lines.push('    - ' + e));
       (await ev('window.__errs')).forEach((e) => allErrs.push('overlap ' + e.pos + ': [' + e.kind + '] ' + e.msg));
     }
+  }
+  // 掘り下げ（--drill）: 印を 1 つずつ開いて板を調べる。部品は時刻送り・段階の行き来・文字の重なりも
+  if (opt.drill) {
+    const stem = path.basename(page, '.html');
+    const fmt = (o) => (o.sid ? o.sid + ' 段階' + (o.s + 1) + ' ' : '') + '印「' + (o.label || '') + '」→ ' + (o.part ? '部品 ' + o.part + (o.step ? ' 段階' + o.step : '') : o.to);
+    const partDone = new Set();
+    let opened = 0, kinds = { part: 0, frame: 0 }, none = false;
+    const sizes = [...DESKTOP.map(([w, h]) => [w, h, false]), ...(opt.phone ? [[PHONE[0], PHONE[1], true]] : [])];
+    for (const [w, h, mobile] of sizes) {
+      await load(w, h, mobile);
+      await ev(DRILL_HELP);
+      const { out: marks, probs } = await ev('window.__drill.list()', true);
+      if (w === DESKTOP[0][0] && !mobile) {
+        probs.forEach((x) => { bad = true; lines.push('  掘り下げ: ' + x); });
+        if (!marks.length) { lines.push('  掘り下げ: 印なし'); none = true; break; }
+      }
+      for (const m of marks) {
+        const r = await ev(`window.__drill.open(${m.i}, ${m.s}, ${JSON.stringify(m.id)})`, true);
+        const tag = (mobile ? w + 'x' + h + ' ' : w + 'x' + h + ' ') + fmt(m);
+        if (r.err) { bad = true; lines.push('  掘り下げ ✗ ' + tag + ': ' + r.err); continue; }
+        if (w === DESKTOP[0][0] && !mobile) { opened++; kinds[r.kind]++; }
+        if (r.over.length) { bad = true; lines.push('  掘り下げ ✗ ' + tag + ': はみ出し ' + r.over.join('、')); }
+        r.errs.forEach((e) => allErrs.push('drill ' + e));
+        if (opt.shots && (w === DESKTOP[0][0] || mobile)) {
+          fs.mkdirSync(opt.shots, { recursive: true });
+          const sh = await cdp.send('Page.captureScreenshot', { format: 'png' }, sid);
+          fs.writeFileSync(path.join(opt.shots, `${stem}-drill${mobile ? '-phone' : ''}${opt.dark ? '-dark' : ''}-${m.sid}-step${m.s + 1}-${m.id}-${m.part || m.to.replace(/\.html.*$/, '')}.png`), Buffer.from(sh.data, 'base64'));
+        }
+        // 部品の板: 部品の中の印も開く。部品ごとに 1 回、時刻送り・段階の行き来・文字の重なりを通し、全段階を撮る
+        if (r.kind === 'part' && !mobile && w === DESKTOP[0][0] && !partDone.has(m.part)) {
+          partDone.add(m.part);
+          for (const pm of await ev('window.__drill.partMarks()')) {
+            const r2 = await ev(`window.__drill.openInPart(${JSON.stringify(pm.id)}, ${JSON.stringify(pm.steps)})`, true);
+            const t2 = '部品 ' + m.part + ' の印「' + pm.label + '」→ ' + (pm.part ? '部品 ' + pm.part : pm.to);
+            if (r2.err) { bad = true; lines.push('  掘り下げ ✗ ' + t2 + ': ' + r2.err); }
+            else { if (r2.over.length) { bad = true; lines.push('  掘り下げ ✗ ' + t2 + ': はみ出し ' + r2.over.join('、')); } r2.errs.forEach((e) => allErrs.push('drill ' + e)); }
+          }
+          await ev('window.__os = { count: 1, ctx: () => oneScreen.drill.top(), show: () => {}, motion: oneScreen.motion }; 1');
+          const sw = await ev(SWEEP, true);
+          sw.forEach((e) => allErrs.push('部品 ' + m.part + ' 時刻送り ' + e));
+          const nv = await ev(NAV, true);
+          const ov = await ev(OVERLAP, true);
+          await ev('window.__os = null; 1');
+          lines.push('  部品 ' + m.part + ': 時刻送り ' + (sw.length ? '例外 ' + sw.length + '件' : '例外なし') + ' ／ 段階の行き来 ' + (nv.length ? '注意 ' + nv.length + '件' : '違いなし') + ' ／ 文字の重なり ' + (ov.length ? '注意 ' + ov.length + '件' : 'なし'));
+          nv.concat(ov).slice(0, 20).forEach((e) => lines.push('    - ' + e));
+          if (opt.shots) {
+            const N = await ev('(() => { const c = oneScreen.drill.top(); return c && c.steps ? c.steps.length : 1; })()');
+            for (let k = 0; k < N; k++) {
+              await ev(`(() => { const c = oneScreen.drill.top(); oneScreen.motion.playing = false; c.goStep(${k}); return 1; })()`);
+              await new Promise((r2) => setTimeout(r2, 400));
+              const sh = await cdp.send('Page.captureScreenshot', { format: 'png' }, sid);
+              fs.writeFileSync(path.join(opt.shots, `part-${m.part}${opt.dark ? '-dark' : ''}-step${k + 1}.png`), Buffer.from(sh.data, 'base64'));
+            }
+          }
+        }
+        await ev('window.__drill.close()');
+      }
+    }
+    if (!none) lines.push(`  掘り下げ: 印 ${opened} 個を開いた（部品 ${kinds.part}・章の埋め込み ${kinds.frame}）、${sizes.length} つの大きさで`);
+    (await ev('window.__errs')).forEach((e) => allErrs.push('drill ' + e.pos + ': [' + e.kind + '] ' + e.msg));
   }
   // 写真（1920x880 の各場面）
   if (opt.shots) {

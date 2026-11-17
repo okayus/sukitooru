@@ -401,7 +401,7 @@
       const mk = S.markers(svg);
       // 記号
       const gsym = S.g({ transform: 'translate(90,40)' }, svg);
-      S.rect(60, 10, 120, 90, { rx: 6, cls: 'f-sf s-fg w2' }, gsym);
+      st.symBox = S.rect(60, 10, 120, 90, { rx: 6, cls: 'f-sf s-fg w2' }, gsym);
       st.symName = S.text(120, 2, '', { cls: 't-c t-b' }, gsym);   // 箱の上に置く（「D フリップフロップ」は箱の幅いっぱいで D・Q の端子名と重なるため）
       st.symTri = S.path('M60,78 L74,86 L60,94 Z', { cls: 'f-fg' }, gsym);
       S.text(74, 30, 'D', { cls: 't-sm t-b' }, gsym); S.text(160, 60, 'Q', { cls: 't-sm t-b' }, gsym);
@@ -468,6 +468,8 @@
         return { r, v };
       });
       st.chainIn = [3, 5, 2, 7, 4, 6, 1, 8];
+      // 掘り下げ（下の層へ）: ラッチの中身の NAND は、4 個のスイッチ（第4章 場面2）
+      YT.drill.mark(st.symBox, { to: '04-ronri.html#s2.1', label: 'ラッチの中の NAND', at: [284, 62], bridge: 'ラッチの中身は NAND の輪（場面1）。NAND は 4 個のスイッチでできている' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

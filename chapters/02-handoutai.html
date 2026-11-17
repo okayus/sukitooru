@@ -500,6 +500,8 @@
       st.cur = S.g({ cls: 'fade hide' }, svg);
       S.arrow(st.cur, 300, 478, 620, 478, 'e', { cls: 's-e w3' });
       S.text(460, 468, '電子のドリフト（− → ＋）', { cls: 't-c t-sm t-e t-b' }, st.cur);
+      // 掘り下げ（下の層へ）: 外れた電子は、金属の自由電子と同じふるまい（第1章 場面1）
+      YT.drill.mark(st.ps[0].ring, { to: '01-denshi.html#s1.3', label: '外れた電子', steps: [3, 4], bridge: '外れた電子は、金属の自由電子と同じく結晶の中を飛び回り、電圧で流れになる' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
