@@ -2,6 +2,7 @@
    ノートごとに slug・日付・題・日刊か・中心の層・層（assets/layers.js の id。中心が先頭）・リンクしている章の場面（'章-場面'、場面を指さないリンクは '章'）・教材に無い概念、
    台本のあるノートは使う部品（anim。parts.html?set=anim の「使うノート」が読む） */
 window.YT_NEWS = [
+{"slug":"2026-11-18-nginx-http2-rce-vulnerabilities","date":"2026-11-18","title":"nginx の HTTP/2 の処理にあった 2 つのメモリ安全の脆弱性","daily":true,"center":"http","layers":["http","type","os","transport","delivery"],"scenes":["9-4","19-4","21-3","22-3","26-1","26-6"],"missing":["HTTP/2 のフロー制御","ASLR"],"anim":["mem"]},
 {"slug":"2026-11-16-optimizely-snippet-malware-injection","date":"2026-11-16","title":"Optimizely Web の配る JavaScript に悪意のコードが入った事故","daily":true,"center":"browser","layers":["browser","tls","http","delivery"],"scenes":["10-2","20-4","21-5","22-4"],"missing":["CSP（Content Security Policy）"]},
 {"slug":"2026-11-15-clice-cpp-language-server-v1","date":"2026-11-15","title":"C++ の言語サーバー clice の 1.0 版","daily":true,"center":"compiler","layers":["compiler","os"],"scenes":["9-2","28-1","28-2","28-3","28-6"],"missing":["モジュール","1 ファイルずつ作る（分割コンパイル）"]},
 {"slug":"2026-11-14-rust-parallel-frontend-nightly","date":"2026-11-14","title":"Rust のコンパイラの並列フロントエンドを nightly の既定にする変更","daily":true,"center":"compiler","layers":["compiler","os"],"scenes":["9-2","9-5","28-2","28-3","28-6"],"missing":["再現可能なビルド","インクリメンタルコンパイル"]},
