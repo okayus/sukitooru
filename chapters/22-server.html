@@ -777,11 +777,11 @@
       st.pRpc = pkt(svg, 'RPC', { w: 36 });
       st.pResp = pkt(svg, '応答');
       st.all = st.pAdv.concat([st.pReq, st.pRpc, st.pResp], st.pConn);
-      // 掘り下げ（下の層へ）: 道の選び方と経路表（第16章）、ハッシュ（第27章）、包む（第11章）、暗号と HTTP（第20・21章）、IP ヘッダ（第18章）
+      // 掘り下げ（下の層へ）: 道の選び方と経路表（第16章）、ハッシュ（第27章）、GRE で包む所は部品 encap、暗号と HTTP（第20・21章）、IP ヘッダ（第18章）
       YT.drill.mark(st.isp, { to: '16-internet.html#s2.3', label: 'ISP の道の選び方', at: [170, 342], steps: [1], bridge: 'ISP のルーターは、同じ 142.250.0.0/15 の候補から規則を順に当てて 1 つの道を選ぶ' });
       YT.drill.mark(st.router, { to: '16-internet.html#s5.4', label: 'ルーター（ECMP）', at: [428, 244], steps: [2], bridge: '拠点のルーターも宛先で経路表を引く。ECMP は、一致した行に同じコストの出口が複数ある形' });
       YT.drill.mark(st.mg[1], { to: '27-algorithm.html#s3.2', label: 'Maglev のハッシュ', at: [588, 184], steps: [3], bridge: '5 つ組から計算で GFE を選ぶのは、鍵から置き場所を計算するハッシュ表と同じ考え' });
-      YT.drill.mark(st.mg[1], { to: '11-sou.html#s3.3', label: 'GRE で包む', at: [588, 256], steps: [3], bridge: 'GRE で包むと、届いたパケットの外側に、GFE 宛ての IP ヘッダがもう 1 枚付く' });
+      YT.drill.mark(st.mg[1], { part: 'encap', step: 5, params: { gre: 1 }, label: 'GRE で包む', at: [588, 256], steps: [3], bridge: 'GRE で包むと、届いたパケットの外側に GRE 4 B と GFE 宛ての IP ヘッダ 20 B が付く' });
       YT.drill.mark(st.gf[1], { to: '20-tls.html#s6.1', label: 'GFE（暗号をほどく）', at: [756, 127], steps: [4], bridge: 'GFE は届いたレコードを 1 つずつ鍵で開き、中の HTTP の要求を取り出す' });
       YT.drill.mark(st.gf[1], { to: '21-http.html#s1.5', label: 'GFE（パスで振り分け）', at: [756, 197], steps: [4], bridge: 'GFE が見る URL のパスは、HTTP/2・3 では擬似ヘッダ :path に入っている' });
       YT.drill.mark(st.dsr, { to: '18-ip.html#s1.6', label: 'DSR の応答', at: [688, 50], steps: [5], bridge: '応答の IP ヘッダの送信元の欄に、GFE は 142.250.196.110 を書いて直接出す' });

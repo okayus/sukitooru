@@ -626,8 +626,10 @@
           row.hl.style.opacity = ph >= 3 && active ? 1 : 0;
           row.toks.forEach((t) => t.setAttribute('class', 't-c t-xs ' + (ph >= 3 && active ? 't-e t-b' : 't-dim')));
         });
-        bus.setAttribute('class', 'f-none round ' + (ph >= 4 && op ? 's-d w3' : 's-dim w3'));
-        opTxt.textContent = ph >= 4 ? (op ? `オペランド ${bits4(n)} = ${n} 番地 → そのままアドレスバスへ（解読しない）` : 'HALT はオペランドを使わない') : 'オペランド（下位 4 ビット）→ アドレスバスへ';
+        // JNZ（op 5）のオペランドは飛び先として PC の入口へ行く（合図の表の「PC ← 番地」）。アドレスバスへの線は光らせない
+        const toBus = op && op !== 5;
+        bus.setAttribute('class', 'f-none round ' + (ph >= 4 && toBus ? 's-d w3' : 's-dim w3'));
+        opTxt.textContent = ph >= 4 ? (toBus ? `オペランド ${bits4(n)} = ${n} 番地 → そのままアドレスバスへ（解読しない）` : op ? `オペランド ${bits4(n)} = ${n} 番地 → PC の入口へ（飛び先。解読しない）` : 'HALT はオペランドを使わない') : 'オペランド（下位 4 ビット）：行き先は解読で決まる';
         status.textContent = ph >= 2 ? `IR = ${fmt8(ir)}：${b8.slice(0, 4)} = ${opName}${op ? `、${b8.slice(4)} = ${n} 番地` : ''}` : `IR = ${fmt8(ir)}`;
       }
     };
@@ -748,9 +750,9 @@
       YT.drill.mark(st.H.a.bg, { to: '05-kioku.html#s3.1', label: 'レジスタ A', at: [444, 294], steps: [2], bridge: 'レジスタ A の 8 ビットは、クロックを共通にした D-FF 8 個に 1 ビットずつ入る' });
       YT.drill.mark(st.H.alu.bg, { to: '04-ronri.html#s6.3', label: 'ALU', at: [584, 378], steps: [3], bridge: 'ALU の足し算は全加算器を桁の数だけ並べたもの。桁上がりが右の桁から順に伝わる' });
       YT.drill.mark(st.H.busA, { to: '04-ronri.html#s1.5', label: 'アドレスバス・データバス', at: [632, 96], steps: [4], bridge: 'アドレスバスもデータバスも、1 ビットに 1 本の導線を並べた束。8 本で 1 バイトを同時に運ぶ' });
-      YT.drill.mark(st.H.memBox, { to: '05-kioku.html#s5.5', label: 'メモリ（DRAM）', at: [918, 70], steps: [4], bridge: 'YT-8 の 1 番地は 1 行に縮めた模式。実物の DRAM は行を開いてから列アドレスで取り出す' });
+      YT.drill.mark(st.H.memBox, { part: 'mem-read', step: 1, label: 'メモリ（DRAM）', at: [918, 70], steps: [4], bridge: '番地 1 の中身が返るのは、16 行 × 8 列のセルの格子から、番地の行だけを選んで読むから' });
       YT.drill.mark(st.H.clk.bg, { to: '05-kioku.html#s2.5', label: 'クロック', at: [266, 438], steps: [5], bridge: '1 拍ごとに 1 つの動作が進むのは、FF の間の論理回路が次のエッジまでに計算を終えるから' });
-      YT.drill.mark(st.H.ctrl.bg, { to: '04-ronri.html#s3.6', label: '制御装置', at: [264, 114], steps: [5], bridge: '制御装置の解読は、命令ごとに AND を 1 個置き、0 の桁は NOT してから入れる配線' });
+      YT.drill.mark(st.H.ctrl.bg, { part: 'dec', step: 3, label: '制御装置', at: [264, 114], steps: [5], bridge: '制御装置の解読は、命令ごとに AND を 1 個置き、0 の桁は NOT してから入れる配線' });
     },
     onStep(ctx, i) {
       const H = ctx.state.H;
@@ -875,7 +877,8 @@
       st.cur = -1;
       // 掘り下げ（下の層へ）
       YT.drill.mark(st.argTxt, { to: '04-ronri.html#s4.1', label: 'オペランド 1011', at: [414, 176], steps: [1], bridge: '1011 が 11 番地なのは、右の桁から重み 1・2・4・8 を付け、1 の桁の重みを足すから' });
-      YT.drill.mark(st.opTxt, { to: '06-cpu.html#s3.3', label: 'オペコード 0010', at: [186, 176], steps: [1], bridge: '「配線で決め打ち」の中身は、オペコードの 4 本を NOT と AND で 1 本の合図に変える解読' });
+      YT.drill.mark(st.opTxt, { part: 'dec', step: 1, label: 'オペコード 0010', at: [186, 176], steps: [1], bridge: '「配線で決め打ち」の中身は、上位 4 ビットだけを NOT と AND に通す解読の配線' });
+      YT.drill.mark(st.gt, { part: 'dec', step: 3, label: '命令表（6 命令）', at: [440, 266], steps: [2], bridge: '命令表の 6 行は、解読の回路では AND 6 個。0010 なら ADD の AND だけが 1 になる' });
       YT.drill.mark(st.memBg, { to: '06-cpu.html#s3.2', label: 'PC を 1 増やす', at: [530, 322], steps: [3], bridge: 'PC を 1 増やすのは、PC + 1 を常に用意する小さな加算器。フェッチの 2 拍めに PC へ入る' });
     },
     onStep(ctx, i) {
@@ -956,12 +959,15 @@
       st.Z.add('reg', buildREG).set({ name: 'A', d: st.after.a, q0: st.base.a, src: '← ALU', dst: '→ ALU' });
       st.Z.add('inc', buildINC).set({ pc: st.base.pc });
       // 掘り下げ（下の層へ）。段階2・3・5 は板が開くと札が隠れ、説明欄の下の一覧からだけ開ける
-      YT.drill.mark(st.H.memBox, { to: '05-kioku.html#s5.5', label: 'メモリ（行を選ぶ）', at: [918, 70], steps: [1, 4], bridge: '番地の行を選ぶのは行デコーダ。実物の DRAM は行を開いてから列アドレスで取り出す' });
+      YT.drill.mark(st.H.memBox, { part: 'mem-read', step: 2, label: 'メモリ（行を選ぶ）', at: [918, 70], steps: [1], bridge: '1 番地の行を選ぶのはデコーダ。行ごとの AND が、0001 のときだけワード線 1 を 1 にする' });
+      YT.drill.mark(st.H.memBox, { part: 'mem-read', step: 4, label: 'メモリ（中身を出す）', at: [918, 70], steps: [2], bridge: 'メモリが中身をデータバスに乗せるのは、センスアンプが行の 8 本の小さな差を広げるから' });
       YT.drill.mark(st.H.ir.bg, { to: '05-kioku.html#s3.2', label: 'IR', at: [546, 160], steps: [2], bridge: 'IR が取り込むのは Load = 1 の拍の立ち上がりだけ。ほかの拍は自分の Q を保つ' });
       YT.drill.mark(st.H.pc.bg, { to: '04-ronri.html#s5.2', label: 'PC + 1 の加算器', at: [444, 104], steps: [2], bridge: 'PC + 1 の各桁は、PC のビットと右からの桁上がりの 2 つを足す半加算器' });
-      YT.drill.mark(st.H.ctrl.bg, { to: '04-ronri.html#s3.6', label: '制御装置（解読）', at: [264, 114], steps: [3], bridge: '0010 を ADD と判定する配線は、1 の桁はそのまま、0 の桁は NOT してから AND に入れる' });
+      YT.drill.mark(st.H.ctrl.bg, { part: 'dec', step: 3, label: '制御装置（解読）', at: [264, 114], steps: [3], bridge: '0010 を ADD と判定する配線は、1 の桁はそのまま、0 の桁は NOT してから AND に入れる' });
+      YT.drill.mark(st.H.memBox, { part: 'mem-read', step: 2, params: { addr: 11 }, label: 'メモリ（11 番地）', at: [918, 70], steps: [4], bridge: '11 番地の中身が出るのは、デコーダが行 11 だけを選び、その 8 個をセンスアンプが読むから' });
       YT.drill.mark(st.H.a.bg, { to: '05-kioku.html#s3.3', label: 'A → ALU の入力 1', at: [444, 294], steps: [4], bridge: 'A の値がいつも ALU に届いているのは、レジスタの Q が常に出力線に出ているから' });
-      YT.drill.mark(st.H.alu.bg, { to: '04-ronri.html#s6.3', label: 'ALU（0 + 3）', at: [584, 378], steps: [5], bridge: '0 + 3 も、全加算器の列を桁上がりが右から 1 段ずつ伝わって確定する。下の例は 5 + 3' });
+      YT.drill.mark(st.H.alu.bg, { part: 'alu', step: 3, label: 'ALU（0 + 3）', at: [584, 378], steps: [5], bridge: '0 + 3 の和は、全加算器 8 個が各桁の A・B と右隣からの桁上がりを足して出す' });
+      YT.drill.mark(st.H.z.bg, { part: 'alu', step: 4, label: 'Z（0 でないので 0）', at: [548, 238], steps: [5], bridge: '結果が 0 でないので Z = 0。Z は和の 8 本の OR を NOT して作る' });
       YT.drill.mark(st.H.memBox, { to: '05-kioku.html#s5.6', label: 'メモリを待つ拍', at: [918, 70], steps: [6], bridge: 'メモリを待つ拍が遅いのは、DRAM が行を開き、増幅し、書き戻す手順を踏むから' });
     },
     onStep(ctx, i) {
@@ -1040,9 +1046,10 @@
       st.shown = -1;
       // 掘り下げ（下の層へ）
       YT.drill.mark(st.H.mem[1].bg, { to: '06-cpu.html#s3.1', label: 'ADD 11（1 番地）', at: [632, 140], steps: [2], bridge: 'ADD 11 の 1 命令も、取り出し・解読・実行の 5 拍で進む。場面3 は同じ A = 0 から 3 を作る' });
-      YT.drill.mark(st.H.alu.bg, { to: '04-ronri.html#s6.5', label: 'SUB（3 − 1）', at: [584, 378], steps: [3], bridge: 'SUB 12 の 3 − 1 は、1 を 2 の補数にして足す。下の例は 5 − 3' });
-      YT.drill.mark(st.H.pc.bg, { to: '06-cpu.html#s3.3', label: 'JNZ（PC ← 0）', at: [444, 104], steps: [3], bridge: 'JNZ が PC を書き換えるのは、JNZ の AND が「PC ← 番地」の合図を出すから。下の例は ADD' });
-      YT.drill.mark(st.H.z.bg, { to: '06-cpu.html#s1.3', label: 'Z（結果が 0 なら 1）', at: [548, 238], steps: [5], bridge: 'Z は和の 8 本の OR を NOT したもの。全部の桁が 0 のときだけ 1。下の例は Z = 0' });
+      YT.drill.mark(st.H.alu.bg, { part: 'alu', step: 1, params: { a: 3, b: 1, op: 'sub' }, label: 'SUB（3 − 1）', at: [584, 378], steps: [3], bridge: 'SUB 12 の 3 − 1 は、M の 1 を XOR で反転し、Cin = 1 を足して −1 を加える' });
+      YT.drill.mark(st.H.pc.bg, { part: 'dec', step: 5, params: { op: 'jnz', z: 0 }, label: 'JNZ（PC ← 0）', at: [444, 104], steps: [3], bridge: 'JNZ が PC を書き換えるのは、JNZ の線と ¬Z の AND が PC の Load を 1 にするから' });
+      YT.drill.mark(st.H.z.bg, { part: 'alu', step: 4, params: { a: 1, b: 1, op: 'sub' }, label: 'Z（結果が 0 なら 1）', at: [548, 238], steps: [5], bridge: 'Z は和の 8 本の OR を NOT したもの。1 − 1 は全部の桁が 0 なので Z = 1' });
+      YT.drill.mark(st.H.pc.bg, { part: 'dec', step: 5, params: { op: 'jnz', z: 1 }, label: 'JNZ（飛ばない）', at: [444, 104], steps: [5], bridge: 'JNZ が飛ばないのは、Z = 1 で ¬Z = 0 になり、PC の Load の AND が 0 だから' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

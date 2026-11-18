@@ -425,8 +425,9 @@
         return f;
       });
 
-      // 掘り下げ（下の層へ）: IP ヘッダのプロトコル欄（第18章）、NAT の書き換え（第14章）、カーネルが層を上がる道（第9章）
+      // 掘り下げ（下の層へ）: IP ヘッダのプロトコル欄（第18章）、中身の QUIC は部品 encap、NAT の書き換え（第14章）、カーネルが層を上がる道（第9章）
       YT.drill.mark(st.cells.proto.r, { to: '18-ip.html#s1.4', label: 'プロトコル 17', at: [192, 95], steps: [1], bridge: 'プロトコル 17 は、IPv4 ヘッダの TTL の隣にある 8 ビットの欄' });
+      YT.drill.mark(st.cells.data.r, { part: 'encap', step: 2, params: { via: 'quic' }, label: '中身の QUIC', at: [944, 40], steps: [1], bridge: '中身の QUIC は、HTTP/3 のフレームを暗号化して見出しとタグを付けたもの。例は PC が送る要求' });
       YT.drill.mark(st.nat, { to: '14-router.html#s4.2', label: 'NAT の後の 1 行', at: [920, 352], steps: [4], bridge: 'サーバーから見た 203.0.113.5:40001 は、家のルーターが出るときに書き換えた送信元' });
       YT.drill.mark(st.drvT, { to: '09-os.html#s6.3', label: 'ドライバ → IP → UDP', at: [368, 411], steps: [5], bridge: 'カーネルが 5 つ組で表を引く前に、Ethernet と IP のヘッダを外して UDP・TCP へ振り分ける' });
     },

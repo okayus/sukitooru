@@ -894,9 +894,10 @@
       st.cap = S.g({ cls: 'fade hide' }, svg);
       S.label(st.cap, 404, 455, '1 波：数百 Gbps', { cls: 't-sm t-b t-x', box: 'f-sf s-x w1' });
       S.label(st.cap, 643, 318, '× 約 90 波 ＝ 1 対で 10〜20 Tbps 前後', { cls: 't-sm t-b t-x', box: 'f-sf s-x w1' });
-      // 掘り下げ（下の層へ）: 光のまま増やす誘導放出と、波長ごとの受光器（第2章 場面6）
+      // 掘り下げ（下の層へ）: 光のまま増やす誘導放出と、波長ごとの受光器（第2章 場面6）、1 波で I と Q を選ぶ変調（部品 line-code の 16-QAM）
       YT.drill.mark(st.dwdm, { to: '02-handoutai.html#s6.5', label: '増幅（EDFA）', at: [700, 398], steps: [3], bridge: 'EDFA が光のまま増幅するのは、励起したエルビウムが通る光と同じ光を出す誘導放出による' });
       YT.drill.mark(st.dwdm, { to: '02-handoutai.html#s6.3', label: '波長ごとの受光器', at: [897, 452], steps: [4], bridge: '波長ごとの受光器も、光子が作る電子正孔対を電流として読むフォトダイオード' });
+      YT.drill.mark(st.cap, { part: 'line-code', step: 1, params: { medium: 'qam' }, label: '1 波：数百 Gbps', at: [446, 431], steps: [5], bridge: '1 波で数百 Gbps の光も、電波と同じく I と Q の値で点を選ぶ（偏波 2 つに別々に）' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

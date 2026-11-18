@@ -467,11 +467,11 @@
       st.bd = board(svg, 14, 290, 932, 254, 4, 40);
       st.ISPX = X(3) + W / 2;
 
-      // 掘り下げ（下の層へ）: Wi-Fi の暗号の範囲（第12章）、すり替えの手口（第13章 ARP・第17章 DNS）、TLS を運ぶ TCP（第11章）
+      // 掘り下げ（下の層へ）: Wi-Fi の暗号の範囲（第12章）、すり替えの手口（第13章 ARP・第17章 DNS）、TLS の下の層は部品 encap（レコードに TCP・IP・Ethernet が付く）
       YT.drill.mark(st.nodes[1], { to: '12-wifi.html#s5.5', label: 'Wi-Fi の暗号', at: [304, 52], steps: [1, 5], bridge: 'Wi-Fi の暗号が電波の区間だけなのは、端末と AP の間の鍵（PTK）でフレームを包むから' });
       YT.drill.mark(st.bd.lines[1], { to: '13-ethernet.html#s5.3', label: 'ARP の偽装', at: [410, 388], steps: [3], bridge: 'ARP の偽装は、届いた応答の MAC をそのまま表に覚える ARP の手順につけ込む' });
       YT.drill.mark(st.bd.lines[0], { to: '17-dns.html#s6.1', label: 'DNS の偽の答え', at: [446, 348], steps: [3], bridge: 'DNS の偽の答えも、ID と送信元ポートが合えば PC が受け取る平文の UDP の答え' });
-      YT.drill.mark(st.bd.lines[2], { to: '11-sou.html#s3.2', label: 'TLS の下の TCP', at: [640, 428], steps: [5], bridge: 'TLS のレコードも、HTTP の要求文と同じく、前に TCP ヘッダ 20 バイトが付いて送られる' });
+      YT.drill.mark(st.bd.lines[2], { part: 'encap', step: 2, label: 'TLS の下の層', at: [640, 428], steps: [5], bridge: 'TLS は HTTP のフレームを暗号化してレコードにし、その外側に TCP・IP・Ethernet が付く' });
     },
     rows(i) {
       return [
@@ -1318,14 +1318,15 @@
       st.botT = S.text(46, 410, '', { cls: 't-sm t-b t-dim' }, gb);
       st.botR = [0, 1, 2, 3].map((k) => [S.text(46, 444 + k * 27, '', { cls: 't-xs t-b' }, gb), S.text(176, 444 + k * 27, '', { cls: 't-sm' }, gb)]);
 
-      // 掘り下げ（下の層へ）: レコードを運ぶ TCP（第19章）、ノンスの XOR（第4章）、外側のヘッダ（第18・19章）、ECH の鍵を配る DNS（第17章）
-      YT.drill.mark(st.rec[0].r, { to: '19-tcp.html#s3.1', label: 'レコードを運ぶ TCP', at: [60, 98], steps: [1], bridge: '46 バイトのレコードは、TCP のセグメントの中身として 1 バイトずつ番号を振って送る' });
+      // 掘り下げ（下の層へ）: レコードを運ぶ TCP・見えるポート・QUIC の中身は部品 encap、ノンスの XOR（第4章）、送らない番号と QUIC の見出し（第19章）、IP アドレス（第18章）、ECH の鍵を配る DNS（第17章）
+      YT.drill.mark(st.rec[0].r, { part: 'encap', step: 3, label: 'レコードを運ぶ TCP', at: [60, 98], steps: [1], bridge: '図のレコードは要求の先頭 24 B の例。HTTP/2 の要求 1 つは 481 B のレコードになり、TCP が包む' });
       YT.drill.mark(st.ncT[11], { to: '04-ronri.html#s3.5', label: 'IV ⊕ 番号', at: [612, 352], steps: [2], bridge: 'IV ⊕ 番号は、ビットごとの XOR。番号が 1 のビットだけ、IV のビットが反転する' });
       YT.drill.mark(st.recNo, { to: '19-tcp.html#s3.3', label: '送らない番号', at: [750, 312], steps: [2], bridge: '番号を送らずに両端で数えられるのは、TCP が抜けを埋め、番号順に並べて渡すから' });
       YT.drill.mark(st.botR[0][1], { to: '18-ip.html#s1.6', label: 'IP アドレス', at: [450, 440], steps: [4], bridge: '見える IP アドレスは、暗号の外側にある IPv4 ヘッダの送信元と宛先の欄' });
-      YT.drill.mark(st.botR[1][1], { to: '19-tcp.html#s1.1', label: 'ポート', at: [406, 467], steps: [4], bridge: '見えるポートは、TCP・UDP のヘッダの先頭 4 バイト。暗号はこの内側から始まる' });
+      YT.drill.mark(st.botR[1][1], { part: 'encap', step: 3, params: { via: 'quic' }, label: 'ポート', at: [406, 467], steps: [4], bridge: '見えるポートは UDP ヘッダの先頭 4 B（NAT の前は 51234）。QUIC の見出しと暗号文はその内側' });
       YT.drill.mark(st.botR[2][1], { to: '17-dns.html#s6.6', label: 'ECH の鍵の配り方', at: [454, 494], steps: [5], bridge: 'ECH の公開鍵は、DNS の HTTPS レコードで接続のしかたと一緒に配る' });
       YT.drill.mark(st.botR[0][1], { to: '19-tcp.html#s6.5', label: 'QUIC の見出し', at: [440, 440], steps: [6], bridge: 'パケット番号を別の鍵で隠すので、途中から読めるのは接続 ID と先頭 1 バイトの一部まで' });
+      YT.drill.mark(st.botR[1][1], { part: 'encap', step: 2, params: { via: 'quic' }, label: 'QUIC のパケットの中身', at: [490, 467], steps: [6], bridge: 'QUIC の暗号文の中身は STREAM フレームで、HTTP/3 の HEADERS フレームが入る' });
     },
     rows(i) {
       if (i === 4) return ['ECH を使うと（www.youtube.com は 2026 年 10 月 12 日の時点で使っていない）', [['外側の SNI', '{d|共用の名前}（例 {m|cloudflare-ech.com}）'], ['本当の SNI', '{d|内側の ClientHello ごと暗号化される}'], ['鍵の配り方', 'DNS の HTTPS レコードの {m|ech=} に公開鍵を載せる'], ['www.youtube.com', '{x|HTTPS レコードは} {m|1 .}{x|（ech= なし）}']]];

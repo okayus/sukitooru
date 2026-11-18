@@ -156,7 +156,7 @@ try {
   await loaded;
   await ev('document.fonts.ready.then(() => true)').catch(() => {});
   fs.mkdirSync(opt.out, { recursive: true });
-  const stem = path.basename(rel, '.html');
+  const stem = (([f, q]) => path.basename(f, '.html') + (q ? '-' + q.replace(/[^A-Za-z0-9-]+/g, '-') : ''))(rel.split('?'));   // parts.html?part=encap も撮れる
   for (const at of opt.at) {
     const r = await ev(ADVANCE(opt.scene, opt.step, at, opt.paused));
     if (!r.startsWith('ok')) { console.log(`✗ s${opt.scene} 段階${opt.step} ${at} 秒: ${r}`); code = 1; continue; }

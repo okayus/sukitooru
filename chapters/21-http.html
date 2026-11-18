@@ -457,10 +457,11 @@
       st.reqTok = pkt(svg, 'GET /watch?v=…', 'f-d');
       st.resTok = pkt(svg, '200 OK', 'f-d');
 
-      // 掘り下げ（下の層へ）: 要求を包む TLS のレコード（第20章）、バイトの 16 進の書き方（第4章）
+      // 掘り下げ（下の層へ）: 要求を包む TLS のレコード（第20章）、バイトの 16 進の書き方（第4章）、擬似ヘッダを入れた HEADERS フレームは部品 encap
       YT.drill.mark(st.tlsT, { to: '20-tls.html#s6.1', label: 'TLS で暗号化した接続', at: [610, 60], steps: [1], bridge: 'この要求の先頭 24 バイトも、TLS のレコードに入れて AEAD で包んでから送る' });
       YT.drill.mark(st.details[0][0], { to: '04-ronri.html#s4.5', label: '1 バイトずつ（16 進）', at: [206, 389], steps: [1], bridge: '1 バイトを 16 進 2 文字で書く。G は 0x47 ＝ 0100 0111' });
       YT.drill.mark(st.chunkT, { to: '04-ronri.html#s4.5', label: '16 進で書いた長さ', at: [792, 434], steps: [3], bridge: '1f40 は 16 進。1 文字が 4 ビットで、0x1f40 ＝ 8,000' });
+      YT.drill.mark(st.details[4][0], { part: 'encap', step: 1, label: 'HEADERS フレーム', at: [455, 420], steps: [5], bridge: '擬似ヘッダの要求を HPACK で縮め、HTTP/2 の HEADERS フレームに入れて送る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -888,8 +889,9 @@
         st.details.push([g, 'TCP から見ると（受け手。S1 は「ストリーム 1 のフレーム」）']);
       }
 
-      // 掘り下げ（下の層へ）: 接続ごとの握手と輻輳制御（第19章）、ハフマン符号（第23章。登録簿では横）、TCP の順番待ち（第19章）
+      // 掘り下げ（下の層へ）: 接続ごとの握手と輻輳制御（第19章）、フレームを包む TLS は部品 encap、ハフマン符号（第23章。登録簿では横）、TCP の順番待ち（第19章）
       YT.drill.mark(st.hsT, { to: '19-tcp.html#s2.4', label: 'TCP と TLS の握手', at: [368, 416], steps: [2], bridge: '接続ごとの握手は、TCP の 1 往復と TLS 1.3 の 1 往復で、要求までに 2 往復' });
+      YT.drill.mark(st.details[2][0], { part: 'encap', step: 2, label: 'フレームを包む TLS', at: [906, 396], steps: [3], bridge: 'この HEADERS フレームは、TLS のレコードに入れて暗号化してから TCP で送る' });
       YT.drill.mark(st.ccT, { to: '19-tcp.html#s4.3', label: '接続ごとの輻輳制御', at: [682, 530], steps: [2], bridge: '接続ごとに別の輻輳ウィンドウを持ち、どれも 10 個から 1 往復ごとに倍に増やす' });
       YT.drill.mark(st.huffT, { to: '23-codec.html#s3.3', label: 'ハフマン符号', at: [646, 486], steps: [4], bridge: 'ハフマン符号も指数ゴロム符号と同じく、よく出る値ほど短い符号を割り当てる' });
       YT.drill.mark(st.loss, { to: '19-tcp.html#s3.4', label: 'TCP の順番待ち', at: [316, 214], steps: [5], bridge: 'アプリに渡せないのは、TCP が抜けた 1 個の再送を待ち、後ろに届いた分を取り置くから' });
@@ -1056,9 +1058,10 @@
         return { g, bx };
       });
 
-      // 掘り下げ（下の層へ）: TCP と QUIC の損失の扱い（第19章）、h3 の 443 番（第19章）、HTTPS レコード（第17章。同じ層）、QUIC の接続と、UDP が通らないとき（第19章）
+      // 掘り下げ（下の層へ）: TCP と QUIC の損失の扱い（第19章）、要求の HEADERS を QUIC のパケットに包む所は部品 encap、h3 の 443 番（第19章）、HTTPS レコード（第17章。同じ層）、QUIC の接続と、UDP が通らないとき（第19章）
       YT.drill.mark(st.h2T, { to: '19-tcp.html#s3.4', label: 'HTTP/2（TCP の上）', at: [156, 34], steps: [2], bridge: '3 本とも待つのは、TCP が抜けた 1 個を重複 ACK で知らせ、送り直しを待つから' });
       YT.drill.mark(st.h3T, { to: '19-tcp.html#s6.3', label: 'HTTP/3（QUIC の上）', at: [160, 112], steps: [1, 2], bridge: 'HTTP/3 のストリームの順番と再送は、QUIC がストリームごとに数えて受け持つ' });
+      YT.drill.mark(st.reqH[0], { part: 'encap', step: 2, params: { via: 'quic' }, label: 'QUIC のパケットへ', at: [645, 246], steps: [1], bridge: '要求 1 の HEADERS フレームは、ストリーム 0 の STREAM フレームに入れて QUIC で送る' });
       YT.drill.mark(st.paths[0].bx[3], { to: '19-tcp.html#s1.2', label: 'h3=":443"', at: [770, 402], steps: [4], bridge: 'h3=":443" の 443 は UDP の 443 番。HTTPS と同じ番号で QUIC も待つ' });
       YT.drill.mark(st.paths[1].bx[0], { to: '17-dns.html#s6.6', label: 'HTTPS レコード', at: [332, 452], steps: [5], bridge: 'alpn="h3" は、DNS の HTTPS レコードが知らせる接続のしかた' });
       YT.drill.mark(st.paths[1].bx[1], { to: '19-tcp.html#s6.2', label: 'QUIC ＋ TLS', at: [478, 452], steps: [5], bridge: '最初から QUIC なら、Initial パケットの ClientHello で接続と鍵が 1 往復で決まる' });

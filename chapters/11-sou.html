@@ -312,7 +312,7 @@
       st.tokTxt = S.text(358, 532, '', { cls: 't-c t-sm t-b' }, svg);
       st.hl = { laptop: st.laptop, router: st.router, onu: st.onu, closure: st.closure, olt: st.olt, phone: st.phone, desk: st.desk };
       // 掘り下げ（下の層へ）: 3 つの媒体の信号（第12・13・15章）、PC の出口の NIC（第7章）、ルーターの中の 3 つの装置（第13・14章）、
-      // ONU の電気から光へ（第15章）、光スプリッタ（第15章）
+      // ONU の電気から光へ（第15章）、光スプリッタ（第15章）、段階6 で媒体ごとにビットを記号に写す方式（部品 line-code）
       YT.drill.mark(st.medRadio, { to: '12-wifi.html#s1.1', label: '電波', at: [334, 150], steps: [1], bridge: '電波 2.4 GHz の区間の信号は、アンテナの中の電子の往復が生む電場の変化' });
       YT.drill.mark(st.medCopper, { to: '13-ethernet.html#s1.2', label: 'LAN ケーブル（銅線）', at: [372, 395], steps: [1], bridge: 'LAN ケーブルの区間の信号は、より合わせた 2 本の線の電圧の差' });
       YT.drill.mark(st.medFiber, { to: '15-hikari.html#s1.3', label: '光ファイバー', at: [564, 516], steps: [1], bridge: '光ファイバーの区間では、光はコアとクラッドの境目で全反射を繰り返して進む' });
@@ -322,6 +322,9 @@
       YT.drill.mark(st.rparts[2], { to: '14-router.html#s4.2', label: 'ルーター ＋ NAT', at: [562, 320], steps: [3], bridge: '家と外の境目で付け替える住所は、送信元の IP とポート。対応を変換表に 1 行残す' });
       YT.drill.mark(st.onu, { to: '15-hikari.html#s2.1', label: 'ONU', at: [514, 438], steps: [4], bridge: '電気を光にするのはレーザー（LD）。1 のときに電流を増やして強く光らせる' });
       YT.drill.mark(st.closure, { to: '15-hikari.html#s4.1', label: '光スプリッタ', at: [764, 438], steps: [5], bridge: '32 軒で分ける光スプリッタは、局舎で 4、電柱で 8 に分ける。電源の要らない部品' });
+      YT.drill.mark(st.medRadio, { part: 'line-code', step: 1, params: { medium: 'qam' }, label: '電波（Wi-Fi）', at: [334, 150], steps: [6], bridge: '電波の区間では、16-QAM ならフレームのビットを 4 個ずつ区切り、I と Q の値を選んで波に乗せる' });
+      YT.drill.mark(st.medCopper, { part: 'line-code', step: 1, label: 'LAN ケーブル（銅線）', at: [372, 395], steps: [6], bridge: '1 Gbps の銅線の区間では、フレームを 1 バイトずつ、4 対の 5 段階の電圧の組に写す' });
+      YT.drill.mark(st.medFiber, { part: 'line-code', step: 1, params: { medium: 'light' }, label: '光ファイバー', at: [564, 516], steps: [6], bridge: '1 Gbps の光の区間では、フレームの 8 ビットごとに 10 ビットの符号にして、光の強弱で送る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -491,6 +494,8 @@
   /* ================================================================
      場面3 カプセル化
      ================================================================ */
+  // 線に出る順のビット: プリアンブル 7 バイト・SFD・宛先 MAC 02:11:22:33:44:01・送信元 MAC 3C:4D:5E:6F:70:81。各バイトは下位のビットから送る（部品 line-code と同じ）
+  const FRAME_BITS = '10101010'.repeat(7) + '10101011' + [0x02, 0x11, 0x22, 0x33, 0x44, 0x01, 0x3C, 0x4D, 0x5E, 0x6F, 0x70, 0x81].map((v) => v.toString(2).padStart(8, '0').split('').reverse().join('')).join('');
   const s3 = {
     steps: [
       { title: 'アプリケーション層：中身を作る', text: 'ブラウザは `GET /watch?v=… HTTP/1.1` と `Host: www.youtube.com` などのヘッダを並べた要求文（ここでは 300 バイトとする）を作る。実際の YouTube は HTTP/2 か HTTP/3 で圧縮した形だが（第21章）、包み方は同じ。' },
@@ -544,12 +549,15 @@
       S.text(128, rowY(4) + 70, '剥がす順', { cls: 't-c t-xs t-x t-b' }, st.peel);
       st.peelRing = S.rect(0, 0, 10, 10, { rx: 5, cls: 'f-none s-x w3' }, st.peel);
       st.peelTxt = S.text(400, 530, '', { cls: 't-c t-sm t-x t-b' }, svg);
-      // 掘り下げ（下の層へ）: TCP のシーケンス番号（第19章）、IPv4 ヘッダ（第18章）、Ethernet フレーム（第13章）、
-      // ビットを電圧にする符号（第13章）、FCS（第13章）、途中のルーターの付け直し（第18章）
+      // 掘り下げ（下の層へ）: TCP のシーケンス番号（第19章）、Ethernet フレーム（第13章）、FCS（第13章）、途中のルーターの付け直し（第18章）、
+      // HTTP/2 と TLS を入れた実際の包み（部品 encap）、ビットを電圧の段階に写す符号（部品 line-code）
+      YT.drill.mark(st.rows[0].parts.http, { part: 'encap', step: 1, label: 'HTTP/2 の実際の形', at: [650, 51], steps: [1], bridge: '300 B は仮の値。実際の要求は 17 個のヘッダを HPACK で 450 B に縮めた HTTP/2 のフレーム' });
       YT.drill.mark(st.rows[1].parts.tcp, { to: '19-tcp.html#s3.1', label: 'TCP ヘッダ', at: [395, 127], steps: [2], bridge: 'TCP ヘッダのシーケンス番号は、中身の先頭バイトの番号。何番目のデータかはバイトで数える' });
-      YT.drill.mark(st.rows[2].parts.ip, { to: '18-ip.html#s1.1', label: 'IP ヘッダ', at: [325, 203], steps: [3], bridge: 'IP ヘッダ 20 バイトは 32 ビットの行が 5 つ。欄の位置と長さが決まっている（第18章の例は UDP）' });
+      YT.drill.mark(st.rows[1].parts.http, { part: 'encap', step: 3, label: 'TLS を足した姿', at: [650, 127], steps: [2], bridge: '実際は TLS が入るので、TCP が中身として包むのは暗号化した 481 B のレコード' });
+      YT.drill.mark(st.rows[2].parts.ip, { part: 'encap', step: 4, label: 'IP ヘッダ', at: [325, 203], steps: [3], bridge: 'HTTP/2 と TLS を入れた実際の姿では、同じ IP ヘッダの全長は 340 でなく 521 になる' });
       YT.drill.mark(st.rows[3].parts.eth, { to: '13-ethernet.html#s3.1', label: 'Ethernet ヘッダ', at: [255, 279], steps: [4], bridge: 'Ethernet ヘッダは宛先・送信元の MAC と種別。フレームの欄は送る順に並ぶ' });
-      YT.drill.mark(st.bits, { to: '13-ethernet.html#s2.3', label: 'ビット列 → 信号', at: [540, 430], steps: [5], bridge: '1 Gbps の銅線では、ビット列を 4 対の線に分け、5 段階の電圧（PAM-5）の列にして送る' });
+      YT.drill.mark(st.rows[3].parts.http, { part: 'encap', step: 5, label: 'TLS を足したフレーム', at: [650, 279], steps: [4], bridge: 'HTTP/2 と TLS を入れた実際の姿では、Ethernet のフレームは 358 B でなく 539 B になる' });
+      YT.drill.mark(st.bits, { part: 'line-code', step: 1, label: 'ビット列 → 信号', at: [540, 430], steps: [5], bridge: '1 Gbps の銅線では、フレームの先頭の 02 11 22 … を 1 バイトずつ 4 対の段階の組に写す' });
       YT.drill.mark(st.rows[3].parts.fcs, { to: '13-ethernet.html#s3.6', label: 'FCS', at: [680, 276], steps: [6], bridge: 'FCS は宛先から中身までの全ビットから計算した CRC-32。受け手は同じ計算で比べる' });
       YT.drill.mark(st.total2, { to: '18-ip.html#s4.4', label: '途中のルーター', at: [480, 488], steps: [6], bridge: '途中のルーターは区間ごとに新しい MAC で包み直す。IP の宛先は端から端まで同じ' });
     },
@@ -583,10 +591,8 @@
     frame(ctx, t) {
       const st = ctx.state, i = ctx.step;
       if (i === 4) {
-        const n = 56, off = Math.floor(t * 18);
-        let s = '';
-        for (let k = 0; k < n; k++) s += ((k + off) % 7 === 3 || (k + off) % 5 === 1) ? '1' : '0';
-        st.bits.textContent = '→ ' + s + ' …';
+        const n = 56, off = Math.floor(t * 18) % FRAME_BITS.length;
+        st.bits.textContent = '→ ' + (FRAME_BITS + FRAME_BITS).substr(off, n) + ' …';
       }
       if (i === 5) {
         const q = U.seq(ctx.ts, [1.2, 1.2, 1.2, 1.2, 1.4], true);

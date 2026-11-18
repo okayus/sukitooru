@@ -15,6 +15,7 @@
 
    使い方:
      node tools/verify.mjs chapters/01-denshi.html [chapters/02-...html ...]
+     node tools/verify.mjs 'parts.html?part=encap&via=quic'   部品の見本を 1 つだけ（問い合わせの残りは部品に渡す値）
        --sizes all      4つの幅で測る（既定は 1920x880 と 1280x688 の2つ）
        --shots DIR      1920x880 の各場面と縦読み版の写真を DIR に置く
        --no-phone       縦読み版の検査を省く
@@ -57,6 +58,9 @@ for (let i = 0; i < args.length; i++) {
 if (!opt.pages.length) { console.error('usage: node tools/verify.mjs [--sizes all] [--shots DIR] <page.html>...'); process.exit(2); }
 const DESKTOP = opt.sizes === 'all' ? [[1920, 880], [1536, 730], [1366, 657], [1280, 688]] : [[1920, 880], [1280, 688]];
 const PHONE = [390, 844];
+/* ページの指定に問い合わせ（parts.html?part=encap&via=quic）を付けてよい。ファイルの比べ・写真の名前は問い合わせを外して使う */
+const pageFile = (p) => p.split('?')[0];
+const pageStem = (p) => { const [f, q] = p.split('?'); return path.basename(f, '.html') + (q ? '-' + q.replace(/[^A-Za-z0-9-]+/g, '-') : ''); };
 
 /* ---------- 静的配信（プロジェクトのルート） ---------- */
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
@@ -596,7 +600,7 @@ async function checkPage(cdp, sid, base, page, report) {
     if (!fs.existsSync(file)) { (/^chapters\/\d\d-[a-z0-9-]+\.html$/.test(rel) ? todo : broken).push(rel + u.hash); continue; }
     if (u.hash.length > 1) {
       const id = decodeURIComponent(u.hash.slice(1)).replace(/^(s\d+)\.\d+$/, '$1');   // #s4.2（場面4 の段階2）は場面の id で確かめる
-      const found = file === path.join(ROOT, page)
+      const found = file === path.join(ROOT, pageFile(page))
         ? await ev('!!document.getElementById(' + JSON.stringify(id) + ')')
         : fs.readFileSync(file, 'utf8').includes('id="' + id + '"');
       if (!found) broken.push(rel + u.hash + '（行き先の id が無い）');
@@ -632,7 +636,7 @@ async function checkPage(cdp, sid, base, page, report) {
   }
   // 掘り下げ（--drill）: 印を 1 つずつ開いて板を調べる。部品は時刻送り・段階の行き来・文字の重なりも
   if (opt.drill) {
-    const stem = path.basename(page, '.html');
+    const stem = pageStem(page);
     const fmt = (o) => (o.sid ? o.sid + ' 段階' + (o.s + 1) + ' ' : '') + '印「' + (o.label || '') + '」→ ' + (o.part ? '部品 ' + o.part + (o.step ? ' 段階' + o.step : '') : o.to);
     const partDone = new Set();
     let opened = 0, kinds = { part: 0, frame: 0 }, none = false;
@@ -695,7 +699,7 @@ async function checkPage(cdp, sid, base, page, report) {
     fs.mkdirSync(opt.shots, { recursive: true });
     await load(DESKTOP[0][0], DESKTOP[0][1], false);
     const count = await ev('document.querySelectorAll("section.scene").length');
-    const stem = path.basename(page, '.html');
+    const stem = pageStem(page);
     for (let i = 0; i < Math.max(1, count); i++) {
       if (count) { await ev(`(() => { const t = document.querySelector('.tabs [data-go="${i}"]'); if (t) t.click(); else if (window.oneScreen) window.oneScreen.show(${i}); return 1; })()`); await new Promise((r) => setTimeout(r, 700)); }
       const shot = await cdp.send('Page.captureScreenshot', { format: 'png' }, sid);
@@ -734,7 +738,7 @@ async function checkPage(cdp, sid, base, page, report) {
         await cdp.send('Emulation.setDeviceMetricsOverride', { width: PHONE[0], height: Math.max(PHONE[1], Math.min(h, 6000)), deviceScaleFactor: 2, mobile: true }, sid);
         await ev(`(async () => { window.scrollTo(0, ${y}); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); await new Promise((r) => setTimeout(r, 300)); return 1; })()`, true);
         const shot = await cdp.send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y, width: PHONE[0], height: Math.min(h, 6000), scale: 1 } }, sid);
-        fs.writeFileSync(path.join(opt.shots, `${path.basename(page, '.html')}-phone${opt.dark ? '-dark' : ''}${rects.length > 1 ? '-s' + i : ''}.png`), Buffer.from(shot.data, 'base64'));
+        fs.writeFileSync(path.join(opt.shots, `${pageStem(page)}-phone${opt.dark ? '-dark' : ''}${rects.length > 1 ? '-s' + i : ''}.png`), Buffer.from(shot.data, 'base64'));
       }
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: PHONE[0], height: PHONE[1], deviceScaleFactor: 2, mobile: true }, sid);
     }

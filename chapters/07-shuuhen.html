@@ -86,7 +86,7 @@
   </div>
   <figure class="anim-fig a-fig">
     <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="CPU、物理アドレス空間、装置のレジスタ。store 命令の値がアドレスによって RAM ではなく装置へ届く"></svg></div>
-    <figcaption>図2　物理アドレス空間（中央）の一部が装置のレジスタに配線されている。CPU は普通の store/load で装置を動かし、状態を読む。</figcaption>
+    <figcaption>図2　物理アドレス空間（中央）の一部が装置のレジスタに割り当てられている。CPU は普通の store/load で装置を動かし、状態を読む。</figcaption>
   </figure>
 </section>
 
@@ -344,7 +344,7 @@
   const s2 = {
     steps: [
       { title: '装置にも「レジスタ」がある', text: '装置の中には、CPU から読み書きできる小さな記憶が並んでいる。「動け」と命令する**制御レジスタ**、「準備できたか」を示す**状態レジスタ**、送るデータや置き場所を書くレジスタ。CPU と装置の会話は、すべてこの読み書きで行う。' },
-      { title: 'アドレス空間の一部を装置に割り当てる（MMIO）', text: '装置のレジスタにはメモリと同じ物理アドレスが付いている。例では 0xFEB0_0000 からの範囲が NIC のレジスタで、このアドレスへの読み書きは配線によって RAM ではなく装置に届く。メモリマップド I/O と呼ぶ。' },
+      { title: 'アドレス空間の一部を装置に割り当てる（MMIO）', text: '装置のレジスタにはメモリと同じ物理アドレスが付いている。例では 0xFEB0_0000 からの範囲が NIC のレジスタで、このアドレスへの読み書きは、起動時に決めた割り当てによって RAM ではなく装置に届く。メモリマップド I/O と呼ぶ。' },
       { title: '書き込むと装置が動く', text: 'CPU が `store` 命令で 0xFEB0_0000 に 1 を書くと、値はバスを通って NIC の{x|制御レジスタ}に入り、送信回路が動き出す。CPU から見れば RAM への書き込みと同じ命令で、違いはアドレスだけ。装置側はレジスタの値が変わった瞬間に回路が反応する。' },
       { title: '読み出すと状態が分かる', text: '状態レジスタを `load` すると「送信が終わったか」「受信データがあるか」が分かる。終わるまで繰り返し読む方法が**ポーリング**。CPU は毎秒数十億回読めるのに装置の答えは遅いので、ほとんどが無駄な問い合わせになる。解決は次の場面の割り込み。' },
       { title: '触れるのはドライバだけ', text: 'このアドレスを読み書きできるのはカーネルモードの OS だけで、アプリは保護されたページ（第9章）を越えられない。装置ごとの読み書きの手順を知っているのが**デバイスドライバ**で、アプリはシステムコールで頼む。だから壊れたアプリが装置を直接壊すことはない。' }
@@ -377,7 +377,7 @@
       st.dev = box(g, 600, 120, 330, 330, 'NIC（ネットワークカード）', null, 'f-sf s-rule w15', 't-lg');
       st.dev.title.setAttribute('y', 146);
       const regs = st.regs = [];
-      [['CTRL', '+0x00', '制御', '0x0'], ['STATUS', '+0x08', '状態', '0x0'], ['TDT', '+0x18', '送信キュー末尾', '0x0']].forEach(([name, off, jp, val], k) => {
+      [['CTRL', '+0x00', '制御', '0x0'], ['STATUS', '+0x08', '状態', '0x0'], ['TDT', '+0xE018', '送信キュー末尾', '0x0']].forEach(([name, off, jp, val], k) => {
         const y = 170 + k * 50;
         const rg = S.g({ cls: 'reg-row' }, g);
         S.rect(616, y, 298, 40, { rx: 4, cls: 'f-in s-rule w1' }, rg);
@@ -397,9 +397,9 @@
       S.path('M250,275 H330', { cls: 'f-none s-rule w6 round' }, g);
       S.path('M450,275 H600', { cls: 'f-none s-rule w6 round', style: { opacity: 0 } }, g);
       st.busLbl = S.text(290, 262, 'バス', { cls: 't-c t-xs t-dim' }, g);
-      // 配線: MMIO 領域 → 装置
+      // MMIO 領域 → 装置（範囲は起動時に BAR で割り当てる）
       st.wire = S.path('M450,435 H560 V190 H600', { cls: 'f-none s-d w3 dash fade', 'marker-end': mk('d') }, g);
-      st.wireTxt = S.text(575, 330, '配線で装置へ', { cls: 't-xs t-d t-b fade', transform: 'rotate(-90 575 330)' }, g);
+      st.wireTxt = S.text(575, 330, '装置へ届く', { cls: 't-xs t-d t-b fade', transform: 'rotate(-90 575 330)' }, g);
       // トークンの道
       st.pStore = S.path('M250,275 H290 V435 H560 V190 H616', { cls: 'f-none s-none' }, g);
       st.pLoad = S.path('M616,240 H560 V435 H290 V275 H250', { cls: 'f-none s-none' }, g);
@@ -418,10 +418,10 @@
       st.pollCount = 0;
       // 掘り下げ（下の層へ）
       YT.drill.mark(st.regs[0].g, { to: '05-kioku.html#s3.1', label: '装置のレジスタ', at: [896, 158], steps: [1], bridge: '装置のレジスタも CPU のレジスタと同じく、クロックを共通にした D-FF の束' });
-      YT.drill.mark(st.mmioRect, { to: '05-kioku.html#s3.4', label: 'MMIO の範囲', at: [310, 462], steps: [2], bridge: 'アドレスで RAM か装置かが決まるのは、番号から 1 本の選択線を選ぶデコーダと同じ考え' });
+      YT.drill.mark(st.mmioRect, { part: 'mem-read', step: 5, label: 'MMIO の範囲', at: [310, 462], steps: [2], bridge: 'アドレスで RAM か装置かが決まるのは、番地の上位のビットで答える部品を選ぶから' });
       YT.drill.mark(st.cpu.rect, { to: '06-cpu.html#s1.4', label: 'store 命令', at: [236, 214], steps: [3], bridge: 'store は、番地をアドレスバスに、値をデータバスに出して「書け」と合図する命令' });
       YT.drill.mark(st.regs[0].g, { to: '05-kioku.html#s3.3', label: '制御レジスタ', at: [896, 158], steps: [3], bridge: '書いた瞬間に送信回路が動くのは、レジスタの Q がいつも回路の入力に出ているから' });
-      YT.drill.mark(st.denyTxt, { part: 'cpu-mode', step: 4, label: '保護（直接は不可）', at: [284, 146], steps: [5], bridge: 'カーネルモードだけが触れるのは、読み書きのたびに CPU がモードとページの印を照らし合わせるから' });
+      YT.drill.mark(st.denyTxt, { part: 'mmu-walk', step: 5, params: { fault: 'us' }, label: '保護（直接は不可）', at: [284, 146], steps: [5], bridge: '装置のレジスタを写したページは、アプリの表ではカーネル用（U/S = 0）か項が無い。書くと #PF' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -488,7 +488,7 @@
       { title: '装置が CPU へ合図を送る', text: 'PS/2 接続のキーボードの例。キーが押されると、キーボードのコントローラが{e|割り込み線}（IRQ）に信号を出す。PCIe の装置は線の代わりに、決まったアドレスへの書き込み（MSI / MSI-X）で合図する。USB の装置は自分から合図できず、読み取る USB ホストコントローラが MSI で割り込む（場面 5）。' },
       { title: '割り込みコントローラが番号を付ける', text: '合図は CPU に直接ではなく、割り込みコントローラ（x86 では APIC、ARM では GIC）に集まる。コントローラは装置ごとに決めた**ベクタ番号**（例: キーボードは 33）を付け、優先度と遮断（マスク）の設定を見て、CPU の割り込み端子に伝える。' },
       { title: 'CPU は命令の切れ目で状態を保存して飛ぶ', text: 'CPU は実行中の命令を終えてから、次に実行する命令のアドレス（PC）とフラグをスタックに保存し、ベクタ表（IDT）の 33 番に書かれたハンドラのアドレスへ飛ぶ。同時にカーネルモードに切り替わる。ここまでおよそ 1 マイクロ秒。' },
-      { title: 'ハンドラが装置と話して、元に戻る', text: 'ハンドラは装置のデータレジスタからキーコードを読み（場面 2 の load）、OS の入力キューに入れ、コントローラに処理済み（EOI）を伝えて、保存した PC とフラグを復元する（`iret`）。中断されたプログラムは何も気づかずに続きを実行する。' },
+      { title: 'ハンドラが装置と話して、元に戻る', text: 'ハンドラは装置のデータレジスタからスキャンコードを読み（場面 2 の load）、OS の入力キューに入れ、コントローラに処理済み（EOI）を伝えて、保存した PC とフラグを復元する（`iret`）。中断されたプログラムは何も気づかずに続きを実行する。' },
       { title: '1 秒に何回起きるか', text: 'タイマは 250〜1,000 回/秒（第9章）、キーボードは多くて 10 回/秒。10 Gb/s の NIC は毎秒数十万フレームを受け、1 フレームごとに割り込むと処理が追いつかない。そこで複数フレームを束ねて 1 回だけ割り込み（coalescing）、Linux はしばらくポーリングに切り替える（NAPI）。' }
     ],
     setup(ctx) {
@@ -538,9 +538,9 @@
         const tx = S.text(70, 451 + k * 30, '', { cls: 't-xs t-mono' }, st.stackG);
         return { r, tx };
       });
-      st.idt = table(g, 330, 420, [10, 50], [['番号', 'ハンドラ'], ['32', 'タイマ'], ['33', 'キーボード → kbd_isr'], ['34', 'NIC → nic_isr']], 24, { head: true, w: 190, mono: true });
-      S.text(330, 412, 'ベクタ表（IDT、256 行）', { cls: 't-sm t-b' }, g);
-      st.idtArrow = S.path('M520,480 H560 V170 H600', { cls: 'f-none s-x w2 fade', 'marker-end': mk('x') }, g);
+      st.idt = table(g, 330, 420, [10, 50], [['番号', 'ハンドラ'], ['33', 'キーボード → kbd_isr'], ['34', 'NIC → nic_isr'], ['236', 'タイマ（ローカル APIC）']], 24, { head: true, w: 190, mono: true });   // 33・34 は例（PIC の IRQ0 を 32 に置く並び）。タイマは Linux のローカル APIC の 236（0xEC）
+      S.text(330, 412, 'ベクタ表（IDT、256 行。33・34 は例）', { cls: 't-sm t-b' }, g);
+      st.idtArrow = S.path('M520,456 H560 V170 H600', { cls: 'f-none s-x w2 fade', 'marker-end': mk('x') }, g);   // キーボードの行（rows[1]）から
       // ハンドラの帯
       S.text(600, 160, 'ハンドラ kbd_isr（カーネル）', { cls: 't-sm t-b' }, g);
       st.hNames = ['load DATA', 'キュー追加', 'EOI', 'iret'];
@@ -556,9 +556,15 @@
       // 段階6: 頻度の表
       st.rateTbl = table(g, 600, 420, [10, 150], [['発生源', '回数／秒'], ['タイマ', '250〜1,000'], ['キーボード', '< 10'], ['NIC 10 Gb/s', '数十万 → 束ねる']], 24, { head: true, w: 320, mono: true });
       st.rateTbl.classList.add('fade');
-      // 掘り下げ（下の層へ）。割り込みの入口は部品 cpu-mode の syscall・sysret と同じ仕組みで見せる（例が違う）
-      YT.drill.mark(st.cpuMode, { part: 'cpu-mode', step: 3, label: 'カーネルモードへ', at: [904, 338], steps: [4], bridge: 'カーネルモードへの切り替えは、決まった入口へ飛ぶ拍に M を 0 にすること。部品は syscall の例' });
-      YT.drill.mark(st.hand[3], { part: 'cpu-mode', step: 5, label: 'iret', at: [904, 158], steps: [5], bridge: 'iret でユーザーに戻るときも、PC を戻すのと同じ拍で M を 1 にする。部品は sysret の例' });
+      // 掘り下げ（下の層へ）。CPU の中の手順は部品 irq-entry（キーボードはベクタ 33、タイマは src: 'timer'）。NIC の束ねは部品 nic-rx で、層が同じ io
+      YT.drill.mark(st.intPin, { part: 'irq-entry', step: 1, label: 'INT 端子', at: [626, 316], steps: [3], bridge: 'INT 端子に届いた合図を、CPU は命令の切れ目でだけ IF と合わせて見る' });
+      YT.drill.mark(st.stackG, { part: 'irq-entry', step: 3, label: 'スタック（保存した状態）', at: [236, 418], steps: [4], bridge: 'スタックへの保存は、SP をカーネルのスタックに替えてから SP・FLAGS・M・PC を積むこと' });
+      YT.drill.mark(st.idt, { part: 'irq-entry', step: 2, label: 'ベクタ表（IDT）', at: [534, 432], steps: [4], bridge: 'ベクタ表の 33 番を引くとは、IDT の先頭から 528 バイト先の 16 バイトを読むこと' });
+      YT.drill.mark(st.cpuMode, { part: 'irq-entry', step: 3, label: 'カーネルモードへ', at: [904, 338], steps: [4], bridge: 'カーネルモードへの切り替えは、IDT から読んだ入口へ飛ぶ拍に M を 0 にすること' });
+      YT.drill.mark(st.hand[2], { part: 'irq-entry', step: 4, label: 'EOI', at: [824, 158], steps: [5], bridge: 'EOI を書くと、コントローラは同じ優先度以下の次の割り込みも CPU に渡せる' });
+      YT.drill.mark(st.hand[3], { part: 'irq-entry', step: 5, label: 'iret', at: [904, 158], steps: [5], bridge: 'iret は、積んだ PC・M・FLAGS・SP をスタックから戻し、元のモードへ帰る命令' });
+      YT.drill.mark(st.rateTbl.rows[1], { part: 'irq-entry', step: 1, params: { src: 'timer' }, label: 'タイマ', at: [906, 456], steps: [6], bridge: 'タイマの割り込みも同じ入口の手順を通る。合図は CPU の中のローカル APIC から来る' });
+      YT.drill.mark(st.rateTbl.rows[3], { part: 'nic-rx', step: 4, label: 'NIC の束ねと NAPI', at: [906, 504], steps: [6], bridge: '束ねた割り込みの後、Linux は割り込みを止めて poll で 64 個まで取り出す（NAPI）' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -611,18 +617,18 @@
           setPC(6);
           st.stack[0].tx.textContent = 'PC = i8（戻り先）'; st.stack[1].tx.textContent = 'FLAGS';
           st.stack.forEach((s) => s.r.setAttribute('class', 'f-x-soft s-x w1'));
-          st.idt.rows[2].bg.setAttribute('class', 'f-x-soft');
+          st.idt.rows[1].bg.setAttribute('class', 'f-x-soft');
           st.cpuMode.textContent = 'カーネルモードへ';
           st.latency.textContent = '≒ 1 µs';
         }
         if (q.i >= 4 && q.i <= 6) {
-          st.idt.rows[2].bg.setAttribute('class', 'f-x-soft');
+          st.idt.rows[1].bg.setAttribute('class', 'f-x-soft');
           st.stack[0].tx.textContent = 'PC = i8（戻り先）'; st.stack[1].tx.textContent = 'FLAGS';
           st.cpuMode.textContent = 'カーネルモード';
           if (limit >= 7) {
             const hk = q.i === 4 ? Math.min(1, Math.floor(q.f * 2)) : q.i === 5 ? 2 : 3;
             setPC(hk, true);
-            st.latency.textContent = q.i === 4 ? 'キーコード 0x04 を読み、キューへ' : q.i === 5 ? 'EOI：コントローラに処理済みを通知' : 'iret：PC と FLAGS を復元';
+            st.latency.textContent = q.i === 4 ? 'スキャンコードを読み、キューへ' : q.i === 5 ? 'EOI：コントローラに処理済みを通知' : 'iret：PC と FLAGS を復元';
           } else { setPC(0, true); st.latency.textContent = 'ハンドラの先頭へ'; }
         }
         if (q.i === 7) {
@@ -631,7 +637,7 @@
             st.cpuMode.textContent = 'ユーザーモードに戻る';
             st.latency.textContent = '合計 ≒ 数 µs。プログラムは i8 から続く';
             st.stack.forEach((s) => { s.tx.textContent = ''; s.r.setAttribute('class', 'f-in s-rule w1'); });
-            st.idt.rows[2].bg.setAttribute('class', 'f-none');
+            st.idt.rows[1].bg.setAttribute('class', 'f-none');
           } else { setPC(0, true); }
         }
       }
@@ -644,7 +650,7 @@
   const s4 = {
     steps: [
       { title: 'CPU が運ぶと遅い（PIO）', text: '届いたデータを CPU が装置のデータレジスタから 1 語ずつ `load` し、メモリへ `store` する方法。1 語ごとに PCIe を往復するので、1,500 バイトのパケットに数百回の往復がかかり、その間 CPU はほかの仕事をまったく進められない。' },
-      { title: '置き場所を装置に教える（ディスクリプタ）', text: 'ドライバはメモリに受信用のバッファを確保し、その先頭アドレスと長さを書いた{d|ディスクリプタ}をリング状に並べる。最後に「ここまで使ってよい」という末尾の位置を MMIO で NIC に知らせる（場面 2 の TDT と同じ形の受信用レジスタ RDT）。NIC はこれで書いてよい場所を知る。' },
+      { title: '置き場所を装置に教える（ディスクリプタ）', text: 'ドライバはメモリに受信用のバッファを確保し、その先頭アドレス（装置によっては大きさも）を書いた{d|ディスクリプタ}をリング状に並べる。最後に「ここまで使ってよい」という末尾の位置を MMIO で NIC に知らせる（場面 2 の TDT と同じ形の受信用レジスタ RDT）。NIC はこれで書いてよい場所を知る。' },
       { title: '装置が自分でメモリへ書く（DMA）', text: 'NIC の DMA エンジンが PCIe の書き込みトランザクションで、ディスクリプタが指すバッファへ直接書く。1 回に 128〜512 バイトずつ。メモリコントローラから見れば CPU からの書き込みと同じで、CPU はその間、別のプロセスを実行していられる。' },
       { title: '終わったら 1 回だけ知らせる', text: '書き終えた NIC はディスクリプタの状態欄に「完了」を立て、割り込みを 1 回送る（場面 3）。ドライバは完了した分をまとめて処理する。パケットごとに割り込むと処理が追いつかないので、数十個ごと、または数十マイクロ秒ごとに束ねる。' },
       { title: '好きな所に書かせない（IOMMU）', text: '装置がメモリのどこにでも書けると、壊れた装置や悪意ある外付け機器が OS を破壊できる。IOMMU（Intel VT-d、AMD-Vi、ARM SMMU）は装置専用のページテーブルで、許可した範囲だけ書けるようにする。CPU のキャッシュとの食い違いは、一貫性の仕組み（スヌープ）で解決する。' }
@@ -668,7 +674,7 @@
       for (let k = 0; k < 7; k++) {
         const y = 74 + k * 34;
         const r = S.rect(372, y, 216, 28, { rx: 3, cls: 'f-in s-rule w1' }, g);
-        S.text(378, y + 18, '0x' + (0x1000 + k * 0x100).toString(16).toUpperCase().padStart(4, '0'), { cls: 't-xs t-mono t-dim' }, g);
+        S.text(378, y + 18, '0x' + (0x1000 + k * 0x400).toString(16).toUpperCase().padStart(4, '0'), { cls: 't-xs t-mono t-dim' }, g);   // 1 マス 1 KiB。バッファは 2 マス（2 KiB）ずつ
         st.cells.push({ r, fill: S.rect(372, y, 0, 28, { rx: 3, cls: 'f-d' }, g) });
       }
       S.text(480, 318, '受信バッファ（空き）', { cls: 't-c t-xs t-dim' }, g);
@@ -716,16 +722,20 @@
       S.rect(615, 300, 150, 90, { rx: 6, cls: 'f-sf s-x w2' }, st.iommu);
       S.text(690, 322, 'IOMMU', { cls: 't-c t-b t-x' }, st.iommu);
       S.text(690, 340, '装置用ページテーブル', { cls: 't-c t-xs t-dim' }, st.iommu);
-      S.text(690, 358, '許可: 0x1000〜0x16FF', { cls: 't-c t-xs t-mono' }, st.iommu);
+      S.text(690, 358, '許可: 0x1000〜0x2FFF', { cls: 't-c t-xs t-mono' }, st.iommu);   // IOMMU はページ（4 KiB）単位で許す
       S.text(690, 376, 'それ以外 → 拒否・記録', { cls: 't-c t-xs t-x' }, st.iommu);
       S.path('M700,200 V300', { cls: 'f-none s-x w2 dash', 'marker-end': mk('x') }, st.iommu);
       S.text(760, 480, 'キャッシュとの一貫性：', { cls: 't-xs t-dim' }, st.iommu);
       S.text(760, 496, '装置の書き込みは CPU のキャッシュ', { cls: 't-xs t-dim' }, st.iommu);
       S.text(760, 512, 'の古い行を無効化（スヌープ）', { cls: 't-xs t-dim' }, st.iommu);
-      // 掘り下げ（下の層へ）。リングの仕組みは第27章にしか無い（登録簿の io の下に algo が無いので向きは「横」）
+      // 掘り下げ（下の層へ）。リングの仕組みは第27章にしか無い（登録簿の io の下に algo が無いので向きは「横」）。
+      // 部品 nic-rx は層が同じ io で、DMA エンジン・NAPI の中を一段細かく見せる。IOMMU の表は部品 mmu-walk の段階6
       YT.drill.mark(st.cpu.rect, { to: '06-cpu.html#s4.2', label: 'CPU が運ぶ（load/store）', at: [206, 186], steps: [1], bridge: '1 語ずつ運ぶ間、値は必ず CPU のレジスタを通る。下の例はメモリの値を足して戻すループ' });
       YT.drill.mark(st.ringLbl, { to: '27-algorithm.html#s5.2', label: 'ディスクリプタのリング', at: [500, 340], steps: [2], bridge: 'ディスクリプタを輪に並べるのは、置き場所を動かさず番号だけを進めるリングバッファの形' });
+      YT.drill.mark(st.dmaLamp, { part: 'nic-rx', step: 2, label: 'DMA エンジン', at: [826, 254], steps: [3], bridge: 'DMA エンジンは、控えた番地を番地のレジスタに入れ、書くたびに進める' });
       YT.drill.mark(st.memRect, { to: '05-kioku.html#s5.2', label: '受信バッファ（DRAM）', at: [614, 90], steps: [3], bridge: 'DMA の書き込みも、最後は DRAM のセルのコンデンサをビット線の電圧で充放電すること' });
+      YT.drill.mark(st.cpu.rect, { part: 'nic-rx', step: 4, label: 'まとめて処理（NAPI）', at: [206, 186], steps: [4], bridge: 'まとめて処理するのは NAPI の poll。割り込みを止めたまま DD = 1 を 64 個まで取り出す' });
+      YT.drill.mark(st.iommu, { part: 'mmu-walk', step: 6, label: 'IOMMU', at: [753, 312], steps: [5], bridge: 'IOMMU の許可はページ単位。NIC の番地 0x1000 も、装置ごとの表で CPU と同じ形に 1 段ずつ引く' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -733,7 +743,7 @@
       S.fade(st.dmaRoad, i >= 2);
       st.desc.forEach((d, k) => {
         const filled = i >= 1;
-        d.a.textContent = filled ? `addr 0x${(0x1000 + k * 0x200).toString(16).toUpperCase()}  len 1514` : '（空）';
+        d.a.textContent = filled ? `addr 0x${(0x1000 + k * 0x800).toString(16).toUpperCase()}  len 2048` : '（空）';   // len はバッファの大きさ
         d.s.textContent = filled ? '状態: 空き' : '';
         d.r.setAttribute('class', filled ? 'f-d-soft s-d w1' : 'f-in s-rule w1');
       });
@@ -742,7 +752,7 @@
       st.tok.style.opacity = 0; st.tok2.style.opacity = 0; st.irqTok.style.opacity = 0; st.inTok.style.opacity = 0;
       st.fifo.forEach((f) => { f.style.opacity = 0; });
       st.cpuTask.textContent = i === 0 ? 'load / store の繰り返し' : i === 1 ? 'ドライバ：表を書く' : 'ほかのプロセスを実行';
-      st.note.textContent = ['1 語ごとに PCIe を往復。1,500 バイトで数百回', 'ディスクリプタ 3 個を用意し、末尾（RDT）を NIC に通知', 'NIC が直接書く。CPU は別の仕事', '完了を立てて割り込み 1 回。束ねて処理', '装置の書き込み先を IOMMU が検査する'][i];
+      st.note.textContent = ['1 語ごとに PCIe を往復。1,500 バイトで数百回', '8 個のリングのうち 0〜2 番を用意し、RDT = 3 を NIC に通知', 'NIC が直接書く。CPU は別の仕事', '完了を立てて割り込み 1 回。束ねて処理', '装置の書き込み先を IOMMU が検査する'][i];
     },
     frame(ctx, t) {
       const st = ctx.state, i = ctx.step, ts = ctx.ts;
@@ -779,12 +789,12 @@
           const row = Math.floor(k / 2), done = row < n, cur = row === n;
           c.fill.setAttribute('width', done ? 216 : cur && q.i === 1 ? (216 * q.f).toFixed(1) : cur && q.i === 2 ? 216 : 0);
         });
-        st.desc.forEach((d, k) => { d.s.textContent = k < n || (k === n && q.i === 2) ? '状態: 完了（DD = 1）' : '状態: 空き'; });
+        st.desc.forEach((d, k) => { d.s.textContent = k < n || (k === n && q.i === 2) ? '完了: DD = 1、長さ 1514' : '状態: 空き'; });
       } else if (i === 3) {
         busy(0.1, '10%');
         const q = U.seq(ts, [2.0, 1.0, 1.4], true);
         st.cells.forEach((c, k) => c.fill.setAttribute('width', k < 6 ? 216 : 0));
-        st.desc.forEach((d) => { d.s.textContent = '状態: 完了（DD = 1）'; d.r.setAttribute('class', q.i >= 1 ? 'f-x-soft s-x w1' : 'f-d-soft s-d w1'); });
+        st.desc.forEach((d) => { d.s.textContent = '完了: DD = 1、長さ 1514'; d.r.setAttribute('class', q.i >= 1 ? 'f-x-soft s-x w1' : 'f-d-soft s-d w1'); });
         if (q.i === 1) { const p = S.along(st.pIrq, q.f); st.irqTok.setAttribute('cx', p.x); st.irqTok.setAttribute('cy', p.y); st.irqTok.style.opacity = 1; }
         else st.irqTok.style.opacity = 0;
         st.cpuTask.textContent = q.i === 2 ? 'ドライバ：3 個まとめて処理' : 'ほかのプロセスを実行';
@@ -965,7 +975,7 @@
     steps: [
       { title: 'NIC の中身', text: 'ホストとの窓口が PCIe インターフェースと DMA エンジン。送信リングと受信リングのディスクリプタ（場面 4）でメモリとやりとりし、**MAC** がフレームを組み立て、**PHY** がビットを電線の信号に変える。安価な NIC でもこの構成は同じで、違いは速さと賢さ。' },
       { title: '送信：メモリのフレームが信号になるまで', text: 'OS がフレーム（宛先 MAC・送信元 MAC・種別・中身）をメモリに置き、ディスクリプタに登録する。NIC が DMA で読み出し、MAC が末尾に 4 バイトの誤り検出符号 **FCS**（CRC-32）を付け、先頭に同期用のプリアンブルを足して PHY に渡す。' },
-      { title: 'PHY：ビットを電圧に', text: '1000BASE-T の PHY は、8 ビットずつを 4 対の線に 2 ビットずつ割り振り、各対で 5 段階の電圧（PAM-5）のシンボルを毎秒 1 億 2,500 万個送る。受信側は電圧の列からビットを復元する。ここで初めて{e|電気信号}になり、第13章の有線 LAN に続く。' },
+      { title: 'PHY：ビットを電圧に', text: '1000BASE-T の PHY は、8 ビットずつを 4 対の段階の組 1 つに写し、各対で 5 段階の電圧（PAM-5）のシンボルを毎秒 1 億 2,500 万個送る。受信側は電圧の列からビットを復元する。ここで初めて{e|電気信号}になり、第13章の有線 LAN に続く。' },
       { title: '受信：信号からフレームへ、そしてメモリへ', text: '届いた信号を PHY がビットに戻し、MAC が FCS を検算して壊れたフレームを捨て、宛先 MAC が自分（またはブロードキャスト）かを確かめる。合格したフレームは DMA で受信リングのバッファに書き、束ねて割り込む（場面 3・4）。' },
       { title: 'Wi-Fi カード：PHY の先が電波', text: 'Wi-Fi カードも MAC と PHY でできているが、PHY はビットを 2.4 / 5 / 6 GHz の{r|電波}の波形（OFDM）に変え、RF 回路とアンテナから放つ。有線と違って同じ周波数を近くの機器と分け合うので、MAC には「空いているか聞いてから送る」手順（CSMA/CA）が加わる（第12章）。' },
       { title: 'ここから先が「ネットワーク」', text: 'NIC が電線に出したビット列は、受け取る側から見れば Ethernet フレーム、中が IP パケット、その中が TCP/QUIC のセグメント、いちばん内側が HTTP の要求。この入れ子が第11章の層モデルで、第11章以降はこれが電線・電波・光の上でどう運ばれるかを追う。次の第8章は、映像と音が画面と音になる所。' }
@@ -1005,7 +1015,7 @@
       // PHY の波形（段階3）
       st.phyG = S.g({ cls: 'fade' }, g);
       S.rect(380, 310, 540, 150, { rx: 6, cls: 'f-sf s-rule w1' }, st.phyG);
-      S.text(396, 334, '1000BASE-T：8 ビット → 4 対 × 2 ビット → 5 段階の電圧（PAM-5）', { cls: 't-xs t-b' }, st.phyG);
+      S.text(396, 334, '1000BASE-T：8 ビット → 4 対の段階の組（1 対 2 ビット分）→ PAM-5', { cls: 't-xs t-b' }, st.phyG);
       st.bitsTxt = S.text(396, 356, '', { cls: 't-mono t-sm' }, st.phyG);
       st.pamPaths = [0, 1, 2, 3].map((k) => {
         const y = 380 + k * 20;
@@ -1041,10 +1051,12 @@
       S.text(480, 500, '電線に出るのは一続きのビット列。受け取る側がこの入れ子として読む（第11章 層モデル）', { cls: 't-c t-xs t-dim' }, st.nestG);
       st.bits = S.text(480, 520, '', { cls: 't-c t-xs t-mono t-d' }, st.nestG);
       // 掘り下げ（下の層へ）。札はフレームの札が通る帯（y 172〜196）より下に置く
+      YT.drill.mark(st.blk.dma.rect, { part: 'nic-rx', step: 2, params: { dir: 'read' }, label: 'DMA（読み出し）', at: [328, 210], steps: [2], bridge: 'NIC の DMA は、まずディスクリプタを読み、次にフレームを読み出しの要求で取ってくる' });
       YT.drill.mark(st.blk.mac.rect, { to: '13-ethernet.html#s3.6', label: 'MAC（FCS）', at: [508, 210], steps: [2, 4], bridge: 'MAC が末尾に付ける FCS は、受け手が同じ計算をして壊れたフレームを見つけるための値' });
       YT.drill.mark(st.blk.phy.rect, { to: '13-ethernet.html#s2.3', label: 'PHY（PAM-5）', at: [688, 210], steps: [3], bridge: 'PHY の 5 段階の電圧は、4 対の組で 1 バイトより多い通りを持ち、余りを誤り訂正に使う' });
       YT.drill.mark(st.blk.rj.rect, { to: '13-ethernet.html#s1.2', label: 'RJ45・4 対の銅線', at: [868, 210], steps: [3], bridge: '4 対のそれぞれは、2 本の線の電圧の差で送る差動信号。同じだけ乗るノイズは差を取ると消える' });
       YT.drill.mark(st.blk.phy.rect, { to: '13-ethernet.html#s2.5', label: 'PHY（電圧 → ビット）', at: [688, 210], steps: [4], bridge: 'PHY がビットに戻すのは、拍を合わせ、各拍の電圧をしきい値と比べて段階を決める仕事' });
+      YT.drill.mark(st.blk.dma.rect, { part: 'nic-rx', step: 2, label: 'DMA（書き込み）', at: [328, 210], steps: [4], bridge: '合格したフレームは、DMA エンジンが PCIe の書き込みで 256 B ずつバッファへ書く' });
       YT.drill.mark(st.wb[1].rect, { to: '12-wifi.html#s4.3', label: 'MAC（CSMA/CA）', at: [386, 382], steps: [5], bridge: 'CSMA/CA の「空いているか聞いてから送る」は、空きが続いた後さらに乱数の時間だけ待つ手順' });
       YT.drill.mark(st.wb[2].rect, { to: '12-wifi.html#s3.2', label: 'ベースバンド（OFDM）', at: [566, 382], steps: [5], bridge: 'OFDM の波形は、帯域を多数のサブキャリアに分け、それぞれにゆっくり送る形' });
       YT.drill.mark(st.wb[3].rect, { to: '12-wifi.html#s1.1', label: 'RF・アンテナ', at: [746, 382], steps: [5], bridge: 'RF 回路が 2.4 GHz などの交流をアンテナに流し、往復する電子が電波を出す' });

@@ -4,7 +4,7 @@
 
    段階の本文 160 字・リード 110 字・補足 1 段落 140 字（docs/authoring.md §2）と、掘り下げの印のつなぎの一文 60 字・
    上の要素の名前 20 字（docs/authoring.md「掘り下げ」）を超える所を章ごとに出す。部品（assets/parts/*.js）も渡せる
-   （段階の本文 160 字、注記 140 字、図の説明 120 字、印）。
+   （段階の本文 160 字、注記 140 字、図の説明 120 字、リード 110 字、印）。
      node tools/lencheck.mjs chapters/NN-*.html assets/parts/*.js
    注意: 本文がテンプレート文字列で式（${…}）を含むと、式をそのまま数えるので実際より多く出る。
    その章は式を短い定数に出すか、描画後の本文で数える。
@@ -34,6 +34,7 @@ for (const f of process.argv.slice(2)) {
       if (/^\s*\{\s*title:\s*['"\x60]/.test(ln)) { k++; const t = key(ln, 'text'); if (t && len(t) > 160) out.push(`段階${k}「${key(ln, 'title')}」 ${len(t)} 字（目安 160）`); }
       const nt = /^\s*note:\s*/.test(ln) && key(ln, 'note'); if (nt && len(nt) > 140) out.push(`注記 ${len(nt)} 字（目安 140）`);
       const cp = /^\s*caption:\s*/.test(ln) && key(ln, 'caption'); if (cp && len(cp) > 120) out.push(`図の説明 ${len(cp)} 字（目安 120）`);
+      const ld = /^\s*lead:\s*/.test(ln) && key(ln, 'lead'); if (ld && len(ld) > 110) out.push(`リード ${len(ld)} 字（目安 110。parts.html の場面のリード）`);
     }
     if (!k) out.push('段階の本文を数えられない（steps: [ { title, text }, … ] を 1 段階 1 行で書く）');
     marks(html, out);

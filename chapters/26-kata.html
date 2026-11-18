@@ -1051,6 +1051,8 @@
       S.text(228, 510, '「帯域の見積もり（B/s）」という意味は、このバイトのどこにも無い', { cls: 't-xs t-x' }, st.gP);
       S.text(40, 534, 'DER は INTEGER（02）・SEQUENCE（30）などの基本の型の札を付けるが、', { cls: 't-xs' }, st.gP);
       S.text(40, 550, 'どの INTEGER が通し番号かは、ASN.1 で書いた定義（RFC 5280）にしかない', { cls: 't-xs' }, st.gP);
+      // 掘り下げ（下の層へ）: ページテーブルの印を MMU が照らし合わせる所は部品 mmu-walk（NX の例）
+      YT.drill.mark(st.hw[0].box, { part: 'mmu-walk', step: 5, params: { fault: 'nx' }, label: 'ページテーブルの印', at: [679, 273], steps: [3], bridge: '実行禁止の印は項の NX。データのページから命令を取り出すと、MMU が #PF で止める' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1218,6 +1220,8 @@
       ];
       S.lines(60, 330, ['札は 4 ビットで 16 通りしかないので、偶然に札が合って見逃すこともある。設定によっては、その場では止めずに記録し、後で知らせる。', 'Apple の強化版（EMTE）は、カーネルと 70 以上のプロセスで常に有効（2025 年 9 月の公表）'], { cls: 't-xs t-mid' }, P[5], 18);
       st.mteCur = S.rect(HXo(15), 77, HB, 36, { rx: 4, cls: 'f-none s-x w2' }, P[5]);
+      // 掘り下げ（下の層へ）: 保護がページ単位なのは、MMU がページの項の印でアクセスを照らし合わせるから（部品 mmu-walk。書き込みが通る例）
+      YT.drill.mark(st.gPage, { part: 'mmu-walk', step: 5, params: { fault: 'none' }, label: '同じページの中', at: [640, 141], steps: [2], bridge: '保護の印はページに 1 組。同じページの中なら、どの番地に書いても同じ印で通る' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

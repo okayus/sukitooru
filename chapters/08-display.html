@@ -525,7 +525,7 @@
       st.PX = PX; st.PY = PY; st.rh = rh; st.PWd = PWd; st.TW = TW;
       st.src = 0; st.lastSwap = 0; st.frameNo = 1;
       // 掘り下げ（下の層へ）。差動線は第13章にしか無い（登録簿の display の下に phy が無いので向きは「横」）
-      YT.drill.mark(st.fb, { to: '07-shuuhen.html#s4.3', label: 'フレームバッファを読む', at: [192, 112], steps: [1], bridge: 'ディスプレイコントローラは CPU を通さずに自分でメモリを読む。下の例は NIC が書く DMA' });
+      YT.drill.mark(st.fb, { part: 'nic-rx', step: 3, params: { dir: 'read' }, label: 'フレームバッファを読む', at: [192, 112], steps: [1], bridge: 'ディスプレイコントローラも、自分で番地を出してメモリを読む。下の例は NIC の読み出し' });
       YT.drill.mark(cable, { to: '13-ethernet.html#s1.2', label: 'ケーブル（差動線）', at: [318, 196], steps: [2], bridge: 'HDMI・DP の差動線も、2 本の電圧の差で送る。下の例は LAN ケーブルの対' });
       YT.drill.mark(st.gateBar, { to: '05-kioku.html#s5.2', label: 'ゲートドライバ・TFT', at: [366, 72], steps: [3], bridge: '行の TFT を開いてコンデンサを充放電し、閉じて電荷を残すのは DRAM の書き込みと同じ形' });
       YT.drill.mark(st.latSegs[0], { to: '07-shuuhen.html#s5.3', label: '入力の読み取り', at: [24, 449], steps: [5], bridge: '入力の読み取りが遅れるのは、USB のホストが 1〜8 ms ごとにしか読みに行かないから' });
@@ -907,7 +907,7 @@
       st.speedTxt = S.text(sx + 150, 460, '', { cls: 't-c t-xs t-dim' }, svg);
       // 掘り下げ（下の層へ）
       YT.drill.mark(st.fmtTxt, { to: '04-ronri.html#s6.5', label: '16 ビット（符号付き）', at: [208, 76], steps: [1], bridge: '−32,768〜32,767 の負の側は 2 の補数で表す。下の例は 4 ビットの −3' });
-      YT.drill.mark(st.pcmArrow, { to: '07-shuuhen.html#s4.3', label: 'PCM を DMA で読む', at: [454, 186], steps: [2], bridge: 'オーディオコントローラも CPU を通さずにメモリを読む。下の例は NIC が書く DMA' });
+      YT.drill.mark(st.pcmArrow, { part: 'nic-rx', step: 3, params: { dir: 'read' }, label: 'PCM を DMA で読む', at: [454, 186], steps: [2], bridge: 'オーディオコントローラも、自分で番地を出して PCM を読む。下の例は NIC の読み出し' });
       YT.drill.mark(st.boxes[2], { to: '03-transistor.html#s2.4', label: 'アンプ', at: [566, 322], steps: [3], bridge: 'アンプの増幅もトランジスタが担う。電流はゲートの電圧で連続的に変えられる' });
     },
     onStep(ctx, i) {

@@ -182,16 +182,19 @@ YT.drill.mark(st.cSys, { part: 'cpu-mode', step: 3, label: 'syscall 命令', ste
 
 ```js
 YT.parts.define('cpu-mode', {
-  title: 'CPU のモード', layer: 'cpu', home: '06-cpu.html#s3',   // home は「章を開く ↗」の行き先
+  title: 'CPU のモード', layer: 'cpu', home: '06-cpu.html#s3',   // layer は使う所の層から down で届く層（印の向きが「下」）。home は「章を開く ↗」の行き先
+  lead: 'parts.html の場面のリード（110 字まで。1 文目は何を見せるか）',
   caption: '図の説明（1〜2 文、120 字まで）', note: '注記（140 字まで。章の補足に当たる）',
-  steps: [ { title, text, where }, … ],          // または (params) => [ … ]
+  steps: [ { title, text, where }, … ],          // 1 段階 1 行。params で変えるなら、変わり方ごとの配列を 1 行 1 段階で書いて (params) => 配列 で選ぶ（段階の数はそろえる）
   setup(ctx) {},  onStep(ctx, i, prev) {},  frame(ctx, t, dt) {}   // ctx は章の場面と同じ形に params と mark を足したもの
 });
 ```
 
 - 部品の図も viewBox `0 0 960 560`。板の左に段階の文、右に図が出る（1画面版）。部品は 1 つの層の仕組みを、上の層の例の値のまま見せる（cpu-mode は第9章 場面3 の rax = 45・fd 23・戻り値 1452）。模式にした所（ビット数・番地の幅）は図か注記に書く。
 - 部品の中の印は `ctx.mark(el, { to | part, … })`。
-- 新しい部品は、章と同じく「作成 → 別の担当による仕上げ確認」を通す（事実と図）。
+- 段階の本文に他の章へのリンクの記法（`[[13-ethernet.html#s4|…]]`）を使わない（板の中で押すとページごと移る）。下の層へは図の印で掘らせる。
+- 新しい部品は、章と同じく「作成 → 別の担当による仕上げ確認」を通す（事実と図）。P5 の担当への指示書は [log/2026-11-18-p5-brief.md](log/2026-11-18-p5-brief.md)。
+- **部品の見本 `parts.html`**: 部品ごとに 1 場面（`LIST` の順。部品を足したら `<script src>` と `LIST` に 1 行ずつ足す）。場面の見出し・リード（`lead`）・注記・図の説明は部品の定義から、「使う所」は章の印から作る（`node tools/build-parts.mjs` が parts.html の `USES` を書き直す。印を足した・張り替えたら走らせる。`--check` は古ければ失敗）。`parts.html?part=<名前>` でその部品だけを出し、問い合わせの残りは部品に渡す値になる（`parts.html?part=encap&via=quic`）。verify.mjs・shot.mjs はこの形のまま渡せる（引用符で囲む）。
 - 検証: `node tools/verify.mjs --drill chapters/NN-*.html`（印を 1 つずつ開き、板が出るか・JS のエラー（iframe の中も）・板の中のはみ出し（埋め込みは全段階）・縦読み版の板を調べる。部品の板では部品の中の印も開き、時刻送り・段階の行き来・文字の重なりを通す。`--shots` で開いた板と部品の全段階を撮る）。印の行き先と部品の名前・段階は `xrefcheck.mjs`、つなぎの一文と部品の文の字数は `lencheck.mjs`（どちらも部品のファイルも渡せる）。場面ごと・段階ごとの印の数と向き（行き先の層が上の場面の層の下か。`assets/layers.js` の down で見る）は `node tools/drillcheck.mjs [--list] chapters/NN-*.html`（第2〜25章で印の無い場面を問題、1 段階 4 つ以上を注意に出す。向きの「横」は数えるだけ）。
 
 ## 6. 高さの予算（1画面版）

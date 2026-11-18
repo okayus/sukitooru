@@ -637,10 +637,14 @@
       st.readBits = CODE.map((b, k) => S.text(X0 + k * UW + UW / 2, 501, String(b), { cls: 't-c t-md t-mono t-b t-d', style: { opacity: 0 } }, rd));
       st.cursor = S.line(X0, 236, X0, 512, { cls: 's-x w15 dash', style: { opacity: 0 } }, gw);
       st.X0 = X0; st.UW = UW;
-      // 掘り下げ（下の層へ）: LD と PD の pn 接合（第2章 場面6）、しきい値で読む（第4章 場面1）
+      // 掘り下げ（下の層へ）: LD と PD の pn 接合（第2章 場面6）、ドライバ・8B/10B・TIA・拍の再生・しきい値で読む（部品 line-code の光）
       YT.drill.mark(st.cb.ld, { to: '02-handoutai.html#s6.5', label: 'LD', at: [350, 66], steps: [1, 2], bridge: 'LD の電流がしきい値を超えると、再結合の光が誘導放出で増え、そろった光になる' });
+      YT.drill.mark(st.cb.drv, { part: 'line-code', step: 2, params: { medium: 'light' }, label: 'ドライバ', at: [226, 66], steps: [1, 2], bridge: 'ドライバはバイアス電流を流し続け、1 のときだけ変調電流を差動対で LD へ振り分ける' });
+      YT.drill.mark(st.pCode, { part: 'line-code', step: 1, params: { medium: 'light' }, label: '8B/10B の表', at: [396, 210], steps: [3], bridge: '8B/10B は 5 ビットを 6 ビットに、3 ビットを 4 ビットに表で置き換え、1 と 0 の数をそろえる' });
       YT.drill.mark(st.cb.pd, { to: '02-handoutai.html#s6.3', label: 'PD', at: [652, 64], steps: [4], bridge: 'PD の電流は、光子が作った電子正孔対が空乏層の電場で引き離されて流れるもの' });
-      YT.drill.mark(st.cb.dec, { to: '04-ronri.html#s1.2', label: 'しきい値で 1 ／ 0', at: [936, 66], steps: [5], bridge: 'しきい値より上なら 1 と読むのは、論理回路の入力がしきい値で 0 と 1 を読むのと同じ判定' });
+      YT.drill.mark(st.cb.tia, { part: 'line-code', step: 3, params: { medium: 'light' }, label: 'TIA', at: [764, 66], steps: [5], bridge: 'TIA は PD の小さな電流を帰還抵抗で電圧に変え、強い光ほど高い電圧にする' });
+      YT.drill.mark(st.cb.dec, { part: 'line-code', step: 4, params: { medium: 'light' }, label: '拍の再生（CDR）', at: [800, 66], steps: [5], bridge: '上りは家ごとの光の塊で届くので、局舎の受け手は塊のたびに拍を合わせ直す' });
+      YT.drill.mark(st.cb.dec, { part: 'line-code', step: 5, params: { medium: 'light' }, label: 'しきい値で 1 ／ 0', at: [936, 66], steps: [5], bridge: '0 でも弱く光らせているので、しきい値は 0 V ではなく弱い光の電圧より上に置く' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

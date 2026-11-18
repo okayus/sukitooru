@@ -20,15 +20,18 @@ tools/serve.sh stop
 ```
 index.html            目次。全体の地図と36章の一覧
 glossary.html         用語索引。全章の用語表を 1 か所に（部ごとの一覧・検索・同じ語の別の意味）
+parts.html            部品の見本。掘り下げの板に出る部品（assets/parts/*.js）を 1 つずつ見る
 chapters/NN-*.html    章ごとのページ（表紙＋動く場面6つ＋まとめ）
 assets/base.css       共通スタイル（1画面版／縦読み版、SVG 用の色クラス）
 assets/engine.js      共通エンジン（場面の切り替え、段階、動きの時計、SVG の部品）
 assets/glossary-data.js  用語索引のデータ（tools/build-glossary.mjs が全章の用語表から作る）
+assets/parts/*.js     部品。下の層の仕組みを、上の章の例の値のまま動かす小さな場面（掘り下げの板の中身）
 docs/plan.md          全36章の計画と進捗
 docs/authoring.md     章の書き方（エンジンの API、場面の型、高さの予算、検証）
 tools/verify.mjs      ヘッドレス Chrome で JS エラー・はみ出し・リンク切れを測る
 tools/shot.mjs        場面・段階・時刻を指定して写真を撮る（動く札の止まる位置の確認）
 tools/build-glossary.mjs  用語索引のデータを作り直す（章の用語表を直したら走らせる）
+tools/build-parts.mjs  部品の見本の「使う所」を章の印から作り直す（部品の印を足したら走らせる）
 news/                 ニュースから層へ。tech ニュースを章・場面に結びつけたノート（*.md が元、*.html と index.html は作ったもの）
 tools/build-news.mjs  news/*.md からページと一覧を作る（ノートを足したり直したりしたら走らせる）
 tools/lencheck.mjs    本文の字数の目安（段階 160・リード 110・補足 140）を超える所を出す
@@ -45,6 +48,7 @@ tools/serve.sh        ローカル配信
   「自動で進む」を入れると、段階は本文の長さに応じて約 12〜30 秒、表紙とまとめは約 15 秒ごとに、章もまたいで最後まで進む。目次の上部バーの「最初から通して見る」「続きから」から始められる。
   URL の末尾は今の場面と段階（<code>#s3</code>、<code>#s3.2</code>）に書き換わるので、再読み込みや共有で同じ所に戻れる。各章のまとめの下には次の章の導入が出る。
 - 用語は <code>glossary.html</code>（用語索引）で探せる。各章のまとめと目次から開ける。
+- 図の角の ↓ の札を押すと、場面の上に板が重なり、一つ下の層を見せる（Esc で 1 段ずつ戻る）。板に出る部品は <code>parts.html</code>（部品の見本）で 1 つずつ見られる。
 - スマートフォンでは縦に読む。段階の操作は画面の下端に出る。
 - 動きを減らす設定（prefers-reduced-motion）のときは止まった状態で始まり、「動かす」で動く。
 

@@ -1014,12 +1014,12 @@
       stops.forEach((s, k) => box(st.road, 50 + k * 88, 500, 80, 26, s, null, 'f-in s-rule w1', 't-xs'));
       st.roadPath = S.path('M90,528 H880', { cls: 'f-none s-none' }, st.road);
       st.roadTok = token(st.road, '要求', 'f-d', 40);
-      // 掘り下げ（下の層へ）: 断片を運ぶ応答（第21章）、容器（第23章）、合成層に貼るフレーム（第8章）、PTS（第23章）、包み方（第11章）
+      // 掘り下げ（下の層へ）: 断片を運ぶ応答（第21章）、容器（第23章）、合成層に貼るフレーム（第8章）、PTS（第23章）、包み方（部品 encap の QUIC）
       YT.drill.mark(st.pFetch, { to: '21-http.html#s6.4', label: '断片の fetch', at: [922, 60], steps: [3], bridge: '断片の fetch は googlevideo.com への POST。1 つの応答に映像と音声の断片が数個ずつ入る' });
       YT.drill.mark(st.pDemux, { to: '23-codec.html#s6.5', label: 'デマルチプレクサ', at: [922, 208], steps: [4], bridge: '容器を解くとは、断片の MP4（moof と mdat）や WebM の入れ子をたどり、フレームの符号を取り出すこと' });
       YT.drill.mark(st.pComp, { to: '08-display.html#s2.3', label: '合成層へ', at: [786, 364], steps: [4], bridge: '合成層に貼るフレームは YUV 4:2:0 のまま。GPU が合成のときに RGB へ直し、大きさを合わせる' });
       YT.drill.mark(st.ptsTxt, { to: '23-codec.html#s6.6', label: 'PTS', at: [916, 446], steps: [5], bridge: 'PTS は容器の中でフレームごとに持つ時刻。MP4 では断片の始まりの時刻に長さを足して求める' });
-      YT.drill.mark(st.road, { to: '11-sou.html#s3.1', label: 'HTTP・TLS・QUIC', at: [706, 486], steps: [6], bridge: 'fetch の要求は、HTTP・TLS・QUIC・IP と各層がヘッダを外側へ付けて包む（第11章の例は TCP）' });
+      YT.drill.mark(st.road, { part: 'encap', step: 1, params: { via: 'quic' }, label: 'HTTP・TLS・QUIC', at: [706, 486], steps: [6], bridge: 'fetch の POST も、例の GET /watch と同じく HTTP/3・QUIC・UDP・IP の順に包む' });
     },
     onStep(ctx, i) {
       const st = ctx.state;

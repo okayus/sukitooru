@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>部品の見本 — YouTubeが見えるまで</title>
+<meta name="description" content="教材「YouTubeが見えるまで」の掘り下げの板に出る部品（下の層の仕組みを、上の章の例の値のまま動かす小さな場面）を、1 つずつ見る見本のページ。">
+<meta property="og:title" content="部品の見本 — YouTubeが見えるまで">
+<meta property="og:description" content="掘り下げの板に出る部品を 1 つずつ見る。">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="assets/base.css">
+<script src="assets/engine.js"></script>
+<script src="assets/layers.js"></script>
+<!-- 部品（assets/parts/<名前>.js）の並び（層の低い順）と上部バーのタブの名前（2〜8 字）。部品を足したら 1 行足す。
+     ?part=<名前> のときはその部品だけを読み込む（ほかの部品の誤りで検証が落ちないように） -->
+<script>
+  window.PARTS_LIST = [
+    { name: 'mem-read', tab: '読み出し' },
+    { name: 'alu', tab: 'ALU' },
+    { name: 'dec', tab: '解読' },
+    { name: 'cpu-mode', tab: 'モード' },
+    { name: 'irq-entry', tab: '割り込み' },
+    { name: 'mmu-walk', tab: 'ページ表' },
+    { name: 'ctx-switch', tab: '切り替え' },
+    { name: 'nic-rx', tab: 'NIC' },
+    { name: 'line-code', tab: '符号' },
+    { name: 'encap', tab: '包む' }
+  ];
+  (function () {
+    var only = new URLSearchParams(location.search).get('part');
+    var known = window.PARTS_LIST.some(function (x) { return x.name === only; });
+    window.PARTS_LIST.forEach(function (x) {
+      if (!known || x.name === only) document.write('<script src="assets/parts/' + x.name + '.js"><\/script>');
+    });
+  })();
+</script>
+<style>
+  /* 部品の見本だけのスタイル */
+  .fit .sc-cover .toc li { padding-block: 0.2rem; }   /* 構成が 10 項目なので詰めて 1 画面に収める */
+  .fit .sc-cover .toc li p { font-size: 0.74rem; line-height: 1.5; }
+  .pt-uses a { color: inherit; }
+  .pt-uses .pt-k { color: var(--fg-dim); margin-right: 0.35rem; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">部品の見本 ／ 掘り下げの板の中身</p>
+    <h1 id="h-s0">部品の見本</h1>
+    <p class="standfirst">章の図の ↓ の印を押すと、場面の上に板が重なり、一つ下の層を見せる。<b>部品</b>は、その板の中身のうち、章の場面に説明の無い仕組みや、例の値が上の章と合わない所を埋める小さな場面で、上の章の例の値のまま動く。ここでは部品を 1 つずつ見られる。部品の中の ↓ の印から、さらに下の章へ掘れる。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only">上のタブで部品を選ぶ。<kbd>→</kbd><kbd>←</kbd>（または右上の <kbd>›</kbd><kbd>‹</kbd>）で段階を進め、<kbd>↓</kbd><kbd>↑</kbd> で部品を移る。<kbd>スペース</kbd>で動きを止める。図の ↓ の札か説明欄の下の「下の層へ」から、下の章の場面を板で開く（<kbd>Esc</kbd> で閉じる）。</p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol id="cover-toc"></ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" aria-label="移動" id="cover-nav"><a href="index.html">目次</a><a href="chapters/01-denshi.html">第1章から読む</a></nav>
+    <p id="cover-note"></p>
+  </footer>
+</section>
+
+<!-- 部品の場面（s1〜）は下のスクリプトが LIST から作る -->
+
+</main>
+</div>
+<script>
+(() => {
+  const LIST = window.PARTS_LIST;   // 並びとタブの名前は head の PARTS_LIST
+  /* 部品を使う章の印（node tools/build-parts.mjs が章の YT.drill.mark から作り直す。手で直さない） */
+  /* USES:BEGIN */
+  const USES = {
+    'alu': [
+      ['06-cpu.html#s3.5', 'ALU（0 + 3）'],
+      ['06-cpu.html#s3.5', 'Z（0 でないので 0）'],
+      ['06-cpu.html#s4.3', 'SUB（3 − 1）'],
+      ['06-cpu.html#s4.5', 'Z（結果が 0 なら 1）']
+    ],
+    'cpu-mode': [
+      ['09-os.html#s1.2', 'CPU のモード'],
+      ['09-os.html#s1.3', 'システムコールの入口'],
+      ['09-os.html#s3.1', 'syscall 命令'],
+      ['09-os.html#s3.2', 'モードの境界'],
+      ['09-os.html#s3.4', 'sysret']
+    ],
+    'ctx-switch': [
+      ['09-os.html#s2.2', 'スレッドの交代'],
+      ['09-os.html#s3.3', '待ちにして交代'],
+      ['09-os.html#s4.2', 'CR3（プロセスごと）'],
+      ['09-os.html#s5.2', '交代を予約'],
+      ['09-os.html#s5.3', '交代の中身']
+    ],
+    'dec': [
+      ['06-cpu.html#s1.5', '制御装置'],
+      ['06-cpu.html#s2.1', 'オペコード 0010'],
+      ['06-cpu.html#s2.2', '命令表（6 命令）'],
+      ['06-cpu.html#s3.3', '制御装置（解読）'],
+      ['06-cpu.html#s4.3', 'JNZ（PC ← 0）'],
+      ['06-cpu.html#s4.5', 'JNZ（飛ばない）']
+    ],
+    'encap': [
+      ['09-os.html#s6.5', 'UDP のヘッダ'],
+      ['10-browser.html#s6.6', 'HTTP・TLS・QUIC'],
+      ['11-sou.html#s3.1', 'HTTP/2 の実際の形'],
+      ['11-sou.html#s3.2', 'TLS を足した姿'],
+      ['11-sou.html#s3.3', 'IP ヘッダ'],
+      ['11-sou.html#s3.4', 'TLS を足したフレーム'],
+      ['19-tcp.html#s1.1', '中身の QUIC'],
+      ['20-tls.html#s1.5', 'TLS の下の層'],
+      ['20-tls.html#s6.1', 'レコードを運ぶ TCP'],
+      ['20-tls.html#s6.4', 'ポート'],
+      ['20-tls.html#s6.6', 'QUIC のパケットの中身'],
+      ['21-http.html#s1.5', 'HEADERS フレーム'],
+      ['21-http.html#s3.3', 'フレームを包む TLS'],
+      ['21-http.html#s4.1', 'QUIC のパケットへ'],
+      ['22-server.html#s3.3', 'GRE で包む']
+    ],
+    'irq-entry': [
+      ['07-shuuhen.html#s3.3', 'INT 端子'],
+      ['07-shuuhen.html#s3.4', 'スタック（保存した状態）'],
+      ['07-shuuhen.html#s3.4', 'ベクタ表（IDT）'],
+      ['07-shuuhen.html#s3.4', 'カーネルモードへ'],
+      ['07-shuuhen.html#s3.5', 'EOI'],
+      ['07-shuuhen.html#s3.5', 'iret'],
+      ['07-shuuhen.html#s3.6', 'タイマ'],
+      ['09-os.html#s1.3', '割り込みハンドラ'],
+      ['09-os.html#s1.3', '例外ハンドラ'],
+      ['09-os.html#s3.2', 'entry_SYSCALL_64'],
+      ['09-os.html#s4.4', '例外 #PF'],
+      ['09-os.html#s5.2', 'タイマ割り込み']
+    ],
+    'line-code': [
+      ['11-sou.html#s1.6', '電波（Wi-Fi）'],
+      ['11-sou.html#s1.6', 'LAN ケーブル（銅線）'],
+      ['11-sou.html#s1.6', '光ファイバー'],
+      ['11-sou.html#s3.5', 'ビット列 → 信号'],
+      ['12-wifi.html#s2.4', '搬送波の波形'],
+      ['12-wifi.html#s2.4', '(I, Q) の取り出し'],
+      ['12-wifi.html#s2.5', '近い点を選ぶ'],
+      ['13-ethernet.html#s2.3', '8 ビット → 4 対の組'],
+      ['13-ethernet.html#s2.3', '段階の電圧を出す回路'],
+      ['13-ethernet.html#s2.4', '差し引く回路'],
+      ['13-ethernet.html#s2.5', '拍の再生（CDR）'],
+      ['13-ethernet.html#s2.5', '4 本のしきい値'],
+      ['15-hikari.html#s2.1', 'ドライバ'],
+      ['15-hikari.html#s2.3', '8B/10B の表'],
+      ['15-hikari.html#s2.5', 'TIA'],
+      ['15-hikari.html#s2.5', '拍の再生（CDR）'],
+      ['15-hikari.html#s2.5', 'しきい値で 1 ／ 0'],
+      ['16-internet.html#s4.5', '1 波：数百 Gbps']
+    ],
+    'mem-read': [
+      ['05-kioku.html#s3.4', 'デコーダ'],
+      ['05-kioku.html#s4.5', '行デコーダ'],
+      ['05-kioku.html#s5.5', '行デコーダ'],
+      ['06-cpu.html#s1.4', 'メモリ（DRAM）'],
+      ['06-cpu.html#s3.1', 'メモリ（行を選ぶ）'],
+      ['06-cpu.html#s3.2', 'メモリ（中身を出す）'],
+      ['06-cpu.html#s3.4', 'メモリ（11 番地）'],
+      ['07-shuuhen.html#s2.2', 'MMIO の範囲']
+    ],
+    'mmu-walk': [
+      ['07-shuuhen.html#s2.5', '保護（直接は不可）'],
+      ['07-shuuhen.html#s4.5', 'IOMMU'],
+      ['09-os.html#s4.2', '仮想アドレスの分解'],
+      ['09-os.html#s4.3', 'ページウォーク'],
+      ['09-os.html#s4.3', 'TLB'],
+      ['09-os.html#s4.4', 'ページの印'],
+      ['09-os.html#s4.5', '表の属性（R/W・NX）'],
+      ['09-os.html#s5.3', 'CR3'],
+      ['26-kata.html#s5.3', 'ページテーブルの印'],
+      ['26-kata.html#s6.2', '同じページの中'],
+      ['27-algorithm.html#s4.6', 'ページテーブル（木）']
+    ],
+    'nic-rx': [
+      ['07-shuuhen.html#s3.6', 'NIC の束ねと NAPI'],
+      ['07-shuuhen.html#s4.3', 'DMA エンジン'],
+      ['07-shuuhen.html#s4.4', 'まとめて処理（NAPI）'],
+      ['07-shuuhen.html#s6.2', 'DMA（読み出し）'],
+      ['07-shuuhen.html#s6.4', 'DMA（書き込み）'],
+      ['08-display.html#s3.1', 'フレームバッファを読む'],
+      ['08-display.html#s6.2', 'PCM を DMA で読む'],
+      ['09-os.html#s2.4', 'パケットの到着'],
+      ['09-os.html#s3.3', 'ソケットの受信キュー'],
+      ['09-os.html#s3.3', 'NIC → DMA'],
+      ['09-os.html#s5.5', 'NIC の割り込み'],
+      ['09-os.html#s6.2', '受信リング'],
+      ['09-os.html#s6.2', 'DMA'],
+      ['09-os.html#s6.2', '割り込み（MSI-X）'],
+      ['09-os.html#s6.3', 'sk_buff の data'],
+      ['09-os.html#s6.4', 'ソケットの受信キュー'],
+      ['09-os.html#s6.5', 'NIC の送信'],
+      ['25-tooshi.html#s4.5', 'DMA でメモリへ']
+    ]
+  };
+  /* USES:END */
+
+  const esc = YT.esc, rich = YT.rich;
+  const LAYERS = window.YT_LAYERS ? window.YT_LAYERS.layers : [];
+  const layerName = (id) => { const l = LAYERS.find((x) => x.id === id); return l ? (l.short || l.name) : id; };
+  const where = (to) => { const m = /^(\d\d)-[a-z0-9-]+\.html#s(\d+)/.exec(to || ''); return m ? `第${Number(m[1])}章 場面${m[2]}` : to; };
+
+  /* ?part=名前 なら、その部品だけを出す（検証用）。問い合わせの残り（?part=encap&via=quic の via）は部品に渡す値 */
+  const q = new URLSearchParams(location.search);
+  const only = q.get('part');
+  const params = {};
+  q.forEach((v, k) => { if (k !== 'part' && k !== 'embed') params[k] = /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; });
+  const shown = LIST.filter((x) => YT.parts.get(x.name) && (!only || x.name === only || !LIST.some((y) => y.name === only)));
+
+  /* 場面を作る */
+  const main = document.querySelector('main.scenes');
+  const scenes = {};
+  shown.forEach((x, k) => {
+    const def = YT.parts.get(x.name).def, n = k + 1, id = 's' + n;
+    const uses = (USES[x.name] || []);
+    const byScene = [];
+    uses.forEach((u) => { const w = where(u[0]); if (!byScene.some((b) => b[1] === w)) byScene.push([u[0].replace(/\.\d+$/, ''), w]); });
+    const sec = document.createElement('section');
+    sec.className = 'scene sc-anim';
+    sec.id = id;
+    sec.dataset.tab = x.tab;
+    sec.dataset.part = x.name;
+    sec.setAttribute('aria-labelledby', 'h-' + id);
+    sec.innerHTML =
+      `<header class="sh a-sh"><h2 id="h-${id}"><span class="n">${n}</span>${esc(def.title || x.name)}</h2>` +
+      `<p class="sh-meta"><span class="chip">層：${esc(layerName(def.layer))}</span><span class="chip">部品 ${esc(x.name)}</span></p></header>` +
+      `<div class="col a-left"><p class="prose a-lead">${rich(def.lead || def.caption || '')}</p><div class="narr-slot a-panel"></div>` +
+      `<div class="prose a-after">${def.note ? `<p class="note">${rich(def.note)}</p>` : ''}` +
+      `<p class="note pt-uses"><span class="pt-k">使う所</span>${byScene.length ? byScene.map((b) => `<a href="chapters/${esc(b[0])}">${esc(b[1])}</a>`).join('・') : 'まだ無い'}` +
+      (def.home ? `<span class="pt-k" style="margin-left:0.9rem">元の章</span><a href="chapters/${esc(def.home)}">${esc(where(def.home))}</a>` : '') + `</p></div></div>` +
+      `<figure class="anim-fig a-fig"><div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="${esc(def.title || x.name)}"></svg></div>` +
+      `<figcaption>${esc(def.caption || '')}</figcaption></figure>`;
+    main.appendChild(sec);
+    const steps = typeof def.steps === 'function' ? def.steps(params) : def.steps;
+    scenes[id] = {
+      steps,
+      setup(ctx) {
+        ctx.params = params;
+        ctx.part = x.name;
+        ctx.mark = (el, o) => YT.drill.mark(el, o);   // 部品の中の印（板の中と同じく、下の章の場面を板で開く）
+        if (def.setup) def.setup(ctx);
+      },
+      onStep(ctx, i, prev) { if (def.onStep) def.onStep(ctx, i, prev); },
+      frame(ctx, t, dt) { if (def.frame) def.frame(ctx, t, dt); },
+      leave(ctx) { if (def.leave) def.leave(ctx); }
+    };
+  });
+
+  /* 表紙の構成と移動 */
+  document.getElementById('cover-toc').innerHTML = shown.map((x, k) => {
+    const def = YT.parts.get(x.name).def;
+    const chs = [...new Set((USES[x.name] || []).map((u) => Number(u[0].slice(0, 2))))].sort((p, q) => p - q);
+    return `<li><a href="#s${k + 1}" data-go="${k + 1}"><span class="n">${k + 1}</span>${esc(def.title || x.name)}</a><p>${esc(layerName(def.layer).replace(/[A-Za-z0-9）)]$/, '$& '))}の層${chs.length ? '。使う所 第' + chs.join('・') + '章' : ''}</p></li>`;
+  }).join('');
+  if (shown.length) document.getElementById('cover-nav').insertAdjacentHTML('afterbegin', `<a class="next" href="#s1" data-go="1">${esc(YT.parts.get(shown[0].name).def.title || shown[0].name)} ›</a>`);
+  document.getElementById('cover-note').textContent = `部品 ${shown.length} 個。層の低い順に並べた。章の印から開いたときは、印が選んだ段階から始まる。`;
+
+  YT.chapter({
+    meta: {
+      eyebrow: '部品の見本',
+      title: '部品の見本',
+      home: 'index.html',
+      legend: [{ c: 'e', label: '電子・電気信号' }, { c: 'h', label: '高い電位・1' }, { c: 'p', label: '光' }, { c: 'r', label: '電波' }, { c: 'd', label: 'データ' }, { c: 'x', label: '注目' }]
+    },
+    scenes
+  });
+})();
+</script>
+</body>
+</html>

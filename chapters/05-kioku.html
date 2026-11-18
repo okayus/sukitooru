@@ -621,10 +621,10 @@
       });
       st.readSeq = [[1, 2, 3], [3, 4, 0], [2, 7, 5], [5, 1, 6], [0, 3, 2], [6, 5, 4], [4, 2, 1], [7, 0, 7]];
       st.writeVals = ['0x0000_0000_0040_12A4', '0x0000_0000_0000_0102', '0x0000_7F3B_2C10_0008', '0x0000_0000_0000_0004', '0x0000_0000_0000_0203', '0x7FFF_F2A0_1C40_87F0', '0x0000_0000_0040_12A8', '0x0000_0000_0000_0011'];
-      // 掘り下げ（下の層へ）: D-FF（場面2）、選択回路とデコーダは積和形（第4章 場面3）
+      // 掘り下げ（下の層へ）: D-FF（場面2）、選択回路は積和形（第4章 場面3）、デコーダは部品 mem-read（YT-8 のメモリの行デコーダ）
       YT.drill.mark(st.ffs[7].r, { to: '05-kioku.html#s2.3', label: 'D-FF（bit 0）', at: [866, 230], steps: [1, 2, 3], bridge: '1 ビット分の箱は、ラッチ 2 段で立ち上がりの瞬間だけ D を取り込む D フリップフロップ' });
       YT.drill.mark(st.muxes[7], { to: '04-ronri.html#s3.6', label: '選択回路', at: [842, 160], steps: [2], bridge: '選択回路も、出力が 1 になる行ごとに入力の AND を作り OR でまとめる積和形で作れる' });
-      YT.drill.mark(st.gf, { to: '04-ronri.html#s3.6', label: 'デコーダ', at: [232, 205], steps: [4], bridge: 'デコーダの選択線 1 本は、番号のビットの AND（0 のビットは NOT してから）。積和形の 1 行分' });
+      YT.drill.mark(st.gf, { part: 'mem-read', step: 2, label: 'デコーダ', at: [232, 205], steps: [4], bridge: '番号 4 ビットを選択線 1 本に変えるデコーダ。下の例は YT-8 のメモリの 16 行' });
       YT.drill.mark(st.cpuTags, { to: '05-kioku.html#s2.3', label: 'PC・SP・汎用レジスタ', at: [772, 128], steps: [5], bridge: '1 ビットに数十個のトランジスタを使うのは、各ビットがラッチ 2 段の D フリップフロップだから' });
     },
     onStep(ctx, i) {
@@ -980,11 +980,11 @@
       st.Z = makeZoom(svg, [st.gw, st.cnt]);
       st.Z.add('cell', buildCell);
       st.Z.add('mos', buildMos);
-      // 掘り下げ（下の層へ）: インバータ・nMOS のスイッチ・トランジスタの強さ（第3章）、デコーダは積和形（第4章 場面3）。YT.zoom の板が開いている間は札が出ない（一覧には出る）
+      // 掘り下げ（下の層へ）: インバータ・nMOS のスイッチ・トランジスタの強さ（第3章）、行デコーダは部品 mem-read（YT-8 の 16 行）。YT.zoom の板が開いている間は札が出ない（一覧には出る）
       YT.drill.mark(st.invQb, { to: '03-transistor.html#s4.3', label: 'インバータ', at: [436, 168], steps: [1], bridge: 'Q = 1 を受けたインバータが Q̄ = 0 を出すのは、nMOS がオンで出力が GND につながるから' });
       YT.drill.mark(st.swL.g, { to: '03-transistor.html#s3.3', label: 'アクセス用 nMOS', at: [305, 304], steps: [2, 3], bridge: 'WL = 1 で輪がビット線につながるのは、アクセス用 nMOS のゲートが 1 になってチャネルができるから' });
       YT.drill.mark(st.swL.g, { to: '03-transistor.html#s1.4', label: 'アクセス用 nMOS の強さ', at: [305, 304], steps: [4], bridge: 'アクセス用 nMOS を輪の pMOS より強く nMOS より弱く作るのは、ゲート幅 W の選び方' });
-      YT.drill.mark(st.dec, { to: '04-ronri.html#s3.6', label: '行デコーダ', at: [212, 140], steps: [5], bridge: '行デコーダの WL 1 本は、アドレスのビットの AND（0 のビットは NOT してから）。積和形の 1 行分' });
+      YT.drill.mark(st.dec, { part: 'mem-read', step: 2, label: '行デコーダ', at: [212, 140], steps: [5], bridge: '行デコーダの WL 1 本は、番地のビット（0 の桁は NOT）の AND。下の例は YT-8 の 16 行' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
@@ -1183,12 +1183,12 @@
       S.text(260, 470, 'L1 32〜48 KB、約 1 ns', { cls: 't-c t-sm' }, gc);
       S.text(700, 492, '8〜32 GB、70〜100 ns', { cls: 't-c t-sm' }, gc);
       S.text(480, 530, 'どちらも電源を切ると消える（揮発性）', { cls: 't-c t-sm t-x t-b' }, gc);
-      // 掘り下げ（下の層へ）: nMOS のスイッチと漏れ（第3章）、コンデンサの充電・放電（第1章 場面6）、デコーダは積和形（第4章 場面3）
+      // 掘り下げ（下の層へ）: nMOS のスイッチと漏れ（第3章）、コンデンサの充電・放電（第1章 場面6）、行デコーダは部品 mem-read（YT-8 の 16 行）
       YT.drill.mark(st.sw.g, { to: '03-transistor.html#s3.3', label: 'nMOS（ワード線）', at: [262, 262], steps: [1, 2], bridge: 'WL を上げるとコンデンサとビット線がつながるのは、nMOS のゲートが 1 になりチャネルができるから' });
       YT.drill.mark(st.cap, { to: '01-denshi.html#s6.4', label: 'コンデンサ', at: [282, 318], steps: [1, 2], bridge: 'DRAM の 1 は、コンデンサの板に電荷が溜まり、板の間に電圧が生まれている状態' });
       YT.drill.mark(st.sw.g, { to: '03-transistor.html#s5.4', label: 'nMOS の漏れ電流', at: [262, 262], steps: [4], bridge: '切り離しても電荷が逃げるのは、オフの nMOS にもわずかに電流が流れるから（漏れ電流）' });
       YT.drill.mark(st.gl, { to: '01-denshi.html#s6.5', label: '電荷の減り方', at: [826, 130], steps: [4], bridge: '漏れで減る電荷の曲線は、コンデンサの放電と同じ形。減る速さは抵抗と容量の積で決まる' });
-      YT.drill.mark(st.dec, { to: '04-ronri.html#s3.6', label: '行デコーダ', at: [182, 110], steps: [5], bridge: '行アドレスで WL を 1 本選ぶ行デコーダは、アドレスのビットの AND を行ごとに作る積和形' });
+      YT.drill.mark(st.dec, { part: 'mem-read', step: 2, label: '行デコーダ', at: [182, 110], steps: [5], bridge: '行アドレスで WL を 1 本選ぶ行デコーダ。下の例は YT-8 の 4 ビット・16 行' });
     },
     onStep(ctx, i) {
       const st = ctx.state;
