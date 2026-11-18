@@ -21,6 +21,11 @@
    読める Markdown は、ノートで使う分だけ: 見出し（# ## ###）、段落、箇条書き（入れ子は 1 段）、
    表、`コード`、**太字**、[リンク](URL) と [リンク][参照]・参照の定義、> 引用、``` で囲んだコード。
    公開版の URL（https://okayus.github.io/youtube-ga-mieru-made/…）へのリンクは、ページから見た相対パスに直す。
+
+   台本（```anim <部品> のブロック。docs/layers-plan.md §3 P6）: 台本のある ## の場面は動きの場面になる。左に台本より前の文（リード）・
+   段階の説明欄・台本より後の文、右に部品（assets/parts/<部品>.js、詳しいノートだけは news/anim/<部品>.js も）が描く図。
+   台本の読み方と検査は assets/anim-script.js（tools/news-pr-check.mjs と同じもの）、場面の組み立ては assets/anim.js。
+   段階の本文の Markdown はここで HTML にし（章の場面へのリンクは板を開く）、ノートの文字は部品が SVG の文字として描く。
    ============================================================ */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,6 +34,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const L = createRequire(import.meta.url)('../assets/layers.js');
+const AS = createRequire(import.meta.url)('../assets/anim-script.js');
 const NEWS = path.join(ROOT, 'news');
 const SITE = 'https://okayus.github.io/youtube-ga-mieru-made/';
 const REPO = 'https://github.com/okayus/youtube-ga-mieru-made/blob/main/news/';
@@ -81,6 +87,7 @@ function inline(s, refs, opt) {
   s = s.replace(/\[([^\]]+)\](?:\(([^)\s]+)\)|\[([^\]]*)\])/g, (m, text, url, ref, off, str) => {
     const u = url !== undefined ? url : refs.get((ref || text).toLowerCase());
     if (u === undefined) return m;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(u) && !/^https?:/i.test(u)) return hold(fmt(text));   // http(s)・相対・# のほか（javascript: など）はリンクにしない
     const h = href(u);
     const ch = /(^|\/)chapters\/\d\d-/.test(h);
     const attr = /^https?:/.test(h) ? ' target="_blank" rel="noopener"' : ch ? ' class="nw-ch"' : '';
@@ -115,8 +122,10 @@ const RE_START = /^(#{1,6}\s|```|>|\s*([-*]|\d+\.)\s|\s*\|)/;
 function parse(src) {
   const refs = new Map();
   const lines = [];
+  let fenced = false;   // ``` の中の行は参照の定義として拾わない（台本やコードの行がそう見えても消さない）
   for (const raw of src.replace(/\r\n?/g, '\n').split('\n')) {
-    const m = /^\s{0,3}\[([^\]]+)\]:\s*(\S+)\s*$/.exec(raw);
+    if (/^```/.test(raw)) fenced = !fenced;
+    const m = !fenced && /^\s{0,3}\[([^\]]+)\]:\s*(\S+)\s*$/.exec(raw);
     if (m) refs.set(m[1].toLowerCase(), m[2]);
     else lines.push(raw);
   }
@@ -134,10 +143,12 @@ function parse(src) {
       blocks.push({ t: 'h', level: m[1].length, text: m[2].replace(/<!--[\s\S]*?-->/g, '').trim(), tab: tab ? tab[1] : '' });
       i++;
     } else if (/^```/.test(l)) {
-      const body = [];
+      const info = l.slice(3).trim(), body = [];
       for (i++; i < lines.length && !/^```/.test(lines[i]); i++) body.push(lines[i]);
       i++;
-      blocks.push({ t: 'code', text: body.join('\n') });
+      // ```anim <部品> は台本（中身は assets/anim-script.js が読む。readNote が script を付ける）
+      if (/^anim(\s|$)/.test(info)) blocks.push({ t: 'anim', part: info.slice(4).trim(), text: body.join('\n') });
+      else blocks.push({ t: 'code', text: body.join('\n') });
     } else if (/^\s*\|/.test(l) && /^\s*\|?\s*:?-{3,}/.test(lines[i + 1] || '')) {
       const rows = [];
       for (; i < lines.length && /^\s*\|/.test(lines[i]); i++) rows.push(cells(lines[i]));
@@ -178,12 +189,34 @@ function render(bs, refs, opt) {
       return `<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr>${head}</tr></thead><tbody>\n${rows}\n</tbody></table></div>`;
     }
     if (b.t === 'quote') return `<blockquote>${inline(b.text, refs)}</blockquote>`;
+    if (b.t === 'anim') return '';   // 台本は動きの場面（animScene）が図にする
     // 長い行は pre の中で横に送る（.nw-body pre の overflow-x: auto）。data-scroll-x は、verify.mjs がその中身を縦読み版のはみ出しに数えない印
     if (b.t === 'code') return `<pre data-scroll-x><code>${esc(b.text)}</code></pre>`;
     const lv = Math.min(6, b.level);   // 場面の中の #### 以下
     return `<h${lv}>${inline(b.text, refs)}</h${lv}>`;
   }).join('\n');
 }
+
+/* ---------- 台本（assets/anim-script.js） ---------- */
+/* 台本の down: の行き先（28-compiler.html#s2.4）が在るか。章のファイル、場面の section、段階の数（const sK = { steps: [ の 1 段階 1 行） */
+const chapterSrc = new Map();
+function chapterOk(to) {
+  const m = /^(\d\d-[a-z0-9-]+\.html)#s(\d+)(?:\.(\d+))?$/.exec(to);
+  if (!m) return '行き先の形が正しくない';
+  const file = path.join(ROOT, 'chapters', m[1]);
+  if (!chapterSrc.has(m[1])) chapterSrc.set(m[1], fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null);
+  const html = chapterSrc.get(m[1]);
+  if (html === null) return '章のファイルが無い';
+  if (!html.includes(`id="s${m[2]}"`)) return `場面${m[2]} が無い`;
+  if (m[3]) {
+    const b = new RegExp(`const\\s+s${m[2]}\\s*=\\s*\\{[\\s\\S]*?steps:\\s*\\[([\\s\\S]*?)\\n\\s*\\],?`).exec(html);
+    const n = b ? b[1].split('\n').filter((ln) => /^\s*\{\s*title:/.test(ln)).length : 0;
+    if (n && Number(m[3]) > n) return `場面${m[2]} の段階は ${n} まで`;
+  }
+  return null;
+}
+/* 詳しいノートが使える手書きの部品（news/anim/<名前>.js） */
+const customPart = (name) => /^[a-z][a-z0-9-]*$/.test(name) && fs.existsSync(path.join(NEWS, 'anim', name + '.js'));
 
 /* ---------- 層（assets/layers.js） ---------- */
 const keyOf = (p) => (p.sc ? `${p.ch}-${p.sc}` : `${p.ch}`);
@@ -257,8 +290,19 @@ function readNote(file) {
   const first = n.lead.find((b) => b.t === 'p');
   n.leadFirst = first ? (first.text.match(/^.*?。/) || [first.text])[0] : '';
   n.refs = refs;
-  /* ノートがリンクしている章（帯に印を付ける） */
-  const all = [...refs.values(), ...[...src.matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1])];
+
+  /* 台本: 形を確かめ（日刊の検査と同じ assets/anim-script.js）、ブロックに段階ごとの姿を付ける。順はノートの中の順 */
+  const ac = AS.checkNote(src, { daily: n.daily, custom: n.daily ? null : customPart, chapterOk });
+  if (ac.errors.length) throw new Error(`news/${file} の台本:\n  ` + ac.errors.join('\n  '));
+  const animBlocks = [];
+  n.scenes.forEach((s, k) => s.groups.forEach((g) => g.blocks.forEach((b) => { if (b.t === 'anim') animBlocks.push({ b, k }); })));
+  // checkNote（行を見る）と、この道具の Markdown の読み方（ブロックを見る）で台本の数が違う。checkNote が拾わない形の崩れ
+  if (animBlocks.length !== ac.blocks.length) throw new Error(`news/${file}: 台本 ${ac.blocks.length} つ（${ac.blocks.map((b) => b.line + ' 行目').join('・')}）のうち、場面の中の台本に読めたのは ${animBlocks.length} つ。\`\`\`anim の行の前後に空行を置く`);
+  n.anims = animBlocks.map(({ b, k }, j) => { b.script = ac.blocks[j].script; return { k: k + 1, block: b, part: b.part, script: b.script, custom: !AS.GENERIC.includes(b.part) }; });
+
+  /* ノートがリンクしている章（帯に印を付ける）。台本の down: の行き先も、章の場面へのリンクとして数える */
+  const downs = n.anims.flatMap((a) => a.script.steps.flatMap((s) => s.down.map((d) => SITE + 'chapters/' + d.to)));
+  const all = [...refs.values(), ...[...src.matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1]), ...downs];
   n.chapters = [...new Set(all.map((u) => /chapters\/(\d\d)-[a-z0-9-]+\.html/.exec(href(u))).filter(Boolean).map((m) => Number(m[1])))].sort((a, b) => a - b);
 
   /* 層と中心の層 */
@@ -470,11 +514,17 @@ const STYLE = `<style>
 </style>`;
 
 /* graph があるページは、層の地図（assets/news-graph.js）を場面 graph.k に描く。graph.opts はその場面の絞り込み。
-   walk があるページは、場面 walk.k を層の歩き（同じファイルの YT_NEWS_GRAPH.walk）にする。walk.data はその値 */
-function page({ title, description, body, meta, graph, walk }) {
+   walk があるページは、場面 walk.k を層の歩き（同じファイルの YT_NEWS_GRAPH.walk）にする。walk.data はその値。
+   anims（[{ k, part, custom, data }]）は、場面 k を台本の動きの場面（assets/anim.js の YT_ANIM.scene）にする。
+   部品は assets/parts/<part>.js、手書きの部品（custom）は news/anim/<part>.js */
+function page({ title, description, body, meta, graph, walk, anims = [] }) {
   const scripts = graph ? ['../assets/layers.js', 'news-data.js', '../assets/news-graph.js'] : walk ? ['../assets/layers.js', '../assets/news-graph.js'] : [];
+  if (anims.length) scripts.push('../assets/anim.js', ...[...new Set(anims.map((a) => (a.custom ? 'anim/' : '../assets/parts/') + a.part + '.js'))]);
   const json = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
-  const scenes = walk ? `, scenes: { s${walk.k}: YT_NEWS_GRAPH.walk(document.getElementById('s${walk.k}'), ${json(walk.data)}) }` : '';
+  const entries = [];
+  if (walk) entries.push(`s${walk.k}: YT_NEWS_GRAPH.walk(document.getElementById('s${walk.k}'), ${json(walk.data)})`);
+  anims.forEach((a) => entries.push(`s${a.k}: YT_ANIM.scene(document.getElementById('s${a.k}'), ${json(a.data)})`));
+  const scenes = entries.length ? `, scenes: { ${entries.join(', ')} }` : '';
   return `<!doctype html>
 <html lang="ja">
 <head>
@@ -519,9 +569,14 @@ function notePage(n) {
   const head = n.head.map((b) => (b.t === 'ul' || b.t === 'ol' ? b.items.map((it) => `<li>${inline(it.text, n.refs)}</li>`).join('') : `<li>${inline(b.text || '', n.refs)}</li>`)).join('');
   const lead = n.lead.map((b) => (b.t === 'p' ? `<p class="standfirst">${inline(b.text, n.refs)}</p>` : render([b], n.refs))).join('\n');
   const toc = n.scenes.map((s, i) => `<li><a href="#s${i + 1}" data-go="${i + 1}"><span class="n">${i + 1}</span>${inline(s.title, n.refs)}</a></li>`).join('\n      ');
+  // 図の番号は、層の歩きと動きの場面を、ページの中の順に 1 から
+  const figs = n.scenes.map((s, i) => (n.walk && n.walk.k === i + 1) || n.anims.some((a) => a.k === i + 1));
+  const figNo = (k) => figs.slice(0, k).filter(Boolean).length;
   const scenes = n.scenes.map((s, i) => {
     const k = i + 1;
-    if (n.walk && n.walk.k === k) return walkScene(n, s, k);
+    if (n.walk && n.walk.k === k) return walkScene(n, s, k, figNo(k));
+    const an = n.anims.find((a) => a.k === k);
+    if (an) return animScene(n, s, k, an, figNo(k));
     // 列の幅は、表のある列を 3、ない列を 2 の割合にする。表の無い 1 列だけの場面は、行が長くなりすぎないよう幅を絞る
     const hasTable = s.groups.map((g) => g.blocks.some((b) => b.t === 'table'));
     const cols = s.groups.length > 1 ? hasTable.map((t) => (t ? '3fr' : '2fr')).join(' ') : '';
@@ -566,13 +621,40 @@ ${scenes}`;
     description: plain(n.leadFirst),
     body,
     meta: { eyebrow, title: n.title, home: 'index.html', actions: [{ href: 'index.html', label: 'ニュースの一覧' }] },
-    walk: n.walk ? { k: n.walk.k, data: { layers: n.layers, missing: n.missing.map((m) => m.name), rows: n.walk.rows } } : null
+    walk: n.walk ? { k: n.walk.k, data: { layers: n.layers, missing: n.missing.map((m) => m.name), rows: n.walk.rows } } : null,
+    anims: n.anims.map((a) => ({ k: a.k, part: a.part, custom: a.custom, data: animData(n, a) }))
   });
+}
+
+/* 動きの場面に渡す値: 部品の名前、台本（段階の本文は記号を外した plain だけ）、段階の本文の HTML（章の場面へのリンクは板を開く） */
+function animData(n, a) {
+  const script = { ...a.script, steps: a.script.steps.map((s) => { const o = { ...s }; delete o.text; return o; }) };
+  return { part: a.part, script, html: a.script.steps.map((s) => inline(s.text, n.refs, { drill: true })) };
+}
+
+/* 動きの場面（台本）。左に台本より前の文（リード）・説明欄・台本より後の文、右に部品が描く図（assets/anim.js の scene） */
+function animScene(n, s, k, a, fig) {
+  const bs = s.groups[0].blocks, ai = bs.indexOf(a.block);
+  const before = bs.slice(0, ai), after = bs.slice(ai + 1);
+  return `<!-- ================= ${k} ${esc(s.title)}（動き：${esc(a.part)}） ================= -->
+<section class="scene sc-anim sc-nwanim" id="s${k}" data-tab="${esc(s.tab)}" aria-labelledby="h-s${k}">
+  <header class="sh a-sh">
+    <h2 id="h-s${k}"><span class="n">${k}</span>${inline(s.title, n.refs)}</h2>
+  </header>
+  <div class="col a-left">
+    ${before.length ? `<div class="prose a-lead nw-wtext">${render(before, n.refs)}</div>` : ''}
+    <div class="narr-slot a-panel"></div>${after.length ? `\n    <div class="prose a-after nw-wtext">${render(after, n.refs)}</div>` : ''}
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="${esc(AS.plain(a.script.title))}"></svg></div>
+    <figcaption>図${fig}　${inline(a.script.caption, n.refs)}</figcaption>
+  </figure>
+</section>`;
 }
 
 /* 層の歩きの場面（assets/news-graph.js の walk が動かす）。左に表の前の文・行の一覧（1画面版）・説明欄、右に層の図。
    表は縦読み版にだけ出し（1画面版は段階に置き換える）、1画面版の説明欄の文と「章・場面」もこの表から写す */
-function walkScene(n, s, k) {
+function walkScene(n, s, k, fig) {
   const w = n.walk;
   // 行の一覧の項目はそれ自体がリンクなので、1 列目の中のリンクは文字だけにする
   const route = w.table.rows.map((r, j) => `<li><a href="#s${k}.${j + 1}" data-go="${k}" data-step="${j}"><span class="n">${j + 1}</span><span class="t">${inline(r[0].replace(RE_LINK, '$1'), n.refs)}</span></a></li>`).join('\n      ');
@@ -591,7 +673,7 @@ function walkScene(n, s, k) {
   </div>
   <figure class="anim-fig a-fig">
     <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を列に並べ、このノートの表の行が触れる層を行の順に線でたどる図"></svg></div>
-    <figcaption>図1　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
+    <figcaption>図${fig || 1}　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
   </figure>
   <div class="nw-wtbl a-tbl">${render([w.table], n.refs, { drill: true })}</div>
 </section>`;
@@ -798,9 +880,14 @@ ${scenes.map((s) => s.html).join('\n\n')}`;
 /* ---------- ノートのデータ（news/news-data.js） ---------- */
 /* 層の地図（assets/news-graph.js）、章の札（engine.js）、目次の表紙の「最新のニュース」が読む。新しい順に 1 行 1 件 */
 function dataFile(notes) {
-  const rows = notes.map((n) => JSON.stringify({ slug: n.slug, date: n.date, title: plain(n.title), daily: n.daily, center: n.center, layers: n.layers, scenes: n.sceneKeys, missing: n.missing.map((m) => m.name) }));
+  const rows = notes.map((n) => {
+    const o = { slug: n.slug, date: n.date, title: plain(n.title), daily: n.daily, center: n.center, layers: n.layers, scenes: n.sceneKeys, missing: n.missing.map((m) => m.name) };
+    if (n.anims.length) o.anim = [...new Set(n.anims.map((a) => a.part))];
+    return JSON.stringify(o);
+  });
   return `/* このファイルは tools/build-news.mjs が news/ の Markdown から作る（手で直さない）。
-   ノートごとに slug・日付・題・日刊か・中心の層・層（assets/layers.js の id。中心が先頭）・リンクしている章の場面（'章-場面'、場面を指さないリンクは '章'）・教材に無い概念 */
+   ノートごとに slug・日付・題・日刊か・中心の層・層（assets/layers.js の id。中心が先頭）・リンクしている章の場面（'章-場面'、場面を指さないリンクは '章'）・教材に無い概念、
+   台本のあるノートは使う部品（anim。parts.html?set=anim の「使うノート」が読む） */
 window.YT_NEWS = [
 ${rows.join(',\n')}
 ];
@@ -836,7 +923,8 @@ for (const n of notes) {
   fs.writeFileSync(path.join(NEWS, n.slug + '.html'), notePage(n));
   console.log(`news/${n.slug}.html: ${n.title} — ${n.daily ? '日刊、' : ''}場面 ${n.scenes.length}、章 ${n.chapters.join('・') || 'なし'}、`
     + `中心の層 ${n.center || 'なし'}${n.tags.length ? '（tags）' : ''}、層 ${n.layers.join('・') || 'なし'}、教材に無い ${n.missing.length}、`
-    + (n.walk ? `層の歩き ${n.walk.rows.length} 段（場面 ${n.walk.k}: ${n.walk.rows.map((r) => [...new Set(r.l.flatMap((x) => x.ids))].join('+') + (r.l.some((x) => x.n) ? '（近い）' : '') + (r.m.length ? '［無い ' + r.m.length + '］' : '') || '—').join(' → ')}）` : '層の歩き なし（表のまま）'));
+    + (n.walk ? `層の歩き ${n.walk.rows.length} 段（場面 ${n.walk.k}: ${n.walk.rows.map((r) => [...new Set(r.l.flatMap((x) => x.ids))].join('+') + (r.l.some((x) => x.n) ? '（近い）' : '') + (r.m.length ? '［無い ' + r.m.length + '］' : '') || '—').join(' → ')}）` : '層の歩き なし（表のまま）')
+    + (n.anims.length ? `、動き ${n.anims.map((a) => `場面 ${a.k} ${a.part} ${a.script.steps.length} 段`).join('・')}` : ''));
 }
 fs.writeFileSync(path.join(NEWS, 'news-data.js'), dataFile(notes));
 ms.forEach((x, i) => {   // ms は新しい月から並ぶ。前の月は i + 1、次の月は i - 1

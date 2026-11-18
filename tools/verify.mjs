@@ -37,6 +37,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -60,13 +61,14 @@ const DESKTOP = opt.sizes === 'all' ? [[1920, 880], [1536, 730], [1366, 657], [1
 const PHONE = [390, 844];
 /* ページの指定に問い合わせ（parts.html?part=encap&via=quic）を付けてよい。ファイルの比べ・写真の名前は問い合わせを外して使う */
 const pageFile = (p) => p.split('?')[0];
-const pageStem = (p) => { const [f, q] = p.split('?'); return path.basename(f, '.html') + (q ? '-' + q.replace(/[^A-Za-z0-9-]+/g, '-') : ''); };
+/* 写真の名前。問い合わせが長いとき（parts.html?part=seq&src=<台本>）は 40 字で切り、残りの代わりにハッシュを付ける（名前が長すぎると書けない） */
+const pageStem = (p) => { const [f, q] = p.split('?'); const s = q ? q.replace(/[^A-Za-z0-9-]+/g, '-') : ''; return path.basename(f, '.html') + (s ? '-' + (s.length > 48 ? s.slice(0, 40) + '-' + crypto.createHash('sha1').update(q).digest('hex').slice(0, 8) : s) : ''); };
 
 /* ---------- 静的配信（プロジェクトのルート） ---------- */
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
 function serve() {
   return new Promise((resolve) => {
-    const srv = http.createServer((req, res) => {
+    const srv = http.createServer({ maxHeaderSize: 131072 }, (req, res) => {   // 長い問い合わせ（台本の src=）も受ける
       const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
       let p = path.normalize(path.join(ROOT, u));
       if (!p.startsWith(ROOT)) { res.writeHead(403); return res.end(); }

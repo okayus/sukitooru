@@ -36,7 +36,16 @@ for (const f of process.argv.slice(2)) {
       const cp = /^\s*caption:\s*/.test(ln) && key(ln, 'caption'); if (cp && len(cp) > 120) out.push(`図の説明 ${len(cp)} 字（目安 120）`);
       const ld = /^\s*lead:\s*/.test(ln) && key(ln, 'lead'); if (ld && len(ld) > 110) out.push(`リード ${len(ld)} 字（目安 110。parts.html の場面のリード）`);
     }
-    if (!k) out.push('段階の本文を数えられない（steps: [ { title, text }, … ] を 1 段階 1 行で書く）');
+    // 台本の部品（generic: true）は、段階を台本が決める。見本の台本の字数は assets/anim-script.js の parse が確かめる
+    const generic = /^\s*generic:\s*true\b/m.test(html);
+    if (generic) {
+      const name = (/YT\.parts\.define\('([a-z0-9-]+)'/.exec(html) || [])[1];
+      const AS = (await import('../assets/anim-script.js')).default;
+      globalThis.YT = { parts: { define: (n, d) => { globalThis.__def = d; } }, svg: {}, util: {} };
+      await import(new URL('file://' + fs.realpathSync(f)).href);
+      const r = AS.parse(name, (globalThis.__def || {}).sample || '');
+      r.errors.forEach((e) => out.push('見本の台本: ' + e));
+    } else if (!k) out.push('段階の本文を数えられない（steps: [ { title, text }, … ] を 1 段階 1 行で書く）');
     marks(html, out);
     console.log(`${f}: ${out.length ? '' : '超過なし'}`);
     for (const o of out) console.log('  ' + o);

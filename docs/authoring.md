@@ -197,6 +197,36 @@ YT.parts.define('cpu-mode', {
 - **部品の見本 `parts.html`**: 部品ごとに 1 場面（`LIST` の順。部品を足したら `<script src>` と `LIST` に 1 行ずつ足す）。場面の見出し・リード（`lead`）・注記・図の説明は部品の定義から、「使う所」は章の印から作る（`node tools/build-parts.mjs` が parts.html の `USES` を書き直す。印を足した・張り替えたら走らせる。`--check` は古ければ失敗）。`parts.html?part=<名前>` でその部品だけを出し、問い合わせの残りは部品に渡す値になる（`parts.html?part=encap&via=quic`）。verify.mjs・shot.mjs はこの形のまま渡せる（引用符で囲む）。
 - 検証: `node tools/verify.mjs --drill chapters/NN-*.html`（印を 1 つずつ開き、板が出るか・JS のエラー（iframe の中も）・板の中のはみ出し（埋め込みは全段階）・縦読み版の板を調べる。部品の板では部品の中の印も開き、時刻送り・段階の行き来・文字の重なりを通す。`--shots` で開いた板と部品の全段階を撮る）。印の行き先と部品の名前・段階は `xrefcheck.mjs`、つなぎの一文と部品の文の字数は `lencheck.mjs`（どちらも部品のファイルも渡せる）。場面ごと・段階ごとの印の数と向き（行き先の層が上の場面の層の下か。`assets/layers.js` の down で見る）は `node tools/drillcheck.mjs [--list] chapters/NN-*.html`（第2〜25章で印の無い場面を問題、1 段階 4 つ以上を注意に出す。向きの「横」は数えるだけ）。
 
+## 5.6 台本の部品（ニュースの動きの場面）
+
+ニュースのノートの台本（```` ```anim 部品 ````）を描く部品。台本の書き方は [news/README.md](../news/README.md)「動きの場面（台本）」、設計は [layers-plan.md](layers-plan.md) §3 P6。ノートに JS を書かせないため、台本は登場する物と段階ごとの変化だけを持ち、描き方は部品が決める。
+
+| ファイル | 役目 |
+|---|---|
+| `assets/anim-script.js` | 台本の読み方と検査（Node とブラウザで共用）。部品ごとの種類・数・札の幅の上限（`SCHEMA`）を持ち、段階ごとの姿まで決める。`tools/build-news.mjs`・`tools/news-pr-check.mjs`・`tools/lencheck.mjs`・`parts.html` が使う |
+| `assets/anim.js` | 部品の共通の道具（`YT_ANIM`）と、ニュースのページの場面の組み立て（`YT_ANIM.scene`） |
+| `assets/parts/seq.js`・`mem.js`・`stack.js`・`boxes.js`・`tree.js`・`timeline.js` | 汎用の部品（日刊も使える） |
+| `news/anim/<名前>.js` | 手書きの部品（詳しいノートだけ。日刊の検査は news/ の直下しか許さないので、日刊は使えない） |
+
+```js
+YT.parts.define('mem', {
+  generic: true,                         // 汎用の部品の印（parts.html?set=anim に出し、lencheck は見本の台本を検査する）。手書きの部品には付けない
+  title: 'メモリの区画', use: '解放後の使用',   // use は parts.html の表紙の 1 行
+  lead, caption, note,                   // parts.html の場面のリード・図の説明・注記（字数は §5.5 の部品と同じ）
+  sample: ['title: …', 'ptr a: …', 'step: …', '本文', 'show: a'].join('\n'),   // 見本の台本（章の例の値を写す）
+  steps: (p) => YT_ANIM.steps(p),
+  setup(ctx) {}, onStep(ctx, i) {}, frame(ctx, t, dt) {}
+});
+```
+
+- `ctx.params` は、`anim-script.js` が段階ごとの姿まで決めた台本: `{ part, title, caption, note, head, items: [{ id, kind, label, sub, … }], steps: [{ title, text, st: { id: { v, x, b, l, s, t } }, fresh, send, down }] }`。`v` 見えている、`x` 注目、`b` 壊れた（破線）、`l`・`s` 札と小さい札、`t` ポインタの指す先（mem）。`fresh` はその段階で出た物と指す先が変わったポインタ（線を伸ばして見せる）。いまの段階は `YT_ANIM.at(ctx)`。
+- setup で全部の物を作り、位置は段階を通して変えない（§5）。箱の高さは `YT_ANIM.variants(p, id)`（段階を通した札の組）が全部入る高さにする（`YT_ANIM.card`）。onStep は、いまの段階の `st` から出す・隠す・x・破線・札を全部決める。frame は `ctx.ts`・`ctx.t` から描き（線の伸び `YT_ANIM.grow`・`growth`、流れる粒 `YT_ANIM.flowDots`）、止めているときは伸び切った姿にする。
+- 文字は `YT_ANIM.fill`（`` `…` `` を等幅の tspan に）で SVG の文字として入れる。HTML として入れない。幅は `YT_ANIM.measure` で見積もる。実際には測らない（書体の読み込みの前後で配置が変わらないように）。半角は字ごとの幅の表（IBM Plex Sans JP の 400 と 600 の広い方を Chrome で測り、2% 足した）、`` `…` `` の中は 0.6em、全角は 1em で、見積もりで収まれば実際の字も収まる。札の大きさと行は `YT_ANIM.fitText(svg, 文字, 幅, 大きさ, 行の上限, 足すクラス, 先に小さくするか)` が決める（その大きさで 1 行 → 2 行 → 1 段小さく。どれも入らなければ単語や `` `…` `` の途中でも折る）。`YT_ANIM.card` は札（2 行まで）と小さい札（既定 2 行まで）にこれを使う。線の横の札は `YT_ANIM.tag`（`set(文字, クラス, x, y, 寄せ方)`、幅の見積もりは `tag.w`）。
+- 色はデータ（区画・メッセージ・流れる粒）が d、注目が x、壊れた物が破線、ほかは無彩色（§4 の色の意味）。
+- 掘り下げの印（台本の `down:`）: setup で `ctx.state.anchor = (id, s, k) => ({ el, x, y, dx, dy })` を返す。s はその印を出す段階（その段階の札は `YT_ANIM.stOf(ctx, s, id).l`）、k は同じ段階で同じ物に付ける何番目の印か（0 始まり）。札の中心は `(x + k × dx, y + k × dy)`（dx を省くと 30、dy は 0）。部品が k ごとの位置を決めるときは dx・dy を 0 にして x・y を返す。札は 26×22px で、その段階の札の文字・矢じり・図の端を避ける。印は `YT_ANIM.downs(ctx)`（ニュースのページと parts.html が呼ぶ）が付ける。
+- 汎用の部品を足すときは、`anim-script.js` の `GENERIC` と `SCHEMA`、`parts.html` の `PARTS_LIST`（`set: 'anim'`）、news/README.md の表に足す。章の部品と同じく「作成 → 別の担当による仕上げ確認」を通す。仕上げ確認では、`SCHEMA` の数と幅の上限いっぱいの台本（札は漢字・英大文字・混ぜた字・`` `…` `` の 4 通り。同じ物に 2 つの印、1 段階に 3 つの印）を作り、明るい表示・ダーク・縦読み版で重なりとはみ出しが無いことを確かめる（P6 の記録 [log/2026-11-18-p6-review-code.md](log/2026-11-18-p6-review-code.md)）。
+- 検証: `node tools/verify.mjs --nav --overlap --drill 'parts.html?set=anim'`（見本の台本）。任意の台本は `'parts.html?part=seq&src=<URL エンコードした台本>'`。数の上限いっぱいの台本でも、はみ出し・重なりが無いことを確かめる。
+
 ## 6. 高さの予算（1画面版）
 
 舞台は最小で 1600×860。上部バー 48px、余白 38px、見出し約 60px を引くと本体は約 714px。
@@ -211,7 +241,7 @@ YT.parts.define('cpu-mode', {
 ```bash
 node tools/verify.mjs chapters/NN-名前.html                       # エラーとはみ出し
 node tools/verify.mjs --shots /tmp/…/shots --all-steps chapters/NN-名前.html   # 全場面・全段階の写真
-node tools/shot.mjs chapters/NN-名前.html --scene 4 --step 2 --at 0,1.5,3 --out /tmp/…/at   # 段階に入って何秒後かを指定して撮る（--dark も可）
+node tools/shot.mjs chapters/NN-名前.html --scene 4 --step 2 --at 0,1.5,3 --out /tmp/…/at   # 段階に入って何秒後かを指定して撮る（--dark も可。--size 1280x688 で画面の大きさを変える）
 ```
 
 - 「JS のエラー: なし」「はみ出しなし」「横スクロール なし」「リンク切れ: なし」になるまで直す。まだ作っていない章へのリンクは切れとして数えず、件数だけ出る。
@@ -220,6 +250,7 @@ node tools/shot.mjs chapters/NN-名前.html --scene 4 --step 2 --at 0,1.5,3 --ou
 - 写真は `--shots DIR --all-steps` で全段階を撮る。縦読み版は場面ごとに `NN-名前-phone-sK.png`（画面の高さを場面に合わせて撮るので、図の一部が抜けて写ることはない。図は横にスクロールする設計なので右が切れて写る）。
 - 写真は、表紙・各場面の段階1・いちばん部品の多い段階を見る。文字の重なり、はみ出し、消し忘れの部品、色の意味違いを確かめる。
 - `--overlap` を付けると、各段階で時刻を 15 秒まで進めながら、止まっている文字どうしの重なり（動く札の最初の位置・止まる位置で箱の題を隠す、動かない文字どうしが重なる）、止まっている動く札の四角（塗りのある rect）が下の文字を隠すもの、図の外へ出た文字を「注意」として出す。通り過ぎる途中の重なりと、動かない板が下の文字を覆う図の作りは拾わない。止めたとき（`YT.motion.playing` を見て決まった姿を描く章がある）と、動いているが速さ 0 のときの 2 回調べる（時刻送りも同じ）。
+- 上部バーのはみ出しは verify.mjs が測らない。タブ（場面）を増やしたら `tools/shot.mjs --size 1280x688` で上部バーを撮って見る（タブは縮めない。題が「…」で切れるのは設計）。
 - `--shots` の写真は段階に入った直後の見た目だけ。動く札の止まる位置や、途中で書き換わる文字・色は `tools/shot.mjs` で時刻を指定して撮って確かめる（動きを止め、ts を 0.05 秒刻みで進めて frame を呼んでから撮る）。
 - 他の章へのリンクは `node tools/xrefcheck.mjs chapters/NN-名前.html` で、行き先の章・場面・段階が在るかと、札の「第N章 場面K」が行き先と合うかを確かめる（verify.mjs は最後に表示していた段階のリンクしか見ない）。
 - 本文の字数は `node tools/lencheck.mjs chapters/NN-名前.html` で数える（段階 160・リード 110・補足 140 の目安を超える所を出す。テンプレート文字列の式は式のまま数えるので、その章は式を定数に出す）。掘り下げの印のつなぎの一文（60 字）と上の要素の名前（20 字）も数える。

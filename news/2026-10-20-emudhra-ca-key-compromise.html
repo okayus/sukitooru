@@ -19,6 +19,9 @@
 <script src="../assets/engine.js"></script>
 <script src="../assets/layers.js"></script>
 <script src="../assets/news-graph.js"></script>
+<script src="../assets/anim.js"></script>
+<script src="../assets/parts/tree.js"></script>
+<script src="../assets/parts/timeline.js"></script>
 <style>
   /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
   .sc-nw { grid-template-areas: "sh" "text"; }
@@ -150,7 +153,7 @@
   <div class="a-main">
     <div class="nw-eyebrow"><p class="eyebrow">ニュースから層へ ／ 2026-10-20</p><p class="nw-layers" aria-label="層（先頭が中心の層）"><a class="chip nw-lc c" href="index.html?layer=tls#s1" title="TLS（中心の層）">TLS</a></p></div>
     <h1 id="h-s0">eMudhra の中間 CA の秘密鍵の危殆化</h1>
-    <p class="standfirst">TLS の証明書の連鎖（第20章 場面4）の中ほどにいる、中間の認証局（中間 CA）の秘密鍵の作り方を誤った話である。インドの認証局 eMudhra が 2025-04-30 に作った 8 つの中間 CA の P-384 鍵は、秘密鍵 d がどれも 256 未満で、1 つは 4 だった。公開鍵は dG なので、G, 2G, 3G … と 255 個の点を作って比べれば d が分かる（第20章 場面3 の「kG から k は難しい」は、k を巨大な範囲から乱数で選ぶことが前提）。TLS 用の 6 つは主要な 4 つのルートプログラムが信頼するルートにつながり、鍵を持つ人は任意の名前の証明書を作れた。ブラウザと OS は 10-17〜10-20 に自前の失効の一覧で止め、Mozilla と Chrome はルートも外す。CT のログに偽の証明書は無く、CT を強制するブラウザは攻撃されなかったとされる。</p>
+    <p class="standfirst">TLS の証明書の連鎖（第20章 場面4）の中ほどにいる、中間の認証局（中間 CA）の秘密鍵の作り方を誤った話である。インドの認証局 eMudhra が 2025-04-30 に作った 8 つの中間 CA の P-384 鍵は、秘密鍵 d がどれも 256 未満で、1 つは 4 だった。公開鍵は dG なので、G, 2G, 3G … と 255 個の点を作って比べれば d が分かる（第20章 場面3 の「kG から k は難しい」は、k を巨大な範囲から乱数で選ぶことが前提）。TLS 用の 6 つは主要な 4 つのルートプログラムが信頼するルートにつながり、鍵を持つ人は任意の名前の証明書を作れた。ブラウザと OS は 10-17 から自前の失効の一覧で止め、Mozilla と Chrome はルートも外す。CT のログに偽の証明書は無く、CT を強制するブラウザは攻撃されなかったとされる。</p>
     <ul class="nw-meta"><li>出典: <a href="https://emudhra.we-have-a-problem.com/" target="_blank" rel="noopener">eMudhra Intermediate CA Compromise</a>（Mozilla の Dennis Jackson、2026-10-20）、<a href="https://bugzilla.mozilla.org/show_bug.cgi?id=2083449" target="_blank" rel="noopener">Mozilla の Bug 2083449</a>（インシデント報告）</li><li>調べた時点: 2026-10-22 00:30 JST。eMudhra の根本原因の調べは続いている。</li><li>手元で確かめたこと: 鍵が 256 未満であることと、この PC のクライアントが受け入れるか（場面「この PC」）。</li></ul>
     <div class="nw-strip" role="group" aria-label="このノートがリンクしている章: 第20章 TLS"><div class="nw-grp" style="--n:3"><span class="nw-part">I 電気</span><div class="nw-cells"><span class="nw-cell" title="第1章 電子と電流">1</span><span class="nw-cell" title="第2章 半導体とダイオード">2</span><span class="nw-cell" title="第3章 トランジスタ">3</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">II 計算機</span><div class="nw-cells"><span class="nw-cell" title="第4章 論理ゲートと2進数">4</span><span class="nw-cell" title="第5章 記憶">5</span><span class="nw-cell" title="第6章 CPU">6</span><span class="nw-cell" title="第7章 入出力と周辺機器">7</span><span class="nw-cell" title="第8章 画面と音">8</span></div></div><div class="nw-grp" style="--n:2"><span class="nw-part">III ソフト</span><div class="nw-cells"><span class="nw-cell" title="第9章 OS">9</span><span class="nw-cell" title="第10章 ブラウザ">10</span></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IV つながる</span><div class="nw-cells"><span class="nw-cell" title="第11章 ネットワークの層">11</span><span class="nw-cell" title="第12章 Wi-Fi">12</span><span class="nw-cell" title="第13章 Ethernet とスイッチ">13</span><span class="nw-cell" title="第14章 ホームルーター">14</span><span class="nw-cell" title="第15章 光回線">15</span><span class="nw-cell" title="第16章 インターネットの骨格">16</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">V 約束ごと</span><div class="nw-cells"><span class="nw-cell" title="第17章 DNS">17</span><span class="nw-cell" title="第18章 IP">18</span><span class="nw-cell" title="第19章 TCP・UDP・QUIC">19</span><a class="nw-cell on" href="../chapters/20-tls.html" title="第20章 TLS">20</a><span class="nw-cell" title="第21章 HTTP">21</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VI YouTube</span><div class="nw-cells"><span class="nw-cell" title="第22章 YouTube のサーバー側">22</span><span class="nw-cell" title="第23章 動画の圧縮">23</span><span class="nw-cell" title="第24章 ストリーミングと再生">24</span><span class="nw-cell" title="第25章 通しで見る">25</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VII 横断</span><div class="nw-cells"><span class="nw-cell" title="第26章 型とメモリ">26</span><span class="nw-cell" title="第27章 データ構造とアルゴリズム">27</span><span class="nw-cell" title="第28章 コンパイラ">28</span><span class="nw-cell" title="第29章 型で意味を表す">29</span></div></div><div class="nw-grp" style="--n:1"><span class="nw-part">VIII </span><div class="nw-cells"><span class="nw-cell" title="第30章 エミュレータの外側">30</span></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IX ブラウザ</span><div class="nw-cells"><span class="nw-cell" title="第31章 URL と HTTP">31</span><span class="nw-cell" title="第32章 HTML トークナイザ">32</span><span class="nw-cell" title="第33章 HTML パーサと DOM">33</span><span class="nw-cell" title="第34章 CSS とスタイル">34</span><span class="nw-cell" title="第35章 レイアウトと描画">35</span><span class="nw-cell" title="第36章 JavaScript エンジン">36</span></div></div></div>
     <p class="keys fit-only">上のタブで場面を選ぶ。<kbd>↓</kbd><kbd>↑</kbd>（または右上の <kbd>‹</kbd><kbd>›</kbd>）で場面を移る。上の札はこのノートの層（太字が中心の層。押すと層の地図で絞る）、帯の塗りつぶした番号はリンクしている章。</p>
@@ -159,12 +162,14 @@
     <h2 id="h-toc">構成</h2>
     <ol>
       <li><a href="#s1" data-go="1"><span class="n">1</span>確かなことと、確かでないこと</a></li>
-      <li><a href="#s2" data-go="2"><span class="n">2</span>見つかってからのこと</a></li>
-      <li><a href="#s3" data-go="3"><span class="n">3</span>どの層の話か</a></li>
-      <li><a href="#s4" data-go="4"><span class="n">4</span>層ごとの守り</a></li>
-      <li><a href="#s5" data-go="5"><span class="n">5</span>この PC で確かめたこと</a></li>
-      <li><a href="#s6" data-go="6"><span class="n">6</span>追って確かめること</a></li>
-      <li><a href="#s7" data-go="7"><span class="n">7</span>出典</a></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>証明書の連鎖</a></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>鍵を作ってから止まるまで</a></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>見つかってからのこと</a></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>どの層の話か</a></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>層ごとの守り</a></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>この PC で確かめたこと</a></li>
+      <li><a href="#s8" data-go="8"><span class="n">8</span>追って確かめること</a></li>
+      <li><a href="#s9" data-go="9"><span class="n">9</span>出典</a></li>
     </ol>
   </nav>
   <footer class="cover-foot a-foot">
@@ -190,14 +195,44 @@
   </div>
 </section>
 
-<!-- ================= 2 見つかってからのこと ================= -->
-<section class="scene sc-nw" id="s2" data-tab="発見と影響" aria-labelledby="h-s2">
+<!-- ================= 2 証明書の連鎖（動き：tree） ================= -->
+<section class="scene sc-anim sc-nwanim" id="s2" data-tab="連鎖" aria-labelledby="h-s2">
   <header class="sh a-sh">
-    <h2 id="h-s2"><span class="n">2</span>見つかってからのこと</h2>
+    <h2 id="h-s2"><span class="n">2</span>証明書の連鎖</h2>
+  </header>
+  <div class="col a-left">
+    <div class="prose a-lead nw-wtext"><p>漏れたのは、サーバーの証明書に署名する中間 CA の鍵である。図は 8 つのうち EM DV TLS CA - G3C を例にした。</p></div>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after nw-wtext"><p>コード署名用の 2 つ（EM OV CS CA - G3B・G3C）は、別の emSign Root CS CA - G3 の下にあり、Microsoft が信頼していた。</p></div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="www.youtube.com の証明書を作れた連鎖"></svg></div>
+    <figcaption>図1　根を上に置いた証明書の連鎖で、親が子に署名する。破線の箱は鍵が漏れた中間 CA と、その鍵で作れた証明書。点線は同じ鍵。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 鍵を作ってから止まるまで（動き：timeline） ================= -->
+<section class="scene sc-anim sc-nwanim" id="s3" data-tab="経緯" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>鍵を作ってから止まるまで</h2>
+  </header>
+  <div class="col a-left">
+    <div class="prose a-lead nw-wtext"><p>弱い鍵の中間 CA は、1 年半近く信頼されていた。見つかってから 3 時間余りで、Chrome が止めた。</p></div>
+    <div class="narr-slot a-panel"></div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="鍵を作ってから止まるまで"></svg></div>
+    <figcaption>図2　上から下へ時間が進む（間隔は時間に比例しない）。2026 年 10 月の時刻は UTC。出どころは Bug 2083449 ほか、Chrome の dev-security-policy の投稿、公開サイト（OS の日付）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 見つかってからのこと ================= -->
+<section class="scene sc-nw" id="s4" data-tab="影響" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>見つかってからのこと</h2>
   </header>
   <div class="nw-body a-text">
 <div class="col"><div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>項目</th><th>内容</th><th>出どころ</th><th>確かさ</th></tr></thead><tbody>
-<tr><td data-label="項目">見つけた経緯</td><td data-label="内容">研究者 Wayne が、CCADB（ルートプログラムが共有する CA の登録簿）の証明書を調べていて、10-17 16:27 UTC に見つけた。18:05 UTC に 4 つのルートプログラムと eMudhra へ、8 つの鍵で署名した文を付けて報告した</td><td data-label="出どころ">報告者（comment 2）</td><td data-label="確かさ">報告者の記録</td></tr>
 <tr><td data-label="項目">悪用</td><td data-label="内容">6 つの TLS 中間 CA の下の証明書は、Chrome が止めるまで CT のログに 1 枚も載っていない</td><td data-label="出どころ">Chrome Root Program</td><td data-label="確かさ">公式。CT を強制しないクライアントが狙われたかは分からない</td></tr>
 <tr><td data-label="項目">eMudhra の発行</td><td data-label="内容">8 つのうち稼働していたのは EM DV TLS CA - G3C だけで、どれも利用者の証明書を発行していない</td><td data-label="出どころ">eMudhra（comment 10）</td><td data-label="確かさ">CA の説明</td></tr>
 <tr><td data-label="項目">ほかの鍵</td><td data-label="内容">A・A-1 系列の P-384 の鍵は、Mozilla が手間をかけても求められていない。RSA の鍵はまだ調べていない</td><td data-label="出どころ">Mozilla（comment 5）</td><td data-label="確かさ">公式。調べている途中</td></tr>
@@ -207,34 +242,34 @@
   </div>
 </section>
 
-<!-- ================= 3 どの層の話か（層の歩き） ================= -->
-<section class="scene sc-anim sc-nwwalk" id="s3" data-tab="層" aria-labelledby="h-s3">
+<!-- ================= 5 どの層の話か（層の歩き） ================= -->
+<section class="scene sc-anim sc-nwwalk" id="s5" data-tab="層" aria-labelledby="h-s5">
   <header class="sh a-sh">
-    <h2 id="h-s3"><span class="n">3</span>どの層の話か</h2>
+    <h2 id="h-s5"><span class="n">5</span>どの層の話か</h2>
   </header>
   <div class="col a-left">
     <div class="prose a-lead nw-wtext"><p>ブラウザが証明書を確かめるときに通る順に並べる。欠陥があったのは太字の層。</p></div>
     <ol class="nw-route fit-only" aria-label="表の行（1 行が 1 段階）">
-      <li><a href="#s3.1" data-go="3" data-step="0"><span class="n">1</span><span class="t"><b>鍵の生成</b></span></a></li>
-      <li><a href="#s3.2" data-go="3" data-step="1"><span class="n">2</span><span class="t">楕円曲線の公開鍵</span></a></li>
-      <li><a href="#s3.3" data-go="3" data-step="2"><span class="n">3</span><span class="t">証明書の連鎖</span></a></li>
-      <li><a href="#s3.4" data-go="3" data-step="3"><span class="n">4</span><span class="t">間に立つ第三者</span></a></li>
-      <li><a href="#s3.5" data-go="3" data-step="4"><span class="n">5</span><span class="t">ルートストア</span></a></li>
-      <li><a href="#s3.6" data-go="3" data-step="5"><span class="n">6</span><span class="t">失効</span></a></li>
-      <li><a href="#s3.7" data-go="3" data-step="6"><span class="n">7</span><span class="t">CT</span></a></li>
-      <li><a href="#s3.8" data-go="3" data-step="7"><span class="n">8</span><span class="t">コード署名</span></a></li>
+      <li><a href="#s5.1" data-go="5" data-step="0"><span class="n">1</span><span class="t"><b>鍵の生成</b></span></a></li>
+      <li><a href="#s5.2" data-go="5" data-step="1"><span class="n">2</span><span class="t">楕円曲線の公開鍵</span></a></li>
+      <li><a href="#s5.3" data-go="5" data-step="2"><span class="n">3</span><span class="t">証明書の連鎖</span></a></li>
+      <li><a href="#s5.4" data-go="5" data-step="3"><span class="n">4</span><span class="t">間に立つ第三者</span></a></li>
+      <li><a href="#s5.5" data-go="5" data-step="4"><span class="n">5</span><span class="t">ルートストア</span></a></li>
+      <li><a href="#s5.6" data-go="5" data-step="5"><span class="n">6</span><span class="t">失効</span></a></li>
+      <li><a href="#s5.7" data-go="5" data-step="6"><span class="n">7</span><span class="t">CT</span></a></li>
+      <li><a href="#s5.8" data-go="5" data-step="7"><span class="n">8</span><span class="t">コード署名</span></a></li>
     </ol>
     <div class="narr-slot a-panel"></div>
   </div>
   <figure class="anim-fig a-fig">
     <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を列に並べ、このノートの表の行が触れる層を行の順に線でたどる図"></svg></div>
-    <figcaption>図1　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
+    <figcaption>図3　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
   </figure>
   <div class="nw-wtbl a-tbl"><div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>このニュースで起きること</th><th>章・場面</th></tr></thead><tbody>
 <tr><td data-label="層"><b>鍵の生成</b></td><td data-label="このニュースで起きること">秘密鍵 d は、乱数で巨大な範囲から選ぶ。eMudhra は、鍵を作る装置（HSM）を操作する手順とスクリプトを誤り、256 未満の d を使った</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/20-tls.html#s3" class="nw-ch" data-to="20-tls.html#s3.5">20章 場面3</a> の段階5（a と b を接続ごとに乱数で作る）</td></tr>
 <tr><td data-label="層">楕円曲線の公開鍵</td><td data-label="このニュースで起きること">公開鍵は dG である。dG から d を求めるのが難しいのは、d の範囲が広いときだけである。d が 256 未満なら、G, 2G, 3G … と 255 個の点を作るうちに一致する点が出る。教材の小さな曲線（G の倍数は 78 個）と同じ桁の探索で済む。正しく選んだ P-384 の d なら、最良の方法でも約 2¹⁹² 回の計算が要る</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s3" class="nw-ch" data-to="20-tls.html#s3.1">20章 場面3</a> の段階1・2</td></tr>
 <tr><td data-label="層">証明書の連鎖</td><td data-label="このニュースで起きること">中間 CA の秘密鍵は、サーバーの証明書に署名する鍵である。持っていれば、どの名前の証明書でも作れ、連鎖の署名はすべて合う。www.youtube.com の本物の連鎖は WE2 → GTS Root R4 だが、ブラウザは名前ごとに CA を決めていない（ピンを除く）。今回の連鎖は、中間 CA → emSign Root TLS CA - G3 → ルートの emSign ECC Root CA - G3 だった</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s4" class="nw-ch" data-to="20-tls.html#s4.3">20章 場面4</a> の段階3</td></tr>
-<tr><td data-label="層">間に立つ第三者</td><td data-label="このニュースで起きること">作った証明書には自分の公開鍵を入れるので、CertificateVerify にも自分で署名できる。通信の経路に入れれば、ブラウザとサーバーの両方と別々に TLS をつなぎ、中身を読める</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s4" class="nw-ch" data-to="20-tls.html#s4.1">20章 場面4</a> の段階1・5</td></tr>
+<tr><td data-label="層">間に立つ第三者</td><td data-label="このニュースで起きること">作った証明書には自分の公開鍵を入れるので、CertificateVerify にも自分で署名できる。ピンを持たず CT も強制しないクライアントなら、経路に入った者がブラウザとサーバーの両方と別々に TLS をつなぎ、中身を読める</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s4" class="nw-ch" data-to="20-tls.html#s4.1">20章 場面4</a> の段階1・5</td></tr>
 <tr><td data-label="層">ルートストア</td><td data-label="このニュースで起きること">emSign ECC Root CA - G3 は、4 つのルートプログラムすべてに入っていた。Sectigo の古いルート（Apple と Microsoft だけが信頼）も、同じ鍵の中間 CA にクロス署名していた</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s4" class="nw-ch" data-to="20-tls.html#s4.4">20章 場面4</a> の段階4</td></tr>
 <tr><td data-label="層">失効</td><td data-label="このニュースで起きること">CA は 8 つを失効させ、CRL に載せた。ブラウザと OS は、CRL を待たずに自前の一覧を配って止めた</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/20-tls.html#s4" class="nw-ch" data-to="20-tls.html#s4.4">20章 場面4</a> の段階4</td></tr>
 <tr><td data-label="層">CT</td><td data-label="このニュースで起きること">CT を強制するブラウザに偽の証明書を通すには、公開のログに載せて SCT を得る必要がある。載れば誰でも見つけられる。これらの中間 CA の下の証明書は、載っていなかった</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s4" class="nw-ch" data-to="20-tls.html#s4.6">20章 場面4</a> の段階6</td></tr>
@@ -242,17 +277,17 @@
 </tbody></table></div></div>
 </section>
 
-<!-- ================= 4 層ごとの守り ================= -->
-<section class="scene sc-nw" id="s4" data-tab="守り" aria-labelledby="h-s4">
+<!-- ================= 6 層ごとの守り ================= -->
+<section class="scene sc-nw" id="s6" data-tab="守り" aria-labelledby="h-s6">
   <header class="sh a-sh">
-    <h2 id="h-s4"><span class="n">4</span>層ごとの守り</h2>
+    <h2 id="h-s6"><span class="n">6</span>層ごとの守り</h2>
   </header>
   <div class="nw-body a-text">
 <div class="col"><div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>守り</th><th>層</th><th>章・場面</th><th>出どころと注意</th></tr></thead><tbody>
 <tr><td data-label="守り">中間 CA を失効させる（CRL に caCompromise）</td><td data-label="層">失効</td><td data-label="章・場面">教材に無い</td><td data-label="出どころと注意">eMudhra が 10-18 09:24〜09:38 UTC、Sectigo がクロス署名を 10-19。CRL や OCSP を見ないクライアントには効かない</td></tr>
 <tr><td data-label="守り">Chrome の CRLSet で、公開鍵のハッシュを止める</td><td data-label="層">失効（ブラウザの一覧）</td><td data-label="章・場面">教材に無い</td><td data-label="出どころと注意">Chrome Root Program。10-17 19:45 UTC で、報告から 1 時間 40 分。公開鍵で止めるので、同じ鍵の Sectigo のクロス署名も止まる。コード署名の 2 つは、Chrome が TLS の連鎖に使わないので止めていない</td></tr>
 <tr><td data-label="守り">Firefox の OneCRL で止める</td><td data-label="層">失効（ブラウザの一覧）</td><td data-label="章・場面">教材に無い</td><td data-label="出どころと注意">Mozilla。10-17 22:59 UTC。Remote Settings で届き、ブラウザの更新は要らない。10-20 に一覧を組み込んだ版も出した。Android の一部の環境で効かず、158.0.2 で直した</td></tr>
-<tr><td data-label="守り">Apple と Microsoft の OS で止める</td><td data-label="層">失効（OS の一覧）</td><td data-label="章・場面">教材に無い</td><td data-label="出どころと注意">公開サイトの記載で、Apple が 10-19、Microsoft が 10-20。各社の発表は確かめていない</td></tr>
+<tr><td data-label="守り">Apple と Microsoft の OS で止める</td><td data-label="層">失効（OS の一覧）</td><td data-label="章・場面">教材に無い</td><td data-label="出どころと注意">公開サイトの記載で、Microsoft が 10-20。Apple は、調べた時点の記載では 10-19 だったが、公開サイトは 10-22 の改訂で「10-22 から」と改めた（2026-11-18 に確かめた）。各社の発表は確かめていない</td></tr>
 <tr><td data-label="守り">ルートを外す</td><td data-label="層">ルートストア</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s4" class="nw-ch">20章 場面4</a> の段階4</td><td data-label="出どころと注意">Mozilla の NSS 3.131.1（10-20）、Chrome Root Store 43、Ubuntu の ca-certificates 20260816ubuntu0.26.04.1 など。失効を見ないソフトは、これで守られる。G3 の下の正当な証明書も通らなくなる</td></tr>
 <tr><td data-label="守り">ソフトが持つ一覧を更新する</td><td data-label="層">アプリ</td><td data-label="章・場面">—</td><td data-label="出どころと注意">Go 1.27.3・1.26.10（CVE-2026-111943。これらの中間 CA を含む連鎖を除く）、Node.js 22.23.4・24.22.1・26.12.1、certifi 2026.10.19、pip 26.2.2 など。修正版の一覧は公開サイトにある</td></tr>
 <tr><td data-label="守り">CT を強制する</td><td data-label="層">CT</td><td data-label="章・場面"><a href="../chapters/20-tls.html#s4" class="nw-ch">20章 場面4</a> の段階6</td><td data-label="出どころと注意">Chrome・Firefox・Edge・Safari。偽の証明書は、使う前に公開のログに載る。Chrome は、CT のログがこれらの中間 CA の下の証明書を受け付けないよう、運営者と調整している</td></tr>
@@ -261,10 +296,10 @@
   </div>
 </section>
 
-<!-- ================= 5 この PC で確かめたこと ================= -->
-<section class="scene sc-nw" id="s5" data-tab="この PC" aria-labelledby="h-s5">
+<!-- ================= 7 この PC で確かめたこと ================= -->
+<section class="scene sc-nw" id="s7" data-tab="この PC" aria-labelledby="h-s7">
   <header class="sh a-sh">
-    <h2 id="h-s5"><span class="n">5</span>この PC で確かめたこと</h2>
+    <h2 id="h-s7"><span class="n">7</span>この PC で確かめたこと</h2>
   </header>
   <div class="nw-body a-text" style="--cols: 2fr 3fr">
 <div class="col"><h3>鍵が 256 未満であること</h3>
@@ -281,20 +316,20 @@
   </div>
 </section>
 
-<!-- ================= 6 追って確かめること ================= -->
-<section class="scene sc-nw" id="s6" data-tab="今後" aria-labelledby="h-s6">
+<!-- ================= 8 追って確かめること ================= -->
+<section class="scene sc-nw" id="s8" data-tab="今後" aria-labelledby="h-s8">
   <header class="sh a-sh">
-    <h2 id="h-s6"><span class="n">6</span>追って確かめること</h2>
+    <h2 id="h-s8"><span class="n">8</span>追って確かめること</h2>
   </header>
   <div class="nw-body a-text nw-narrow">
 <div class="col"><ul><li>eMudhra の根本原因の最終の報告。スクリプトのどこが 256 未満の d を作ったか、弱い鍵を CSR に使った手順の点検がなぜ働かなかったか。</li><li>RSA の B・C 系列の鍵が無事か（Mozilla はまだ調べていない）。</li><li>Chrome Root Program による、eMudhra の残りのルート（emSign Root CA - G1）の評価。</li><li>2025-04 から 2026-10 の間に、CT を強制しないクライアントへの悪用があったか。コード署名の 2 つで署名したプログラムが出回っていないか。</li><li><a href="../chapters/20-tls.html#s4" class="nw-ch">20章 場面4</a> の段階4 の「この PC の OS（Ubuntu）では 121 個」。10-21 の更新で emSign ECC Root CA - G3 が外れ、Mozilla の一覧 2.90 への更新で 4 つ増えて 4 つ減ったので、120 個になった（ca-certificates.crt）。章の値を直すか、時点を書き添える。</li></ul></div>
   </div>
 </section>
 
-<!-- ================= 7 出典 ================= -->
-<section class="scene sc-nw" id="s7" data-tab="出典" aria-labelledby="h-s7">
+<!-- ================= 9 出典 ================= -->
+<section class="scene sc-nw" id="s9" data-tab="出典" aria-labelledby="h-s9">
   <header class="sh a-sh">
-    <h2 id="h-s7"><span class="n">7</span>出典</h2>
+    <h2 id="h-s9"><span class="n">9</span>出典</h2>
   </header>
   <div class="nw-body a-text" style="--cols: 2fr 2fr">
 <div class="col"><h3>一次資料</h3>
@@ -308,7 +343,7 @@
 </div>
 
 <script>
-YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2026-10-20","title":"eMudhra の中間 CA の秘密鍵の危殆化","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]}, scenes: { s3: YT_NEWS_GRAPH.walk(document.getElementById('s3'), {"layers":["tls"],"missing":["鍵の生成","失効（CRL・CRLSet・OneCRL）","コード署名","静的なピン"],"rows":[{"l":[{"to":"20-tls.html#s3.5","ids":["tls"],"n":1}],"m":[0]},{"l":[{"to":"20-tls.html#s3.1","ids":["tls"],"n":0}],"m":[]},{"l":[{"to":"20-tls.html#s4.3","ids":["tls"],"n":0}],"m":[]},{"l":[{"to":"20-tls.html#s4.1","ids":["tls"],"n":0}],"m":[]},{"l":[{"to":"20-tls.html#s4.4","ids":["tls"],"n":0}],"m":[]},{"l":[{"to":"20-tls.html#s4.4","ids":["tls"],"n":1}],"m":[1]},{"l":[{"to":"20-tls.html#s4.6","ids":["tls"],"n":0}],"m":[]},{"l":[],"m":[2]}]}) } });
+YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2026-10-20","title":"eMudhra の中間 CA の秘密鍵の危殆化","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]}, scenes: { s5: YT_NEWS_GRAPH.walk(document.getElementById('s5'), {"layers":["tls"],"missing":["鍵の生成","失効（CRL・CRLSet・OneCRL）","コード署名","静的なピン"],"rows":[{"l":[{"to":"20-tls.html#s3.5","ids":["tls"],"n":1}],"m":[0]},{"l":[{"to":"20-tls.html#s3.1","ids":["tls"],"n":0}],"m":[]},{"l":[{"to":"20-tls.html#s4.3","ids":["tls"],"n":0}],"m":[]},{"l":[{"to":"20-tls.html#s4.1","ids":["tls"],"n":0}],"m":[]},{"l":[{"to":"20-tls.html#s4.4","ids":["tls"],"n":0}],"m":[]},{"l":[{"to":"20-tls.html#s4.4","ids":["tls"],"n":1}],"m":[1]},{"l":[{"to":"20-tls.html#s4.6","ids":["tls"],"n":0}],"m":[]},{"l":[],"m":[2]}]}), s2: YT_ANIM.scene(document.getElementById('s2'), {"part":"tree","script":{"part":"tree","title":"www.youtube.com の証明書を作れた連鎖","caption":"根を上に置いた証明書の連鎖で、親が子に署名する。破線の箱は鍵が漏れた中間 CA と、その鍵で作れた証明書。点線は同じ鍵。","note":"","head":{},"items":[{"id":"gts","kind":"node","label":"GTS Root R4","sub":"ルート","parent":""},{"id":"we2","kind":"node","label":"WE2","sub":"中間 CA","parent":"gts"},{"id":"yt","kind":"node","label":"www.youtube.com","sub":"本物の証明書","parent":"we2"},{"id":"ecc","kind":"node","label":"emSign ECC Root CA - G3","sub":"ルート（4 つのプログラム）","parent":""},{"id":"tls","kind":"node","label":"emSign Root TLS CA - G3","sub":"ECC Root G3 がクロス署名","parent":"ecc"},{"id":"g3c","kind":"node","label":"EM DV TLS CA - G3C","sub":"TLS の中間 CA 6 つの 1 つ","parent":"tls"},{"id":"fake","kind":"node","label":"www.youtube.com","sub":"鍵を持つ人が作れる","parent":"g3c"},{"id":"aaa","kind":"node","label":"AAA Certificate Services","sub":"Sectigo の古いルート","parent":""},{"id":"g3cx","kind":"node","label":"EM DV TLS CA - G3C","sub":"同じ鍵へのクロス署名","parent":"aaa"},{"id":"same","kind":"edge","label":"同じ鍵","sub":"","from":"g3c","to":"g3cx","dir":false}],"steps":[{"title":"名前ごとに CA は決まっていない","plain":"www.youtube.com の本物の連鎖は、WE2 → GTS Root R4 である。ブラウザは名前ごとに CA を決めていない（ピンを除く）ので、ルートストアのルートにつながる中間 CA なら、どの名前の証明書にも署名できる。","st":{"gts":{"v":1,"x":1,"b":0,"l":"GTS Root R4","s":"ルート"},"we2":{"v":1,"x":1,"b":0,"l":"WE2","s":"中間 CA"},"yt":{"v":1,"x":1,"b":0,"l":"www.youtube.com","s":"本物の証明書"},"ecc":{"v":1,"x":0,"b":0,"l":"emSign ECC Root CA - G3","s":"ルート（4 つのプログラム）"},"tls":{"v":1,"x":0,"b":0,"l":"emSign Root TLS CA - G3","s":"ECC Root G3 がクロス署名"},"g3c":{"v":1,"x":0,"b":0,"l":"EM DV TLS CA - G3C","s":"TLS の中間 CA 6 つの 1 つ"},"fake":{"v":0,"x":0,"b":0,"l":"www.youtube.com","s":"鍵を持つ人が作れる"},"aaa":{"v":0,"x":0,"b":0,"l":"AAA Certificate Services","s":"Sectigo の古いルート"},"g3cx":{"v":0,"x":0,"b":0,"l":"EM DV TLS CA - G3C","s":"同じ鍵へのクロス署名"},"same":{"v":0,"x":0,"b":0,"l":"同じ鍵","s":""}},"fresh":["gts","we2","yt","ecc","tls","g3c"],"send":[],"down":[{"id":"yt","to":"20-tls.html#s4.3","bridge":"本物の www.youtube.com も、WE2 と GTS Root R4 の署名の連鎖で確かめる"}]},{"title":"8 つの鍵の d が 256 未満","plain":"2025-04-30 に作った 8 つの中間 CA の P-384 鍵は、秘密鍵 d がどれも 256 未満だった。公開鍵 dG から、G, 2G, 3G … と 255 個の点を作って比べれば d が分かる。手元では 8 つ合わせて 0.08 秒で求まった。","st":{"gts":{"v":1,"x":0,"b":0,"l":"GTS Root R4","s":"ルート"},"we2":{"v":1,"x":0,"b":0,"l":"WE2","s":"中間 CA"},"yt":{"v":1,"x":0,"b":0,"l":"www.youtube.com","s":"本物の証明書"},"ecc":{"v":1,"x":0,"b":0,"l":"emSign ECC Root CA - G3","s":"ルート（4 つのプログラム）"},"tls":{"v":1,"x":0,"b":0,"l":"emSign Root TLS CA - G3","s":"ECC Root G3 がクロス署名"},"g3c":{"v":1,"x":1,"b":1,"l":"EM DV TLS CA - G3C","s":"秘密鍵 d が 256 未満"},"fake":{"v":0,"x":0,"b":0,"l":"www.youtube.com","s":"鍵を持つ人が作れる"},"aaa":{"v":0,"x":0,"b":0,"l":"AAA Certificate Services","s":"Sectigo の古いルート"},"g3cx":{"v":0,"x":0,"b":0,"l":"EM DV TLS CA - G3C","s":"同じ鍵へのクロス署名"},"same":{"v":0,"x":0,"b":0,"l":"同じ鍵","s":""}},"fresh":[],"send":[],"down":[{"id":"g3c","to":"20-tls.html#s3.2","bridge":"dG から d が難しいのは、d を巨大な範囲から選んだときだけ"}]},{"title":"どの名前の証明書でも作れる","plain":"鍵を持つ人は www.youtube.com の証明書を作り、G3C の鍵で署名できる。連鎖の署名はすべて合う。自分の公開鍵を入れるので、CertificateVerify にも署名できる。ピンを持たず、CT も強制しないクライアントなら、経路に入った者が間に立って中身を読める。","st":{"gts":{"v":1,"x":0,"b":0,"l":"GTS Root R4","s":"ルート"},"we2":{"v":1,"x":0,"b":0,"l":"WE2","s":"中間 CA"},"yt":{"v":1,"x":0,"b":0,"l":"www.youtube.com","s":"本物の証明書"},"ecc":{"v":1,"x":0,"b":0,"l":"emSign ECC Root CA - G3","s":"ルート（4 つのプログラム）"},"tls":{"v":1,"x":0,"b":0,"l":"emSign Root TLS CA - G3","s":"ECC Root G3 がクロス署名"},"g3c":{"v":1,"x":0,"b":1,"l":"EM DV TLS CA - G3C","s":"秘密鍵 d が 256 未満"},"fake":{"v":1,"x":1,"b":1,"l":"www.youtube.com","s":"鍵を持つ人が作れる"},"aaa":{"v":0,"x":0,"b":0,"l":"AAA Certificate Services","s":"Sectigo の古いルート"},"g3cx":{"v":0,"x":0,"b":0,"l":"EM DV TLS CA - G3C","s":"同じ鍵へのクロス署名"},"same":{"v":0,"x":0,"b":0,"l":"同じ鍵","s":""}},"fresh":["fake"],"send":[],"down":[{"id":"fake","to":"20-tls.html#s4.1","bridge":"偽の証明書があれば、間に立つ第三者を見分けられない"}]},{"title":"Sectigo のルートにもつながる","plain":"8 つの鍵には、Sectigo の古いルート AAA Certificate Services もクロス署名していた。このルートを信頼するのは Apple と Microsoft で、同じ鍵なので偽の証明書はこのルートにもつながる。","st":{"gts":{"v":1,"x":0,"b":0,"l":"GTS Root R4","s":"ルート"},"we2":{"v":1,"x":0,"b":0,"l":"WE2","s":"中間 CA"},"yt":{"v":1,"x":0,"b":0,"l":"www.youtube.com","s":"本物の証明書"},"ecc":{"v":1,"x":0,"b":0,"l":"emSign ECC Root CA - G3","s":"ルート（4 つのプログラム）"},"tls":{"v":1,"x":0,"b":0,"l":"emSign Root TLS CA - G3","s":"ECC Root G3 がクロス署名"},"g3c":{"v":1,"x":0,"b":1,"l":"EM DV TLS CA - G3C","s":"秘密鍵 d が 256 未満"},"fake":{"v":1,"x":0,"b":1,"l":"www.youtube.com","s":"鍵を持つ人が作れる"},"aaa":{"v":1,"x":1,"b":0,"l":"AAA Certificate Services","s":"Sectigo の古いルート"},"g3cx":{"v":1,"x":1,"b":1,"l":"EM DV TLS CA - G3C","s":"同じ鍵へのクロス署名"},"same":{"v":1,"x":1,"b":0,"l":"同じ鍵","s":""}},"fresh":["aaa","g3cx","same"],"send":[],"down":[]},{"title":"公開鍵で止める","plain":"Chrome は報告から 1 時間 40 分で、CRLSet に公開鍵のハッシュを載せて止めた。公開鍵で止めるので、同じ鍵の Sectigo のクロス署名も止まる。Firefox は OneCRL で止め、CA は翌日 8 つを失効させた。","st":{"gts":{"v":1,"x":0,"b":0,"l":"GTS Root R4","s":"ルート"},"we2":{"v":1,"x":0,"b":0,"l":"WE2","s":"中間 CA"},"yt":{"v":1,"x":0,"b":0,"l":"www.youtube.com","s":"本物の証明書"},"ecc":{"v":1,"x":0,"b":0,"l":"emSign ECC Root CA - G3","s":"ルート（4 つのプログラム）"},"tls":{"v":1,"x":0,"b":0,"l":"emSign Root TLS CA - G3","s":"ECC Root G3 がクロス署名"},"g3c":{"v":1,"x":1,"b":1,"l":"EM DV TLS CA - G3C","s":"CRLSet・OneCRL で止めた"},"fake":{"v":1,"x":0,"b":1,"l":"www.youtube.com","s":"鍵を持つ人が作れる"},"aaa":{"v":1,"x":0,"b":0,"l":"AAA Certificate Services","s":"Sectigo の古いルート"},"g3cx":{"v":1,"x":1,"b":1,"l":"EM DV TLS CA - G3C","s":"CRLSet では同じ鍵で止まる"},"same":{"v":1,"x":0,"b":0,"l":"同じ鍵","s":""}},"fresh":[],"send":[],"down":[]},{"title":"ルートを外し、CT で見張る","plain":"Mozilla と Chrome は emSign ECC Root CA - G3 をルートストアから外す。CT を強制するブラウザでは偽の証明書は公開のログに載らないと通らず、これらの中間 CA の下の証明書はログに無かった。","st":{"gts":{"v":1,"x":0,"b":0,"l":"GTS Root R4","s":"ルート"},"we2":{"v":1,"x":0,"b":0,"l":"WE2","s":"中間 CA"},"yt":{"v":1,"x":0,"b":0,"l":"www.youtube.com","s":"本物の証明書"},"ecc":{"v":1,"x":1,"b":0,"l":"emSign ECC Root CA - G3","s":"Mozilla と Chrome が外す"},"tls":{"v":1,"x":0,"b":0,"l":"emSign Root TLS CA - G3","s":"ECC Root G3 がクロス署名"},"g3c":{"v":1,"x":0,"b":1,"l":"EM DV TLS CA - G3C","s":"CRLSet・OneCRL で止めた"},"fake":{"v":1,"x":1,"b":1,"l":"www.youtube.com","s":"鍵を持つ人が作れる"},"aaa":{"v":1,"x":0,"b":0,"l":"AAA Certificate Services","s":"Sectigo の古いルート"},"g3cx":{"v":1,"x":0,"b":1,"l":"EM DV TLS CA - G3C","s":"CRLSet では同じ鍵で止まる"},"same":{"v":1,"x":0,"b":0,"l":"同じ鍵","s":""}},"fresh":[],"send":[],"down":[{"id":"ecc","to":"20-tls.html#s4.4","bridge":"ルートストアから外すと、そのルートで終わる連鎖は通らなくなる"},{"id":"fake","to":"20-tls.html#s4.6","bridge":"CT を強制するブラウザに偽の証明書を通すには、CT ログの受領印（SCT）が要る"}]}]},"html":["www.youtube.com の本物の連鎖は、WE2 → GTS Root R4 である。ブラウザは名前ごとに CA を決めていない（ピンを除く）ので、ルートストアのルートにつながる中間 CA なら、どの名前の証明書にも署名できる。","2025-04-30 に作った 8 つの中間 CA の P-384 鍵は、秘密鍵 d がどれも 256 未満だった。公開鍵 dG から、G, 2G, 3G … と 255 個の点を作って比べれば d が分かる。手元では 8 つ合わせて 0.08 秒で求まった。","鍵を持つ人は www.youtube.com の証明書を作り、G3C の鍵で署名できる。連鎖の署名はすべて合う。自分の公開鍵を入れるので、CertificateVerify にも署名できる。ピンを持たず、CT も強制しないクライアントなら、経路に入った者が間に立って中身を読める。","8 つの鍵には、Sectigo の古いルート AAA Certificate Services もクロス署名していた。このルートを信頼するのは Apple と Microsoft で、同じ鍵なので偽の証明書はこのルートにもつながる。","Chrome は報告から 1 時間 40 分で、CRLSet に公開鍵のハッシュを載せて止めた。公開鍵で止めるので、同じ鍵の Sectigo のクロス署名も止まる。Firefox は OneCRL で止め、CA は翌日 8 つを失効させた。","Mozilla と Chrome は emSign ECC Root CA - G3 をルートストアから外す。CT を強制するブラウザでは偽の証明書は公開のログに載らないと通らず、これらの中間 CA の下の証明書はログに無かった。"]}), s3: YT_ANIM.scene(document.getElementById('s3'), {"part":"timeline","script":{"part":"timeline","title":"鍵を作ってから止まるまで","caption":"上から下へ時間が進む（間隔は時間に比例しない）。2026 年 10 月の時刻は UTC。出どころは Bug 2083449 ほか、Chrome の dev-security-policy の投稿、公開サイト（OS の日付）。","note":"","head":{},"items":[{"id":"cer","kind":"event","label":"キーセレモニーで 24 個の鍵を作る","sub":"B・C 系列の P-384 の 8 つが、d \u003c 256 の弱い鍵だった","time":"2025-04-30"},{"id":"crl","kind":"event","label":"中間 CA の CRL の署名が検証できないと指摘される","sub":"eMudhra は弱い鍵で署名し直していた（Bug 1970728）","time":"2025-06"},{"id":"g1","kind":"gap","label":"1 年 4 か月","sub":""},{"id":"find","kind":"event","label":"研究者が CCADB の証明書を調べていて見つける","sub":"","time":"10-17 16:27"},{"id":"rep","kind":"event","label":"ルートプログラム 4 つと eMudhra へ報告","sub":"8 つの鍵で署名した文を添えた","time":"10-17 18:05"},{"id":"crlset","kind":"event","label":"Chrome が CRLSet で止める","sub":"報告から 1 時間 40 分","time":"10-17 19:45"},{"id":"onecrl","kind":"event","label":"Firefox が OneCRL で止める","sub":"Remote Settings で届き、ブラウザの更新は要らない","time":"10-17 22:59"},{"id":"revoke","kind":"event","label":"eMudhra が 8 つを失効させる（〜09:38）","sub":"","time":"10-18 09:24"},{"id":"d19","kind":"event","label":"Sectigo がクロス署名を失効させる","sub":"Apple が止め始める（公開サイトは 10-22 からと改めた）","time":"10-19"},{"id":"d20","kind":"event","label":"Microsoft の OS が止め、NSS がルートを外す","sub":"NSS 3.131.1","time":"10-20"}],"steps":[{"title":"鍵を作る","plain":"CA の暫定の説明では、鍵の書き出し（wrap／unwrap）を試すスクリプトの欠陥で、HSM の中に弱い 2 組目の鍵ができた。ラベルが似ていたので、その鍵で CSR を作った。","st":{"cer":{"v":1,"x":1,"b":0,"l":"キーセレモニーで 24 個の鍵を作る","s":"B・C 系列の P-384 の 8 つが、d \u003c 256 の弱い鍵だった"},"crl":{"v":0,"x":0,"b":0,"l":"中間 CA の CRL の署名が検証できないと指摘される","s":"eMudhra は弱い鍵で署名し直していた（Bug 1970728）"},"g1":{"v":0,"x":0,"b":0,"l":"1 年 4 か月","s":""},"find":{"v":0,"x":0,"b":0,"l":"研究者が CCADB の証明書を調べていて見つける","s":""},"rep":{"v":0,"x":0,"b":0,"l":"ルートプログラム 4 つと eMudhra へ報告","s":"8 つの鍵で署名した文を添えた"},"crlset":{"v":0,"x":0,"b":0,"l":"Chrome が CRLSet で止める","s":"報告から 1 時間 40 分"},"onecrl":{"v":0,"x":0,"b":0,"l":"Firefox が OneCRL で止める","s":"Remote Settings で届き、ブラウザの更新は要らない"},"revoke":{"v":0,"x":0,"b":0,"l":"eMudhra が 8 つを失効させる（〜09:38）","s":""},"d19":{"v":0,"x":0,"b":0,"l":"Sectigo がクロス署名を失効させる","s":"Apple が止め始める（公開サイトは 10-22 からと改めた）"},"d20":{"v":0,"x":0,"b":0,"l":"Microsoft の OS が止め、NSS がルートを外す","s":"NSS 3.131.1"}},"fresh":["cer"],"send":[],"down":[]},{"title":"前兆","plain":"指摘したのは Sectigo で、対象は 6 つの TLS 中間 CA の CRL だった。本来の鍵で署名した CRL が合わなかったのは、証明書の公開鍵が本来の鍵のものではなかったからである。","st":{"cer":{"v":1,"x":0,"b":0,"l":"キーセレモニーで 24 個の鍵を作る","s":"B・C 系列の P-384 の 8 つが、d \u003c 256 の弱い鍵だった"},"crl":{"v":1,"x":1,"b":0,"l":"中間 CA の CRL の署名が検証できないと指摘される","s":"eMudhra は弱い鍵で署名し直していた（Bug 1970728）"},"g1":{"v":0,"x":0,"b":0,"l":"1 年 4 か月","s":""},"find":{"v":0,"x":0,"b":0,"l":"研究者が CCADB の証明書を調べていて見つける","s":""},"rep":{"v":0,"x":0,"b":0,"l":"ルートプログラム 4 つと eMudhra へ報告","s":"8 つの鍵で署名した文を添えた"},"crlset":{"v":0,"x":0,"b":0,"l":"Chrome が CRLSet で止める","s":"報告から 1 時間 40 分"},"onecrl":{"v":0,"x":0,"b":0,"l":"Firefox が OneCRL で止める","s":"Remote Settings で届き、ブラウザの更新は要らない"},"revoke":{"v":0,"x":0,"b":0,"l":"eMudhra が 8 つを失効させる（〜09:38）","s":""},"d19":{"v":0,"x":0,"b":0,"l":"Sectigo がクロス署名を失効させる","s":"Apple が止め始める（公開サイトは 10-22 からと改めた）"},"d20":{"v":0,"x":0,"b":0,"l":"Microsoft の OS が止め、NSS がルートを外す","s":"NSS 3.131.1"}},"fresh":["crl"],"send":[],"down":[]},{"title":"見つかる","plain":"2026-10-17、研究者 Wayne が CCADB（ルートプログラムが共有する CA の登録簿）の証明書を調べていて見つけ、1 時間 38 分後に報告した（報告者の記録）。","st":{"cer":{"v":1,"x":0,"b":0,"l":"キーセレモニーで 24 個の鍵を作る","s":"B・C 系列の P-384 の 8 つが、d \u003c 256 の弱い鍵だった"},"crl":{"v":1,"x":0,"b":0,"l":"中間 CA の CRL の署名が検証できないと指摘される","s":"eMudhra は弱い鍵で署名し直していた（Bug 1970728）"},"g1":{"v":1,"x":1,"b":0,"l":"1 年 4 か月","s":""},"find":{"v":1,"x":1,"b":0,"l":"研究者が CCADB の証明書を調べていて見つける","s":""},"rep":{"v":1,"x":1,"b":0,"l":"ルートプログラム 4 つと eMudhra へ報告","s":"8 つの鍵で署名した文を添えた"},"crlset":{"v":0,"x":0,"b":0,"l":"Chrome が CRLSet で止める","s":"報告から 1 時間 40 分"},"onecrl":{"v":0,"x":0,"b":0,"l":"Firefox が OneCRL で止める","s":"Remote Settings で届き、ブラウザの更新は要らない"},"revoke":{"v":0,"x":0,"b":0,"l":"eMudhra が 8 つを失効させる（〜09:38）","s":""},"d19":{"v":0,"x":0,"b":0,"l":"Sectigo がクロス署名を失効させる","s":"Apple が止め始める（公開サイトは 10-22 からと改めた）"},"d20":{"v":0,"x":0,"b":0,"l":"Microsoft の OS が止め、NSS がルートを外す","s":"NSS 3.131.1"}},"fresh":["g1","find","rep"],"send":[],"down":[]},{"title":"ブラウザが止める","plain":"CRLSet と OneCRL は、ブラウザの作り手が配る失効の一覧である。どちらも、CA が失効させるより先に効いた。","st":{"cer":{"v":1,"x":0,"b":0,"l":"キーセレモニーで 24 個の鍵を作る","s":"B・C 系列の P-384 の 8 つが、d \u003c 256 の弱い鍵だった"},"crl":{"v":1,"x":0,"b":0,"l":"中間 CA の CRL の署名が検証できないと指摘される","s":"eMudhra は弱い鍵で署名し直していた（Bug 1970728）"},"g1":{"v":1,"x":0,"b":0,"l":"1 年 4 か月","s":""},"find":{"v":1,"x":0,"b":0,"l":"研究者が CCADB の証明書を調べていて見つける","s":""},"rep":{"v":1,"x":0,"b":0,"l":"ルートプログラム 4 つと eMudhra へ報告","s":"8 つの鍵で署名した文を添えた"},"crlset":{"v":1,"x":1,"b":0,"l":"Chrome が CRLSet で止める","s":"報告から 1 時間 40 分"},"onecrl":{"v":1,"x":1,"b":0,"l":"Firefox が OneCRL で止める","s":"Remote Settings で届き、ブラウザの更新は要らない"},"revoke":{"v":0,"x":0,"b":0,"l":"eMudhra が 8 つを失効させる（〜09:38）","s":""},"d19":{"v":0,"x":0,"b":0,"l":"Sectigo がクロス署名を失効させる","s":"Apple が止め始める（公開サイトは 10-22 からと改めた）"},"d20":{"v":0,"x":0,"b":0,"l":"Microsoft の OS が止め、NSS がルートを外す","s":"NSS 3.131.1"}},"fresh":["crlset","onecrl"],"send":[],"down":[]},{"title":"CA が失効させる","plain":"失効は CA の CRL と OCSP に載るが、それを見ないクライアントには効かない。OS の作り手も、ブラウザと同じく自前の一覧を配って止めた。","st":{"cer":{"v":1,"x":0,"b":0,"l":"キーセレモニーで 24 個の鍵を作る","s":"B・C 系列の P-384 の 8 つが、d \u003c 256 の弱い鍵だった"},"crl":{"v":1,"x":0,"b":0,"l":"中間 CA の CRL の署名が検証できないと指摘される","s":"eMudhra は弱い鍵で署名し直していた（Bug 1970728）"},"g1":{"v":1,"x":0,"b":0,"l":"1 年 4 か月","s":""},"find":{"v":1,"x":0,"b":0,"l":"研究者が CCADB の証明書を調べていて見つける","s":""},"rep":{"v":1,"x":0,"b":0,"l":"ルートプログラム 4 つと eMudhra へ報告","s":"8 つの鍵で署名した文を添えた"},"crlset":{"v":1,"x":0,"b":0,"l":"Chrome が CRLSet で止める","s":"報告から 1 時間 40 分"},"onecrl":{"v":1,"x":0,"b":0,"l":"Firefox が OneCRL で止める","s":"Remote Settings で届き、ブラウザの更新は要らない"},"revoke":{"v":1,"x":1,"b":0,"l":"eMudhra が 8 つを失効させる（〜09:38）","s":""},"d19":{"v":1,"x":1,"b":0,"l":"Sectigo がクロス署名を失効させる","s":"Apple が止め始める（公開サイトは 10-22 からと改めた）"},"d20":{"v":0,"x":0,"b":0,"l":"Microsoft の OS が止め、NSS がルートを外す","s":"NSS 3.131.1"}},"fresh":["revoke","d19"],"send":[],"down":[]},{"title":"ルートを外す","plain":"Mozilla は NSS のルートの一覧から emSign ECC Root CA - G3 を外した。この一覧を使うソフトは、失効を見なくても守られる。G3 の下の正当な証明書 約 30,000 枚も通らなくなるので、eMudhra はそれらを RSA のルートの下へ移す。","st":{"cer":{"v":1,"x":0,"b":0,"l":"キーセレモニーで 24 個の鍵を作る","s":"B・C 系列の P-384 の 8 つが、d \u003c 256 の弱い鍵だった"},"crl":{"v":1,"x":0,"b":0,"l":"中間 CA の CRL の署名が検証できないと指摘される","s":"eMudhra は弱い鍵で署名し直していた（Bug 1970728）"},"g1":{"v":1,"x":0,"b":0,"l":"1 年 4 か月","s":""},"find":{"v":1,"x":0,"b":0,"l":"研究者が CCADB の証明書を調べていて見つける","s":""},"rep":{"v":1,"x":0,"b":0,"l":"ルートプログラム 4 つと eMudhra へ報告","s":"8 つの鍵で署名した文を添えた"},"crlset":{"v":1,"x":0,"b":0,"l":"Chrome が CRLSet で止める","s":"報告から 1 時間 40 分"},"onecrl":{"v":1,"x":0,"b":0,"l":"Firefox が OneCRL で止める","s":"Remote Settings で届き、ブラウザの更新は要らない"},"revoke":{"v":1,"x":0,"b":0,"l":"eMudhra が 8 つを失効させる（〜09:38）","s":""},"d19":{"v":1,"x":0,"b":0,"l":"Sectigo がクロス署名を失効させる","s":"Apple が止め始める（公開サイトは 10-22 からと改めた）"},"d20":{"v":1,"x":1,"b":0,"l":"Microsoft の OS が止め、NSS がルートを外す","s":"NSS 3.131.1"}},"fresh":["d20"],"send":[],"down":[]}]},"html":["CA の暫定の説明では、鍵の書き出し（wrap／unwrap）を試すスクリプトの欠陥で、HSM の中に弱い 2 組目の鍵ができた。ラベルが似ていたので、その鍵で CSR を作った。","指摘したのは Sectigo で、対象は 6 つの TLS 中間 CA の CRL だった。本来の鍵で署名した CRL が合わなかったのは、証明書の公開鍵が本来の鍵のものではなかったからである。","2026-10-17、研究者 Wayne が CCADB（ルートプログラムが共有する CA の登録簿）の証明書を調べていて見つけ、1 時間 38 分後に報告した（報告者の記録）。","CRLSet と OneCRL は、ブラウザの作り手が配る失効の一覧である。どちらも、CA が失効させるより先に効いた。","失効は CA の CRL と OCSP に載るが、それを見ないクライアントには効かない。OS の作り手も、ブラウザと同じく自前の一覧を配って止めた。","Mozilla は NSS のルートの一覧から emSign ECC Root CA - G3 を外した。この一覧を使うソフトは、失効を見なくても守られる。G3 の下の正当な証明書 約 30,000 枚も通らなくなるので、eMudhra はそれらを RSA のルートの下へ移す。"]}) } });
 </script>
 </body>
 </html>

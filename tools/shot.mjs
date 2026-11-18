@@ -4,7 +4,7 @@
 
    verify.mjs の写真は段階に入った直後の見た目だけなので、動く札の止まる位置や、
    途中で書き換わる文字・色は写らない。このツールは、指定した場面・段階で ts を 0 から
-   指定の秒まで 0.05 秒刻みに進めて frame を呼んでから、1920x880 で撮る
+   指定の秒まで 0.05 秒刻みに進めて frame を呼んでから、1920x880（--size で変えられる）で撮る
    （verify.mjs の「時刻送り」と同じ進め方）。エンジンの時計は「動いているが速さ 0」にする
    （YT.motion.playing を見て、止めているときは決まった姿を描く章があるため）。
 
@@ -16,6 +16,7 @@
        --out DIR   写真を置くフォルダ（必須。プロジェクトの外の一時置き場にする）
        --dark      ダークモード（prefers-color-scheme: dark）で撮る
        --paused    動きを止めたときの姿を撮る（動きを止めた人・動きを減らす設定の人が見る姿）
+       --size WxH  画面の大きさ（既定 1920x880。1280x688 で上部バーのタブが収まるかを見るときなど。1画面版の大きさだけ）
    写真の名前: NN-名前-sN-stepK-t秒[-paused][-dark].png
    ============================================================ */
 import { spawn } from 'node:child_process';
@@ -23,11 +24,12 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-const opt = { scene: null, step: 1, at: [0], out: null, dark: false, paused: false, page: null };
+const opt = { scene: null, step: 1, at: [0], out: null, dark: false, paused: false, page: null, size: [1920, 880] };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--scene') opt.scene = Number(args[++i]);
@@ -36,10 +38,13 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--out') opt.out = path.resolve(args[++i]);
   else if (a === '--dark') opt.dark = true;
   else if (a === '--paused') opt.paused = true;
+  else if (a === '--size') opt.size = args[++i].split('x').map(Number);
   else opt.page = a;
 }
+// 撮るのは 1画面版（幅 1216 以上・高さ 654 以上）だけ。縦読み版の写真は verify.mjs --shots
+if (!(opt.size[0] >= 1216 && opt.size[1] >= 654)) { console.error('--size は 1画面版の大きさ（幅 1216 以上・高さ 654 以上）。縦読み版は node tools/verify.mjs --shots DIR で撮る'); process.exit(2); }
 if (!opt.page || opt.scene === null || !opt.out || opt.at.some((v) => !(v >= 0))) {
-  console.error('usage: node tools/shot.mjs <page.html> --scene N [--step K] [--at 0,1.5,3] --out DIR [--dark] [--paused]');
+  console.error('usage: node tools/shot.mjs <page.html> --scene N [--step K] [--at 0,1.5,3] --out DIR [--dark] [--paused] [--size WxH]');
   process.exit(2);
 }
 
@@ -47,7 +52,7 @@ if (!opt.page || opt.scene === null || !opt.out || opt.at.some((v) => !(v >= 0))
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 function serve() {
   return new Promise((resolve) => {
-    const srv = http.createServer((req, res) => {
+    const srv = http.createServer({ maxHeaderSize: 131072 }, (req, res) => {   // 長い問い合わせ（台本の src=）も受ける
       let p = path.normalize(path.join(ROOT, decodeURIComponent(new URL(req.url, 'http://x').pathname)));
       if (!p.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
       if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
@@ -145,7 +150,7 @@ try {
   await cdp.send('Page.enable', {}, sid);
   await cdp.send('Runtime.enable', {}, sid);
   if (opt.dark) await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] }, sid);
-  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 880, deviceScaleFactor: 1, mobile: false }, sid);
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: opt.size[0], height: opt.size[1], deviceScaleFactor: 1, mobile: false }, sid);
   const ev = (expr) => cdp.send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }, sid).then((r) => {
     if (r.exceptionDetails) throw new Error((r.exceptionDetails.exception && r.exceptionDetails.exception.description) || r.exceptionDetails.text);
     return r.result.value;
@@ -156,7 +161,8 @@ try {
   await loaded;
   await ev('document.fonts.ready.then(() => true)').catch(() => {});
   fs.mkdirSync(opt.out, { recursive: true });
-  const stem = (([f, q]) => path.basename(f, '.html') + (q ? '-' + q.replace(/[^A-Za-z0-9-]+/g, '-') : ''))(rel.split('?'));   // parts.html?part=encap も撮れる
+  // parts.html?part=encap も撮れる。問い合わせが長いとき（src=<台本>）は 40 字で切り、ハッシュを付ける
+  const stem = (([f, q]) => { const s = q ? q.replace(/[^A-Za-z0-9-]+/g, '-') : ''; return path.basename(f, '.html') + (s ? '-' + (s.length > 48 ? s.slice(0, 40) + '-' + crypto.createHash('sha1').update(q).digest('hex').slice(0, 8) : s) : ''); })(rel.split('?'));
   for (const at of opt.at) {
     const r = await ev(ADVANCE(opt.scene, opt.step, at, opt.paused));
     if (!r.startsWith('ok')) { console.log(`✗ s${opt.scene} 段階${opt.step} ${at} 秒: ${r}`); code = 1; continue; }

@@ -41,16 +41,56 @@ SYN が届いてから解放された領域を読むまでの順に並べ、最�
 
 ## 欠陥の仕組み <!-- tab: 仕組み -->
 
-### 読む側と解放する側
+IP オプションの写しは、request socket から子ソケットへコピーせずに渡る。子ソケットは読み手を待たずに写しを解放するので、別の CPU が解放された領域を読む。
 
-1. SYN が届くと、`tcp_v4_save_options()` が IP オプションの写しを確保し、`ireq->ireq_opt` に置く。オプションが無ければ何も確保しない。
-2. 最後の ACK で、`tcp_v4_syn_recv_sock()` がこのポインタを子ソケットの `inet_opt` へ移す。コピーはしない。
-3. 別の CPU が、同じ request socket への再送 SYN を処理する。`tcp_check_req()`、`tcp_v4_send_synack()`、`ip_build_and_send_pkt()`、`ip_options_build()` の順に進み、写しを読む。持っているのは `rcu_read_lock()` だけで、`opt->optlen` を 2 回読む。
-4. 子ソケットが解放されると、`inet_sock_destruct()` が `inet_opt` を `kfree()` する。3 の読み手を待たないので、読み手は解放された領域を読む。
+```anim mem
+title: IP オプションの写しを、解放した後に読む
+caption: 左は写しを指すポインタを持つ所、右はカーネルのヒープ。破線は解放した区画と、それを指したままのポインタ。関数の名前は修正の時点の上流のソース。
+left: ポインタを持つ所
+right: カーネルのヒープ
+ptr req: request socket | `ireq_opt` -> opt
+ptr rd: 別の CPU（再送 SYN） | `rcu_read_lock()` の中で読む
+ptr child: 子ソケット | `inet_opt`
+block opt: IP オプションの写し | `optlen` と中身
+step: SYN で写しを作る
+IP オプション付きの SYN が届くと、`tcp_v4_save_options()` がオプションの写しを確保し、request socket の `ireq_opt` に置く。オプションが無ければ何も確保しない。
+show: req opt
+down: opt -> 18-ip.html#s1.6: 写しを作るのは、SYN の IP ヘッダにオプションがあるときだけ
+step: 再送 SYN で、別の CPU が読み始める
+同じ request socket への再送 SYN を別の CPU が処理し、SYN/ACK を作る。`tcp_v4_send_synack()` は `rcu_read_lock()` だけを持って `ireq_opt` を読み、`ip_options_build()` まで渡す。
+show: rd
+point: rd -> opt
+down: rd -> 19-tcp.html#s3.5: 相手は SYN/ACK が来なければ、再送タイマーが切れてから SYN を送り直す
+down: rd -> 09-os.html#s5.6: 再送の処理と子ソケットの解放は、別のコアで同時に走る
+step: 最後の ACK で子ソケットへ移す
+最後の ACK で `tcp_v4_syn_recv_sock()` が子ソケットを作り、ポインタを `inet_opt` へ移して `ireq_opt` を NULL にする。写しはコピーしないので、読み手はまだ同じ区画を指している。
+show: child
+point: child -> opt
+point: req -> -
+set: req = request socket | `ireq_opt` = NULL
+down: child -> 19-tcp.html#s2.3: 子ソケットができるのは、最後の ACK で接続が ESTABLISHED になるとき
+step: 子ソケットの解放で kfree() する
+子ソケットが解放されると、`inet_sock_destruct()` が `inet_opt` を `kfree()` する。TCP の子ソケットは RCU で解放を遅らせないので、読み手が `rcu_read_lock()` の中にいても待たない。
+hide: child
+bad: opt rd
+set: opt = 解放した区画 | 読み手はまだ指している
+step: 使い回された区画を読む
+区画が別の物に使い回されると、読み手が読む `optlen` も別の値になる。CVE の記録は、隣のヒープの内容が SYN/ACK で相手に届くことと、範囲外に書くことを挙げる。
+set: opt = 別の物が使っている | `optlen` の所に別の値
+ok: opt
+send: opt -> rd: `optlen` を読む
+x: opt rd
+down: opt -> 26-kata.html#s6.3: 解放した区画は、別の物に使い回される
+step: 直し：kfree_rcu() で待つ
+修正は、`kfree()` を `kfree_rcu()` に替える 2 行である。`rcu_read_lock()` の中の読み手が抜けるまで待ってから解放するので、読み手が使い回された区画を読むことは無くなる。
+ok: rd
+set: opt = IP オプションの写し | 読み手が抜けてから解放
+x: opt rd
+```
 
-SYN の処理はリスナーのロックを持たない。SYN/ACK のタイマーは request socket の参照を持ち、子を解放する前に止まるので、この欠陥の道ではない。
+request socket の処理はリスナーのロックを持たないので、再送 SYN と最後の ACK は別の CPU で同時に進みうる。SYN/ACK のタイマーは request socket の参照を持ち、子を解放する前に止まるので、この欠陥の道ではない。
 
-### 2 つ目の道と IPv6
+## 2 つ目の道と IPv6 <!-- tab: 移行・IPv6 -->
 
 - request socket の移行（`net.ipv4.tcp_migrate_req=1` か、`BPF_SK_REUSEPORT_SELECT_OR_MIGRATE` の BPF プログラム）では、複製と元が同じ `ireq_opt` を指す。元を持つ別の CPU が読んでいる間に複製が解放されると、同じことが起きる。`tcp_migrate_req` の既定は 0 である。
 - IPv6 は `tcp_v6_syn_recv_sock()` がオプションを複製するので、最初の欠陥が無い。

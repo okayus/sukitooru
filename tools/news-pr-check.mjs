@@ -21,7 +21,9 @@
        リンクが https:// か http:// だけ、章の場面へのリンクが 2 つ以上の場面にある、
        <!-- tags: … --> の id が層の登録簿（この検査と同じ側の assets/layers.js）にある、
        <!-- missing: … --> の名前の数と長さ、
-       「層」の場面の表が「層 | 起きること | 章と場面」の 3 列で 2〜6 行（ページでは行が層の歩きの段階になる）
+       「層」の場面の表が「層 | 起きること | 章と場面」の 3 列で 2〜6 行（ページでは行が層の歩きの段階になる）、
+       台本（```anim。任意）は 1 つまでで、部品が seq・mem・stack・boxes・tree・timeline のどれか、形・段階 2〜6・本文 160 字・
+       down: の行き先が正しく段階の番号を書いていない（assets/anim-script.js の checkNote。tools/build-news.mjs と同じ検査に、日刊だけの決まりを足す）
    .html・news-data.js・README.md が build-news.mjs の出力と一致するか、ページが 1 画面に収まるかは、
    ワークフローがこの後に build-news.mjs と verify.mjs を走らせて確かめる。
 
@@ -32,8 +34,11 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const L = createRequire(import.meta.url)('../assets/layers.js');   // main の側の登録簿（プルリクエストの側は読まない）
+const AS = createRequire(import.meta.url)('../assets/anim-script.js');   // main の側の台本の読み方
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');   // main の側（章は main と同じ。プルリクエストは news/ の外を変えない）
 const MAX_BYTES = 16000;
 const MAX_MISSING = 8, MAX_MISSING_LEN = 40;
 const MAX_LAYER_ROWS = 6;   // 「層」の場面の表の行（news/README.md の日刊の型）
@@ -106,6 +111,10 @@ if (note && added.length === 1) {
   for (const s of names) if (s.length > MAX_MISSING_LEN) bad(`missing の名前が長い（${MAX_MISSING_LEN} 字まで）: ${s}`);
   if (new Set(names).size !== names.length) bad('missing に同じ名前が 2 回ある');
 
+  /* 台本（```anim。任意）。日刊は 1 つまで、部品は assets/parts/ の台本の部品だけ（news/anim/ の手書きの部品は使えない） */
+  const ac = AS.checkNote(src, { daily: true, chapterOk });
+  for (const e of ac.errors) bad('台本: ' + e);
+
   /* 「層」の場面の表。ページでは表の行が層の歩きの段階になる（tools/build-news.mjs の walkOf と同じ形） */
   const lines = src.split('\n');
   const at = lines.findIndex((l) => /^##\s.*<!--\s*tab:\s*層\s*-->/.test(l));
@@ -124,6 +133,22 @@ if (note && added.length === 1) {
       data.forEach((r, i) => { if (r.length !== 3) bad(`「層」の場面の表の ${i + 1} 行目のセルが 3 つでない（${r.length} つ）`); });
     }
   }
+}
+
+/* 台本の down: の行き先（28-compiler.html#s2.4）が在るか（tools/build-news.mjs の chapterOk と同じ） */
+function chapterOk(to) {
+  const m = /^(\d\d-[a-z0-9-]+\.html)#s(\d+)(?:\.(\d+))?$/.exec(to);
+  if (!m) return '行き先の形が正しくない';
+  const file = path.join(ROOT, 'chapters', m[1]);
+  if (!fs.existsSync(file)) return '章のファイルが無い';
+  const html = fs.readFileSync(file, 'utf8');
+  if (!html.includes(`id="s${m[2]}"`)) return `場面${m[2]} が無い`;
+  if (m[3]) {
+    const b = new RegExp(`const\\s+s${m[2]}\\s*=\\s*\\{[\\s\\S]*?steps:\\s*\\[([\\s\\S]*?)\\n\\s*\\],?`).exec(html);
+    const n = b ? b[1].split('\n').filter((ln) => /^\s*\{\s*title:/.test(ln)).length : 0;
+    if (n && Number(m[3]) > n) return `場面${m[2]} の段階は ${n} まで`;
+  }
+  return null;
 }
 
 /* 表の行をセルに分ける（`…` の中の | と \| では分けない。tools/build-news.mjs の cells と同じ） */

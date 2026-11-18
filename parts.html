@@ -17,7 +17,11 @@
 <link rel="stylesheet" href="assets/base.css">
 <script src="assets/engine.js"></script>
 <script src="assets/layers.js"></script>
+<script src="assets/anim-script.js"></script>
+<script src="assets/anim.js"></script>
+<script src="news/news-data.js"></script>
 <!-- 部品（assets/parts/<名前>.js）の並び（層の低い順）と上部バーのタブの名前（2〜8 字）。部品を足したら 1 行足す。
+     set: 'anim' は台本の部品（ニュースのノートの ```anim を描く。見本は部品の sample の台本）で、?set=anim のときに出す。
      ?part=<名前> のときはその部品だけを読み込む（ほかの部品の誤りで検証が落ちないように） -->
 <script>
   window.PARTS_LIST = [
@@ -30,13 +34,20 @@
     { name: 'ctx-switch', tab: '切り替え' },
     { name: 'nic-rx', tab: 'NIC' },
     { name: 'line-code', tab: '符号' },
-    { name: 'encap', tab: '包む' }
+    { name: 'encap', tab: '包む' },
+    { name: 'seq', tab: 'やりとり', set: 'anim' },
+    { name: 'mem', tab: 'メモリ', set: 'anim' },
+    { name: 'stack', tab: '積み重ね', set: 'anim' },
+    { name: 'boxes', tab: '箱と線', set: 'anim' },
+    { name: 'tree', tab: '木', set: 'anim' },
+    { name: 'timeline', tab: '時間', set: 'anim' }
   ];
   (function () {
-    var only = new URLSearchParams(location.search).get('part');
-    var known = window.PARTS_LIST.some(function (x) { return x.name === only; });
+    var q = new URLSearchParams(location.search), only = q.get('part');
+    var known = window.PARTS_LIST.filter(function (x) { return x.name === only; })[0];
+    window.PARTS_SET = known ? (known.set || '') : q.get('set') === 'anim' ? 'anim' : '';
     window.PARTS_LIST.forEach(function (x) {
-      if (!known || x.name === only) document.write('<script src="assets/parts/' + x.name + '.js"><\/script>');
+      if (known ? x === known : (x.set || '') === window.PARTS_SET) document.write('<script src="assets/parts/' + x.name + '.js"><\/script>');
     });
   })();
 </script>
@@ -55,9 +66,9 @@
 <!-- ================= 表紙 ================= -->
 <section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
   <div class="a-main">
-    <p class="eyebrow">部品の見本 ／ 掘り下げの板の中身</p>
+    <p class="eyebrow" id="cover-eyebrow">部品の見本 ／ 掘り下げの板の中身</p>
     <h1 id="h-s0">部品の見本</h1>
-    <p class="standfirst">章の図の ↓ の印を押すと、場面の上に板が重なり、一つ下の層を見せる。<b>部品</b>は、その板の中身のうち、章の場面に説明の無い仕組みや、例の値が上の章と合わない所を埋める小さな場面で、上の章の例の値のまま動く。ここでは部品を 1 つずつ見られる。部品の中の ↓ の印から、さらに下の章へ掘れる。</p>
+    <p class="standfirst" id="cover-lead">章の図の ↓ の印を押すと、場面の上に板が重なり、一つ下の層を見せる。<b>部品</b>は、その板の中身のうち、章の場面に説明の無い仕組みや、例の値が上の章と合わない所を埋める小さな場面で、上の章の例の値のまま動く。ここでは部品を 1 つずつ見られる。部品の中の ↓ の印から、さらに下の章へ掘れる。</p>
     <p class="legend" data-auto></p>
     <p class="keys fit-only">上のタブで部品を選ぶ。<kbd>→</kbd><kbd>←</kbd>（または右上の <kbd>›</kbd><kbd>‹</kbd>）で段階を進め、<kbd>↓</kbd><kbd>↑</kbd> で部品を移る。<kbd>スペース</kbd>で動きを止める。図の ↓ の札か説明欄の下の「下の層へ」から、下の章の場面を板で開く（<kbd>Esc</kbd> で閉じる）。</p>
   </div>
@@ -211,21 +222,33 @@
   const layerName = (id) => { const l = LAYERS.find((x) => x.id === id); return l ? (l.short || l.name) : id; };
   const where = (to) => { const m = /^(\d\d)-[a-z0-9-]+\.html#s(\d+)/.exec(to || ''); return m ? `第${Number(m[1])}章 場面${m[2]}` : to; };
 
-  /* ?part=名前 なら、その部品だけを出す（検証用）。問い合わせの残り（?part=encap&via=quic の via）は部品に渡す値 */
+  /* ?part=名前 なら、その部品だけを出す（検証用）。問い合わせの残り（?part=encap&via=quic の via）は部品に渡す値。
+     ?set=anim なら台本の部品（ニュースのノートの ```anim を描く。値は部品の見本の台本 sample）。
+     台本の部品は ?part=seq&src=<台本（URL エンコード）> で、見本の代わりにその台本を描く（ノートに書く前の試し） */
   const q = new URLSearchParams(location.search);
-  const only = q.get('part');
+  const only = q.get('part'), src = q.get('src');
   const params = {};
-  q.forEach((v, k) => { if (k !== 'part' && k !== 'embed') params[k] = /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; });
+  q.forEach((v, k) => { if (k !== 'part' && k !== 'set' && k !== 'src' && k !== 'embed') params[k] = /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; });
+  const ANIM = window.PARTS_SET === 'anim';
   const shown = LIST.filter((x) => YT.parts.get(x.name) && (!only || x.name === only || !LIST.some((y) => y.name === only)));
+  /* 台本の部品を使うノート（news/news-data.js の anim） */
+  const notesOf = (name) => (window.YT_NEWS || []).filter((n) => (n.anim || []).indexOf(name) >= 0);
 
   /* 場面を作る */
   const main = document.querySelector('main.scenes');
   const scenes = {};
   shown.forEach((x, k) => {
     const def = YT.parts.get(x.name).def, n = k + 1, id = 's' + n;
+    let P = params;
+    if (def.generic) {
+      const r = window.YT_ANIM_SCRIPT.parse(x.name, (only === x.name && src) || def.sample || '');
+      if (r.errors.length) console.error('[YT] 部品 ' + x.name + ' の' + (only === x.name && src ? '試しの' : '見本の') + '台本: ' + r.errors.join(' ／ '));
+      P = r.script || { steps: [], items: [], head: {} };
+    }
     const uses = (USES[x.name] || []);
     const byScene = [];
     uses.forEach((u) => { const w = where(u[0]); if (!byScene.some((b) => b[1] === w)) byScene.push([u[0].replace(/\.\d+$/, ''), w]); });
+    const notes = def.generic ? notesOf(x.name) : [];
     const sec = document.createElement('section');
     sec.className = 'scene sc-anim';
     sec.id = id;
@@ -234,22 +257,27 @@
     sec.setAttribute('aria-labelledby', 'h-' + id);
     sec.innerHTML =
       `<header class="sh a-sh"><h2 id="h-${id}"><span class="n">${n}</span>${esc(def.title || x.name)}</h2>` +
-      `<p class="sh-meta"><span class="chip">層：${esc(layerName(def.layer))}</span><span class="chip">部品 ${esc(x.name)}</span></p></header>` +
+      `<p class="sh-meta"><span class="chip">${def.generic ? '台本の部品' : '層：' + esc(layerName(def.layer))}</span><span class="chip">部品 ${esc(x.name)}</span></p></header>` +
       `<div class="col a-left"><p class="prose a-lead">${rich(def.lead || def.caption || '')}</p><div class="narr-slot a-panel"></div>` +
       `<div class="prose a-after">${def.note ? `<p class="note">${rich(def.note)}</p>` : ''}` +
-      `<p class="note pt-uses"><span class="pt-k">使う所</span>${byScene.length ? byScene.map((b) => `<a href="chapters/${esc(b[0])}">${esc(b[1])}</a>`).join('・') : 'まだ無い'}` +
-      (def.home ? `<span class="pt-k" style="margin-left:0.9rem">元の章</span><a href="chapters/${esc(def.home)}">${esc(where(def.home))}</a>` : '') + `</p></div></div>` +
+      (def.generic
+        ? `<p class="note pt-uses"><span class="pt-k">使うノート</span>${notes.length ? notes.map((m) => `<a href="news/${esc(m.slug)}.html" title="${esc(m.title)}">${esc(m.date)}</a>`).join('・') : 'まだ無い'}</p>`
+        : `<p class="note pt-uses"><span class="pt-k">使う所</span>${byScene.length ? byScene.map((b) => `<a href="chapters/${esc(b[0])}">${esc(b[1])}</a>`).join('・') : 'まだ無い'}` +
+          (def.home ? `<span class="pt-k" style="margin-left:0.9rem">元の章</span><a href="chapters/${esc(def.home)}">${esc(where(def.home))}</a>` : '') + `</p>`) +
+      `</div></div>` +
       `<figure class="anim-fig a-fig"><div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="${esc(def.title || x.name)}"></svg></div>` +
-      `<figcaption>${esc(def.caption || '')}</figcaption></figure>`;
+      // 台本の図の説明は、段階の本文と同じく `コード` と **太字** を効かせる（rich は先に HTML の記号を外す）
+      `<figcaption>${def.generic ? rich(P.caption || def.caption || '') : esc(def.caption || '')}</figcaption></figure>`;
     main.appendChild(sec);
-    const steps = typeof def.steps === 'function' ? def.steps(params) : def.steps;
+    const steps = typeof def.steps === 'function' ? def.steps(P) : def.steps;
     scenes[id] = {
       steps,
       setup(ctx) {
-        ctx.params = params;
+        ctx.params = P;
         ctx.part = x.name;
         ctx.mark = (el, o) => YT.drill.mark(el, o);   // 部品の中の印（板の中と同じく、下の章の場面を板で開く）
         if (def.setup) def.setup(ctx);
+        if (def.generic) YT_ANIM.downs(ctx);   // 台本の down: の印
       },
       onStep(ctx, i, prev) { if (def.onStep) def.onStep(ctx, i, prev); },
       frame(ctx, t, dt) { if (def.frame) def.frame(ctx, t, dt); },
@@ -257,21 +285,32 @@
     };
   });
 
-  /* 表紙の構成と移動 */
+  /* 表紙の構成と移動。台本の部品の組（?set=anim）は表紙の文も替える */
+  if (ANIM) {
+    document.getElementById('cover-eyebrow').textContent = '部品の見本 ／ ニュースの台本';
+    document.getElementById('h-s0').textContent = '台本の部品';
+    document.getElementById('cover-lead').innerHTML = 'ニュースのノートの「動きの場面」は、ノートに書いた<b>台本</b>（<code>```anim</code> のブロック）を、ここにある 6 つの部品が描く。台本には JS を書かず、登場する物と、段階ごとに出す・変える物だけを書く。ここでは部品ごとに見本の台本を動かす。';
+  }
   document.getElementById('cover-toc').innerHTML = shown.map((x, k) => {
     const def = YT.parts.get(x.name).def;
     const chs = [...new Set((USES[x.name] || []).map((u) => Number(u[0].slice(0, 2))))].sort((p, q) => p - q);
-    return `<li><a href="#s${k + 1}" data-go="${k + 1}"><span class="n">${k + 1}</span>${esc(def.title || x.name)}</a><p>${esc(layerName(def.layer).replace(/[A-Za-z0-9）)]$/, '$& '))}の層${chs.length ? '。使う所 第' + chs.join('・') + '章' : ''}</p></li>`;
+    const sub = def.generic ? (def.use || '') : esc(layerName(def.layer).replace(/[A-Za-z0-9）)]$/, '$& ')) + 'の層' + (chs.length ? '。使う所 第' + chs.join('・') + '章' : '');
+    return `<li><a href="#s${k + 1}" data-go="${k + 1}"><span class="n">${k + 1}</span>${esc(def.title || x.name)}</a><p>${esc(sub)}</p></li>`;
   }).join('');
   if (shown.length) document.getElementById('cover-nav').insertAdjacentHTML('afterbegin', `<a class="next" href="#s1" data-go="1">${esc(YT.parts.get(shown[0].name).def.title || shown[0].name)} ›</a>`);
-  document.getElementById('cover-note').textContent = `部品 ${shown.length} 個。層の低い順に並べた。章の印から開いたときは、印が選んだ段階から始まる。`;
+  document.getElementById('cover-nav').insertAdjacentHTML('beforeend', ANIM ? '<a href="parts.html">掘り下げの部品</a><a href="news/index.html">ニュースの一覧</a>' : '<a href="parts.html?set=anim">台本の部品（ニュース）</a>');
+  document.getElementById('cover-note').textContent = ANIM
+    ? `台本の部品 ${shown.length} 個。台本の書き方は news/README.md の「動きの場面」。`
+    : `部品 ${shown.length} 個。層の低い順に並べた。章の印から開いたときは、印が選んだ段階から始まる。`;
 
   YT.chapter({
     meta: {
-      eyebrow: '部品の見本',
-      title: '部品の見本',
+      eyebrow: ANIM ? '部品の見本 ／ ニュースの台本' : '部品の見本',
+      title: ANIM ? '台本の部品' : '部品の見本',
       home: 'index.html',
-      legend: [{ c: 'e', label: '電子・電気信号' }, { c: 'h', label: '高い電位・1' }, { c: 'p', label: '光' }, { c: 'r', label: '電波' }, { c: 'd', label: 'データ' }, { c: 'x', label: '注目' }]
+      // 台本の部品が使う色は d（データ）と x（注目）だけ
+      legend: ANIM ? [{ c: 'd', label: 'データ' }, { c: 'x', label: '注目' }]
+        : [{ c: 'e', label: '電子・電気信号' }, { c: 'h', label: '高い電位・1' }, { c: 'p', label: '光' }, { c: 'r', label: '電波' }, { c: 'd', label: 'データ' }, { c: 'x', label: '注目' }]
     },
     scenes
   });

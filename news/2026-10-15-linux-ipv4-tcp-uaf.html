@@ -19,6 +19,8 @@
 <script src="../assets/engine.js"></script>
 <script src="../assets/layers.js"></script>
 <script src="../assets/news-graph.js"></script>
+<script src="../assets/anim.js"></script>
+<script src="../assets/parts/mem.js"></script>
 <style>
   /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
   .sc-nw { grid-template-areas: "sh" "text"; }
@@ -161,12 +163,13 @@
       <li><a href="#s1" data-go="1"><span class="n">1</span>確かなことと、確かでないこと</a></li>
       <li><a href="#s2" data-go="2"><span class="n">2</span>どの層の話か</a></li>
       <li><a href="#s3" data-go="3"><span class="n">3</span>欠陥の仕組み</a></li>
-      <li><a href="#s4" data-go="4"><span class="n">4</span>解放された領域を読むと</a></li>
-      <li><a href="#s5" data-go="5"><span class="n">5</span>直し方と配布</a></li>
-      <li><a href="#s6" data-go="6"><span class="n">6</span>層ごとの守り</a></li>
-      <li><a href="#s7" data-go="7"><span class="n">7</span>この PC で確かめたこと</a></li>
-      <li><a href="#s8" data-go="8"><span class="n">8</span>追って確かめること</a></li>
-      <li><a href="#s9" data-go="9"><span class="n">9</span>出典</a></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>2 つ目の道と IPv6</a></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>解放された領域を読むと</a></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>直し方と配布</a></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>層ごとの守り</a></li>
+      <li><a href="#s8" data-go="8"><span class="n">8</span>この PC で確かめたこと</a></li>
+      <li><a href="#s9" data-go="9"><span class="n">9</span>追って確かめること</a></li>
+      <li><a href="#s10" data-go="10"><span class="n">10</span>出典</a></li>
     </ol>
   </nav>
   <footer class="cover-foot a-foot">
@@ -233,24 +236,36 @@
 </tbody></table></div></div>
 </section>
 
-<!-- ================= 3 欠陥の仕組み ================= -->
-<section class="scene sc-nw" id="s3" data-tab="仕組み" aria-labelledby="h-s3">
+<!-- ================= 3 欠陥の仕組み（動き：mem） ================= -->
+<section class="scene sc-anim sc-nwanim" id="s3" data-tab="仕組み" aria-labelledby="h-s3">
   <header class="sh a-sh">
     <h2 id="h-s3"><span class="n">3</span>欠陥の仕組み</h2>
   </header>
-  <div class="nw-body a-text" style="--cols: 2fr 2fr">
-<div class="col"><h3>読む側と解放する側</h3>
-<ol><li>SYN が届くと、<code>tcp_v4_save_options()</code> が IP オプションの写しを確保し、<code>ireq-&gt;ireq_opt</code> に置く。オプションが無ければ何も確保しない。</li><li>最後の ACK で、<code>tcp_v4_syn_recv_sock()</code> がこのポインタを子ソケットの <code>inet_opt</code> へ移す。コピーはしない。</li><li>別の CPU が、同じ request socket への再送 SYN を処理する。<code>tcp_check_req()</code>、<code>tcp_v4_send_synack()</code>、<code>ip_build_and_send_pkt()</code>、<code>ip_options_build()</code> の順に進み、写しを読む。持っているのは <code>rcu_read_lock()</code> だけで、<code>opt-&gt;optlen</code> を 2 回読む。</li><li>子ソケットが解放されると、<code>inet_sock_destruct()</code> が <code>inet_opt</code> を <code>kfree()</code> する。3 の読み手を待たないので、読み手は解放された領域を読む。</li></ol>
-<p>SYN の処理はリスナーのロックを持たない。SYN/ACK のタイマーは request socket の参照を持ち、子を解放する前に止まるので、この欠陥の道ではない。</p></div>
-<div class="col"><h3>2 つ目の道と IPv6</h3>
-<ul><li>request socket の移行（<code>net.ipv4.tcp_migrate_req=1</code> か、<code>BPF_SK_REUSEPORT_SELECT_OR_MIGRATE</code> の BPF プログラム）では、複製と元が同じ <code>ireq_opt</code> を指す。元を持つ別の CPU が読んでいる間に複製が解放されると、同じことが起きる。<code>tcp_migrate_req</code> の既定は 0 である。</li><li>IPv6 は <code>tcp_v6_syn_recv_sock()</code> がオプションを複製するので、最初の欠陥が無い。</li><li>移行の欠陥は <code>tcp_v6_reqsk_destructor()</code> にもある。<code>ipv6_opt</code> を設定するのは CALIPSO だけで、CVE の記録は別のパッチで直すと書く。</li></ul></div>
+  <div class="col a-left">
+    <div class="prose a-lead nw-wtext"><p>IP オプションの写しは、request socket から子ソケットへコピーせずに渡る。子ソケットは読み手を待たずに写しを解放するので、別の CPU が解放された領域を読む。</p></div>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after nw-wtext"><p>request socket の処理はリスナーのロックを持たないので、再送 SYN と最後の ACK は別の CPU で同時に進みうる。SYN/ACK のタイマーは request socket の参照を持ち、子を解放する前に止まるので、この欠陥の道ではない。</p></div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="IP オプションの写しを、解放した後に読む"></svg></div>
+    <figcaption>図2　左は写しを指すポインタを持つ所、右はカーネルのヒープ。破線は解放した区画と、それを指したままのポインタ。関数の名前は修正の時点の上流のソース。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 2 つ目の道と IPv6 ================= -->
+<section class="scene sc-nw" id="s4" data-tab="移行・IPv6" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>2 つ目の道と IPv6</h2>
+  </header>
+  <div class="nw-body a-text nw-narrow">
+<div class="col"><ul><li>request socket の移行（<code>net.ipv4.tcp_migrate_req=1</code> か、<code>BPF_SK_REUSEPORT_SELECT_OR_MIGRATE</code> の BPF プログラム）では、複製と元が同じ <code>ireq_opt</code> を指す。元を持つ別の CPU が読んでいる間に複製が解放されると、同じことが起きる。<code>tcp_migrate_req</code> の既定は 0 である。</li><li>IPv6 は <code>tcp_v6_syn_recv_sock()</code> がオプションを複製するので、最初の欠陥が無い。</li><li>移行の欠陥は <code>tcp_v6_reqsk_destructor()</code> にもある。<code>ipv6_opt</code> を設定するのは CALIPSO だけで、CVE の記録は別のパッチで直すと書く。</li></ul></div>
   </div>
 </section>
 
-<!-- ================= 4 解放された領域を読むと ================= -->
-<section class="scene sc-nw" id="s4" data-tab="影響" aria-labelledby="h-s4">
+<!-- ================= 5 解放された領域を読むと ================= -->
+<section class="scene sc-nw" id="s5" data-tab="影響" aria-labelledby="h-s5">
   <header class="sh a-sh">
-    <h2 id="h-s4"><span class="n">4</span>解放された領域を読むと</h2>
+    <h2 id="h-s5"><span class="n">5</span>解放された領域を読むと</h2>
   </header>
   <div class="nw-body a-text" style="--cols: 2fr 2fr">
 <div class="col"><h3>CVE の記録が書く影響</h3>
@@ -261,10 +276,10 @@
   </div>
 </section>
 
-<!-- ================= 5 直し方と配布 ================= -->
-<section class="scene sc-nw" id="s5" data-tab="修正" aria-labelledby="h-s5">
+<!-- ================= 6 直し方と配布 ================= -->
+<section class="scene sc-nw" id="s6" data-tab="修正" aria-labelledby="h-s6">
   <header class="sh a-sh">
-    <h2 id="h-s5"><span class="n">5</span>直し方と配布</h2>
+    <h2 id="h-s6"><span class="n">6</span>直し方と配布</h2>
   </header>
   <div class="nw-body a-text" style="--cols: 3fr 3fr">
 <div class="col"><h3>差分は 2 行</h3>
@@ -287,10 +302,10 @@
   </div>
 </section>
 
-<!-- ================= 6 層ごとの守り ================= -->
-<section class="scene sc-nw" id="s6" data-tab="守り" aria-labelledby="h-s6">
+<!-- ================= 7 層ごとの守り ================= -->
+<section class="scene sc-nw" id="s7" data-tab="守り" aria-labelledby="h-s7">
   <header class="sh a-sh">
-    <h2 id="h-s6"><span class="n">6</span>層ごとの守り</h2>
+    <h2 id="h-s7"><span class="n">7</span>層ごとの守り</h2>
   </header>
   <div class="nw-body a-text">
 <div class="col"><div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>守り</th><th>層</th><th>章・場面</th><th>出どころと注意</th></tr></thead><tbody>
@@ -304,10 +319,10 @@
   </div>
 </section>
 
-<!-- ================= 7 この PC で確かめたこと ================= -->
-<section class="scene sc-nw" id="s7" data-tab="この PC" aria-labelledby="h-s7">
+<!-- ================= 8 この PC で確かめたこと ================= -->
+<section class="scene sc-nw" id="s8" data-tab="この PC" aria-labelledby="h-s8">
   <header class="sh a-sh">
-    <h2 id="h-s7"><span class="n">7</span>この PC で確かめたこと</h2>
+    <h2 id="h-s8"><span class="n">8</span>この PC で確かめたこと</h2>
   </header>
   <div class="nw-body a-text" style="--cols: 3fr 2fr">
 <div class="col"><h3>暫定策のルール</h3>
@@ -329,20 +344,20 @@
   </div>
 </section>
 
-<!-- ================= 8 追って確かめること ================= -->
-<section class="scene sc-nw" id="s8" data-tab="今後" aria-labelledby="h-s8">
+<!-- ================= 9 追って確かめること ================= -->
+<section class="scene sc-nw" id="s9" data-tab="今後" aria-labelledby="h-s9">
   <header class="sh a-sh">
-    <h2 id="h-s8"><span class="n">8</span>追って確かめること</h2>
+    <h2 id="h-s9"><span class="n">9</span>追って確かめること</h2>
   </header>
   <div class="nw-body a-text nw-narrow">
 <div class="col"><ul><li>Ubuntu の修正版が <code>-security</code> と <code>-updates</code> に載る日と USN。Livepatch が対応するか。</li><li>RHEL の修正版の時期。IP オプションを落とす策を、ベンダーが認めるか。</li><li>MPTCP の無い待ち受けで RCE に至る道があるか。Anthropic の PoC の第三者の再現と、MPTCP が要る理由。</li><li>公開された道具の実際の力、悪用の報告、KEV への掲載。</li><li>IPv6 の移行の欠陥を直す別のパッチ。</li><li>Go が既定を変えるか（<a href="https://go.dev/issue/82717" target="_blank" rel="noopener">issue 82717</a>）。</li></ul></div>
   </div>
 </section>
 
-<!-- ================= 9 出典 ================= -->
-<section class="scene sc-nw" id="s9" data-tab="出典" aria-labelledby="h-s9">
+<!-- ================= 10 出典 ================= -->
+<section class="scene sc-nw" id="s10" data-tab="出典" aria-labelledby="h-s10">
   <header class="sh a-sh">
-    <h2 id="h-s9"><span class="n">9</span>出典</h2>
+    <h2 id="h-s10"><span class="n">10</span>出典</h2>
   </header>
   <div class="nw-body a-text" style="--cols: 2fr 2fr">
 <div class="col"><h3>公式の記録と修正</h3>
@@ -356,7 +371,7 @@
 </div>
 
 <script>
-YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2026-10-15","title":"Linux の IPv4 TCP の解放後の使用 CVE-2026-98432","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]}, scenes: { s2: YT_NEWS_GRAPH.walk(document.getElementById('s2'), {"layers":["transport","os","ip","tls","type","algo","cpu"],"missing":["MPTCP","KASLR","RCU"],"rows":[{"l":[{"to":"18-ip.html#s1.2","ids":["ip"],"n":0}],"m":[]},{"l":[{"to":"14-router.html#s5.1","ids":["ip","transport"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s6.2","ids":["os","transport"],"n":0}],"m":[]},{"l":[{"to":"19-tcp.html#s2.1","ids":["transport"],"n":0}],"m":[]},{"l":[{"to":"19-tcp.html#s3.5","ids":["transport"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s5.6","ids":["os"],"n":0}],"m":[]},{"l":[{"to":"26-kata.html#s6.3","ids":["type"],"n":0}],"m":[]},{"l":[{"to":"27-algorithm.html#s3.2","ids":["algo"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s1.2","ids":["os"],"n":0}],"m":[]},{"l":[{"to":"19-tcp.html#s6.4","ids":["transport","tls"],"n":0}],"m":[0]}]}) } });
+YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 2026-10-15","title":"Linux の IPv4 TCP の解放後の使用 CVE-2026-98432","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]}, scenes: { s2: YT_NEWS_GRAPH.walk(document.getElementById('s2'), {"layers":["transport","os","ip","tls","type","algo","cpu"],"missing":["MPTCP","KASLR","RCU"],"rows":[{"l":[{"to":"18-ip.html#s1.2","ids":["ip"],"n":0}],"m":[]},{"l":[{"to":"14-router.html#s5.1","ids":["ip","transport"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s6.2","ids":["os","transport"],"n":0}],"m":[]},{"l":[{"to":"19-tcp.html#s2.1","ids":["transport"],"n":0}],"m":[]},{"l":[{"to":"19-tcp.html#s3.5","ids":["transport"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s5.6","ids":["os"],"n":0}],"m":[]},{"l":[{"to":"26-kata.html#s6.3","ids":["type"],"n":0}],"m":[]},{"l":[{"to":"27-algorithm.html#s3.2","ids":["algo"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s1.2","ids":["os"],"n":0}],"m":[]},{"l":[{"to":"19-tcp.html#s6.4","ids":["transport","tls"],"n":0}],"m":[0]}]}), s3: YT_ANIM.scene(document.getElementById('s3'), {"part":"mem","script":{"part":"mem","title":"IP オプションの写しを、解放した後に読む","caption":"左は写しを指すポインタを持つ所、右はカーネルのヒープ。破線は解放した区画と、それを指したままのポインタ。関数の名前は修正の時点の上流のソース。","note":"","head":{"left":"ポインタを持つ所","right":"カーネルのヒープ"},"items":[{"id":"req","kind":"ptr","label":"request socket","sub":"`ireq_opt`","to":"opt"},{"id":"rd","kind":"ptr","label":"別の CPU（再送 SYN）","sub":"`rcu_read_lock()` の中で読む","to":""},{"id":"child","kind":"ptr","label":"子ソケット","sub":"`inet_opt`","to":""},{"id":"opt","kind":"block","label":"IP オプションの写し","sub":"`optlen` と中身"}],"steps":[{"title":"SYN で写しを作る","plain":"IP オプション付きの SYN が届くと、tcp_v4_save_options() がオプションの写しを確保し、request socket の ireq_opt に置く。オプションが無ければ何も確保しない。","st":{"req":{"v":1,"x":1,"b":0,"l":"request socket","s":"`ireq_opt`","t":"opt"},"rd":{"v":0,"x":0,"b":0,"l":"別の CPU（再送 SYN）","s":"`rcu_read_lock()` の中で読む","t":""},"child":{"v":0,"x":0,"b":0,"l":"子ソケット","s":"`inet_opt`","t":""},"opt":{"v":1,"x":1,"b":0,"l":"IP オプションの写し","s":"`optlen` と中身"}},"fresh":["req","opt"],"send":[],"down":[{"id":"opt","to":"18-ip.html#s1.6","bridge":"写しを作るのは、SYN の IP ヘッダにオプションがあるときだけ"}]},{"title":"再送 SYN で、別の CPU が読み始める","plain":"同じ request socket への再送 SYN を別の CPU が処理し、SYN/ACK を作る。tcp_v4_send_synack() は rcu_read_lock() だけを持って ireq_opt を読み、ip_options_build() まで渡す。","st":{"req":{"v":1,"x":0,"b":0,"l":"request socket","s":"`ireq_opt`","t":"opt"},"rd":{"v":1,"x":1,"b":0,"l":"別の CPU（再送 SYN）","s":"`rcu_read_lock()` の中で読む","t":"opt"},"child":{"v":0,"x":0,"b":0,"l":"子ソケット","s":"`inet_opt`","t":""},"opt":{"v":1,"x":0,"b":0,"l":"IP オプションの写し","s":"`optlen` と中身"}},"fresh":["rd"],"send":[],"down":[{"id":"rd","to":"19-tcp.html#s3.5","bridge":"相手は SYN/ACK が来なければ、再送タイマーが切れてから SYN を送り直す"},{"id":"rd","to":"09-os.html#s5.6","bridge":"再送の処理と子ソケットの解放は、別のコアで同時に走る"}]},{"title":"最後の ACK で子ソケットへ移す","plain":"最後の ACK で tcp_v4_syn_recv_sock() が子ソケットを作り、ポインタを inet_opt へ移して ireq_opt を NULL にする。写しはコピーしないので、読み手はまだ同じ区画を指している。","st":{"req":{"v":1,"x":1,"b":0,"l":"request socket","s":"`ireq_opt` = NULL","t":""},"rd":{"v":1,"x":0,"b":0,"l":"別の CPU（再送 SYN）","s":"`rcu_read_lock()` の中で読む","t":"opt"},"child":{"v":1,"x":1,"b":0,"l":"子ソケット","s":"`inet_opt`","t":"opt"},"opt":{"v":1,"x":0,"b":0,"l":"IP オプションの写し","s":"`optlen` と中身"}},"fresh":["child","req"],"send":[],"down":[{"id":"child","to":"19-tcp.html#s2.3","bridge":"子ソケットができるのは、最後の ACK で接続が ESTABLISHED になるとき"}]},{"title":"子ソケットの解放で kfree() する","plain":"子ソケットが解放されると、inet_sock_destruct() が inet_opt を kfree() する。TCP の子ソケットは RCU で解放を遅らせないので、読み手が rcu_read_lock() の中にいても待たない。","st":{"req":{"v":1,"x":0,"b":0,"l":"request socket","s":"`ireq_opt` = NULL","t":""},"rd":{"v":1,"x":1,"b":1,"l":"別の CPU（再送 SYN）","s":"`rcu_read_lock()` の中で読む","t":"opt"},"child":{"v":0,"x":0,"b":0,"l":"子ソケット","s":"`inet_opt`","t":"opt"},"opt":{"v":1,"x":1,"b":1,"l":"解放した区画","s":"読み手はまだ指している"}},"fresh":[],"send":[],"down":[]},{"title":"使い回された区画を読む","plain":"区画が別の物に使い回されると、読み手が読む optlen も別の値になる。CVE の記録は、隣のヒープの内容が SYN/ACK で相手に届くことと、範囲外に書くことを挙げる。","st":{"req":{"v":1,"x":0,"b":0,"l":"request socket","s":"`ireq_opt` = NULL","t":""},"rd":{"v":1,"x":1,"b":1,"l":"別の CPU（再送 SYN）","s":"`rcu_read_lock()` の中で読む","t":"opt"},"child":{"v":0,"x":0,"b":0,"l":"子ソケット","s":"`inet_opt`","t":"opt"},"opt":{"v":1,"x":1,"b":0,"l":"別の物が使っている","s":"`optlen` の所に別の値"}},"fresh":[],"send":[{"a":"opt","b":"rd","label":"`optlen` を読む"}],"down":[{"id":"opt","to":"26-kata.html#s6.3","bridge":"解放した区画は、別の物に使い回される"}]},{"title":"直し：kfree_rcu() で待つ","plain":"修正は、kfree() を kfree_rcu() に替える 2 行である。rcu_read_lock() の中の読み手が抜けるまで待ってから解放するので、読み手が使い回された区画を読むことは無くなる。","st":{"req":{"v":1,"x":0,"b":0,"l":"request socket","s":"`ireq_opt` = NULL","t":""},"rd":{"v":1,"x":1,"b":0,"l":"別の CPU（再送 SYN）","s":"`rcu_read_lock()` の中で読む","t":"opt"},"child":{"v":0,"x":0,"b":0,"l":"子ソケット","s":"`inet_opt`","t":"opt"},"opt":{"v":1,"x":1,"b":0,"l":"IP オプションの写し","s":"読み手が抜けてから解放"}},"fresh":[],"send":[],"down":[]}]},"html":["IP オプション付きの SYN が届くと、\u003ccode>tcp_v4_save_options()\u003c/code> がオプションの写しを確保し、request socket の \u003ccode>ireq_opt\u003c/code> に置く。オプションが無ければ何も確保しない。","同じ request socket への再送 SYN を別の CPU が処理し、SYN/ACK を作る。\u003ccode>tcp_v4_send_synack()\u003c/code> は \u003ccode>rcu_read_lock()\u003c/code> だけを持って \u003ccode>ireq_opt\u003c/code> を読み、\u003ccode>ip_options_build()\u003c/code> まで渡す。","最後の ACK で \u003ccode>tcp_v4_syn_recv_sock()\u003c/code> が子ソケットを作り、ポインタを \u003ccode>inet_opt\u003c/code> へ移して \u003ccode>ireq_opt\u003c/code> を NULL にする。写しはコピーしないので、読み手はまだ同じ区画を指している。","子ソケットが解放されると、\u003ccode>inet_sock_destruct()\u003c/code> が \u003ccode>inet_opt\u003c/code> を \u003ccode>kfree()\u003c/code> する。TCP の子ソケットは RCU で解放を遅らせないので、読み手が \u003ccode>rcu_read_lock()\u003c/code> の中にいても待たない。","区画が別の物に使い回されると、読み手が読む \u003ccode>optlen\u003c/code> も別の値になる。CVE の記録は、隣のヒープの内容が SYN/ACK で相手に届くことと、範囲外に書くことを挙げる。","修正は、\u003ccode>kfree()\u003c/code> を \u003ccode>kfree_rcu()\u003c/code> に替える 2 行である。\u003ccode>rcu_read_lock()\u003c/code> の中の読み手が抜けるまで待ってから解放するので、読み手が使い回された区画を読むことは無くなる。"]}) } });
 </script>
 </body>
 </html>
