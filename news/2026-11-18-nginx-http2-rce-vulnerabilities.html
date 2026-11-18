@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<!-- このページは tools/build-news.mjs が news/ の Markdown から作る（手で直さない） -->
+<title>nginx の HTTP/2 の処理にあった 2 つのメモリ安全の脆弱性 — ニュースから層へ</title>
+<meta name="description" content="HTTP/2（第21章 場面3）で届くフレームを扱う nginx のコードに、メモリの安全（第26章 場面6）を壊す脆弱性が 2 つあった。">
+<meta property="og:title" content="nginx の HTTP/2 の処理にあった 2 つのメモリ安全の脆弱性 — ニュースから層へ">
+<meta property="og:description" content="HTTP/2（第21章 場面3）で届くフレームを扱う nginx のコードに、メモリの安全（第26章 場面6）を壊す脆弱性が 2 つあった。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<script src="../assets/layers.js"></script>
+<script src="../assets/news-graph.js"></script>
+<script src="../assets/anim.js"></script>
+<script src="../assets/parts/mem.js"></script>
+<style>
+  /* ニュースのページだけのスタイル（tools/build-news.mjs が書く） */
+  .sc-nw { grid-template-areas: "sh" "text"; }
+  .fit .sc-nw { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh" "text"; }
+  .nw-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.15rem; align-content: start; }
+  .fit .nw-body { grid-template-columns: var(--cols, minmax(0, 1fr)); column-gap: 40px; }
+  .fit .nw-body.nw-narrow { max-width: 60em; }
+  .nw-body h3 { font-family: var(--display); font-weight: 700; font-size: 1.05rem; line-height: 1.5; }
+  .nw-body h4 { font-weight: 600; font-size: 0.95rem; }
+  .nw-body ul, .nw-body ol { padding-left: 1.3em; display: grid; gap: 0.35rem; }
+  .nw-body li > ul, .nw-body li > ol { margin-top: 0.3rem; }
+  .nw-body blockquote { border-left: 3px solid var(--rule); padding-left: 0.9rem; color: var(--fg-mid); }
+  .nw-body pre { background: var(--inset); border-radius: 4px; padding: 0.6rem 0.8rem; overflow-x: auto; font-size: 0.8rem; }
+  .nw-tbl b { font-weight: 600; }
+  table.nw-tbl td[data-label]::before { border-left: 0; padding-left: 0; }   /* 縦読み版の見出しの色見本（章の表で使う）は出さない */
+  a.nw-ch { white-space: nowrap; text-decoration: underline dotted; text-decoration-color: var(--fg-dim); text-underline-offset: 0.22em; }
+  a.nw-ch:hover { text-decoration-style: solid; text-decoration-color: var(--fg); }
+  .nw-meta { list-style: none; padding: 0; margin-top: 1rem; display: grid; gap: 0.2rem; font-size: 0.84rem; line-height: 1.7; color: var(--fg-mid); }
+  .fit .nw-meta { margin-top: 18px; }
+  .nw-meta li { padding-left: 1em; text-indent: -1em; }
+  .nw-meta li::before { content: "・"; }
+
+  /* 全章の帯 */
+  .nw-strip { display: flex; flex-wrap: wrap; gap: 6px 6px; margin-top: 1rem; }
+  .nw-grp { flex: var(--n) 1 calc(var(--n) * 17px); min-width: 0; display: grid; gap: 2px; }
+  .nw-part { font-size: 0.68rem; line-height: 1.5; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 2px solid var(--rule); padding-left: 3px; }
+  .nw-cells { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; }
+  .nw-cell { font-family: var(--mono); font-size: 0.68rem; line-height: 1.75rem; text-align: center; border-radius: 3px; background: var(--inset); color: var(--fg-dim); text-decoration: none; }
+  a.nw-cell.on { background: var(--fg); color: var(--surface); font-weight: 600; }
+  a.nw-cell.on:hover { outline: 2px solid var(--fg-dim); outline-offset: 1px; }
+
+  /* 一覧 */
+  .sc-nwlist { grid-template-areas: "sh" "tbl"; }
+  .fit .sc-nwlist { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh" "tbl"; }
+  .nw-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.9rem; align-content: start; }
+  .fit .nw-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
+  .nw-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.75rem 0.95rem 0.8rem; display: grid; gap: 0.35rem; align-content: start; }
+  .nw-card .nw-date, .nw-month .nw-date { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; color: var(--fg-dim); }
+  .nw-card h3 { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
+  .nw-card h3 a { text-decoration: none; }
+  .nw-card h3 a:hover { text-decoration: underline; text-underline-offset: 0.2em; }
+  .nw-card .nw-lead, .nw-month .nw-lead { font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-card .nw-strip { margin-top: 0.35rem; }
+
+  /* 月ごと */
+  .nw-months { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; align-content: start; }
+  .fit .nw-months { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; }
+  .nw-month { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.6rem 0.9rem 0.65rem; display: grid; gap: 0.1rem; align-content: start; color: var(--fg); text-decoration: none; }
+  .nw-month:hover { border-color: var(--fg-dim); }
+  .nw-month b { font-family: var(--display); font-weight: 700; font-size: 1.02rem; line-height: 1.5; }
+
+  /* 層の札（中心の層は太字） */
+  .nw-layers { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .nw-card .nw-layers { margin-top: 0.2rem; }
+  .nw-eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 1rem; margin-bottom: 0.9rem; }
+  .nw-eyebrow .eyebrow { margin-bottom: 0; }
+  a.nw-lc { text-decoration: none; }
+  a.nw-lc:hover { border-color: var(--fg-dim); color: var(--fg); }
+  a.nw-lc.c { color: var(--fg); border-color: var(--fg); font-weight: 600; }
+  .nw-more { color: var(--fg-dim); border-style: dashed; }
+
+  /* 層の地図（assets/news-graph.js が中身を入れる） */
+  .sc-nwmap { grid-template-areas: "sh" "left" "fig"; }
+  .fit .sc-nwmap { grid-template-columns: 31fr 69fr; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh sh" "left fig"; }
+  .fit .sc-nwmap .a-left { align-self: stretch; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+  .nwg-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; font-size: 0.8rem; color: var(--fg-mid); }
+  .nwg-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+  .nwg-seg button { font: inherit; padding: 0.15rem 0.65rem; background: var(--surface); color: var(--fg-mid); border: 0; cursor: pointer; }
+  .nwg-seg button + button { border-left: 1px solid var(--rule); }
+  .nwg-seg button[aria-pressed="true"] { background: var(--fg); color: var(--surface); }
+  .nwg-chip { display: inline-flex; align-items: center; border: 1px solid var(--fg); border-radius: 3px; padding-left: 0.45rem; color: var(--fg); }
+  .nwg-chip button { font: inherit; border: 0; background: none; cursor: pointer; color: var(--fg-mid); padding: 0 0.4rem; }
+  .nwg-list { list-style: none; padding: 0; margin-top: 0.7rem; display: grid; gap: 0.25rem; align-content: start; }
+  .fit .nwg-list { overflow-y: auto; min-height: 0; padding-right: 4px; }
+  .nwg-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.6rem; border-left: 3px solid transparent; padding: 0.3rem 0.5rem 0.35rem 0.6rem; border-radius: 0 4px 4px 0; }
+  .nwg-list li.on { border-left-color: var(--c-x); background: var(--inset); }
+  .nwg-list li.nwg-none { display: block; color: var(--fg-dim); font-size: 0.86rem; }
+  .nwg-pick { font: inherit; text-align: left; background: none; border: 0; padding: 0; cursor: pointer; color: var(--fg); display: grid; gap: 0.05rem; min-width: 0; }
+  .nwg-pick .d { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); }
+  .nwg-pick b { font-weight: 600; font-size: 0.88rem; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .nwg-pick .c { font-size: 0.74rem; color: var(--fg-mid); }
+  .nwg-list a { font-size: 0.8rem; white-space: nowrap; }
+  .nwg-foot { font-size: 0.78rem; line-height: 1.6; color: var(--fg-dim); margin-top: 0.6rem; }
+  .nwg-box { cursor: pointer; }
+  .nwg-box:focus-visible { outline: none; }
+  .nwg-box:focus-visible rect { stroke: var(--fg); stroke-width: 2.5; }
+
+  /* 層の歩き（assets/news-graph.js の walk）。1画面版は表を段階（説明欄と行の一覧）に置き換え、縦読み版は表を縦に並べる */
+  .sc-nwwalk { grid-template-areas: "sh" "lead" "fig" "tbl" "after"; }
+  .sc-nwwalk .a-panel, .sc-nwwalk .a-mbar, .fit .sc-nwwalk .a-tbl { display: none; }
+  .fit .sc-nwwalk .a-panel { display: block; }
+  .sc-nwwalk .drill-list { display: none; }   /* 板の行き先は、説明欄の「章・場面」の欄のリンクと図の ↓ の札 */
+  html:not(.fit) .sc-nwwalk .drill-badges { display: none; }   /* 縦読み版は、表の章と場面のリンクで板を開く */
+  .nw-fit { display: none; }
+  .fit .nw-fit { display: inline; }
+  .fit .nw-phone { display: none; }
+  .nw-route { list-style: none; padding: 0; }
+  .nw-route li + li { margin-top: 1px; }
+  .nw-route a { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); align-items: baseline; padding: 0.1rem 0.6rem 0.12rem 0.45rem; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; color: var(--fg-mid); text-decoration: none; font-size: 0.86rem; line-height: 1.6; }
+  .nw-route a:hover { color: var(--fg); background: var(--hl); }
+  .nw-route .n { font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); }
+  .nw-route .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nw-route b { color: var(--fg); }
+  .nw-route li.on a { border-left-color: var(--c-x); background: var(--inset); color: var(--fg); }
+  .nw-route li.on .n { color: var(--c-x); font-weight: 600; }
+  .nw-ref { margin-top: 0.55rem; font-size: 0.86rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-ref-l { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); border: 1px solid var(--rule); border-radius: 3px; padding: 0 0.35rem; margin-right: 0.5rem; white-space: nowrap; }
+  .nw-wtbl tbody { counter-reset: nw-row; }
+  .nw-wtbl tbody tr { counter-increment: nw-row; }
+  .nw-wtbl table.stack td[data-label]:first-child::before { content: counter(nw-row); font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); min-width: 1.4rem; margin-right: 0.2rem; }
+
+  /* 教材に無い */
+  .nw-miss { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.55rem 1.4rem; align-content: start; }
+  .fit .nw-miss { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; }
+  .nw-miss li { display: grid; gap: 0.1rem; border-left: 2px dashed var(--rule); padding-left: 0.7rem; }
+  .nw-miss li.cand { border-left: 2px solid var(--c-x); }
+  .nw-miss b { font-weight: 600; }
+  .nw-miss .nw-n { font-family: var(--mono); font-size: 0.78rem; color: var(--fg-mid); margin-left: 0.4rem; }
+  .nw-miss .cand-mark { color: var(--c-x); border-color: var(--c-x); margin-left: 0.4rem; }
+  .nw-miss small { font-size: 0.8rem; line-height: 1.6; color: var(--fg-mid); }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <div class="nw-eyebrow"><p class="eyebrow">ニュースから層へ ／ 日刊 ／ 2026-11-18</p><p class="nw-layers" aria-label="層（先頭が中心の層）"><a class="chip nw-lc c" href="index.html?layer=http#s1" title="HTTP と DNS（中心の層）">HTTP と DNS</a><a class="chip nw-lc" href="index.html?layer=type#s1" title="型とメモリ">型とメモリ</a><a class="chip nw-lc" href="index.html?layer=os#s1" title="OS">OS</a><a class="chip nw-lc" href="index.html?layer=transport#s1" title="TCP・UDP・QUIC">TCP・UDP・QUIC</a><a class="chip nw-lc" href="index.html?layer=delivery#s1" title="配信（CDN・負荷分散）">配信</a></p></div>
+    <h1 id="h-s0">nginx の HTTP/2 の処理にあった 2 つのメモリ安全の脆弱性</h1>
+    <p class="standfirst">HTTP/2（第21章 場面3）で届くフレームを扱う nginx のコードに、メモリの安全（第26章 場面6）を壊す脆弱性が 2 つあった。CVE-2026-123633 では、要求を処理中の接続が「閉じてよい接続」の列に残り、接続の枠が足りなくなると nginx 自身がその接続を解放して、要求が解放後のメモリを使い続ける。CVE-2026-123007 では、送ってよい量を数える符号なしの数が上限を超え、上限からの引き算が下にあふれて検査を素通りし、最後は範囲外のメモリの写しになる。Wiz は、どちらでも認証なしにコードを実行できたと書き、nginx は 2026-11-18 の 1.31.9 と 1.30.7 で直した。</p>
+    <ul class="nw-meta"><li>出典: nginx の<a href="https://nginx.org/en/security_advisories.html" target="_blank" rel="noopener">セキュリティ勧告の一覧</a>と<a href="https://nginx.org/en/CHANGES" target="_blank" rel="noopener">変更の記録</a>（2026-11-18。1.31.9 と 1.30.7）。見つけた組の 1 つ、Wiz Research の<a href="https://www.wiz.io/blog/nginx-http2-rce-vulnerabilities" target="_blank" rel="noopener">記事</a>（2026-11-18）。</li><li>話題: <a href="https://news.ycombinator.com/item?id=50547374" target="_blank" rel="noopener">Hacker News</a> の 1 位（677 点）と<a href="https://b.hatena.ne.jp/entry/s/www.wiz.io/blog/nginx-http2-rce-vulnerabilities" target="_blank" rel="noopener">はてなブックマーク</a>（15 users）、2026-11-19 の朝の時点。</li><li>調べた時点: 2026-11-19。日刊のノート（自動で選んで書いた）。人は確かめていない。nginx.org の 1.31.8 と 1.31.9 のソースを比べ、直した行を確かめた。</li></ul>
+    <div class="nw-strip" role="group" aria-label="このノートがリンクしている章: 第9章 OS、第19章 TCP・UDP・QUIC、第21章 HTTP、第22章 YouTube のサーバー側、第26章 型とメモリ"><div class="nw-grp" style="--n:3"><span class="nw-part">I 電気</span><div class="nw-cells"><span class="nw-cell" title="第1章 電子と電流">1</span><span class="nw-cell" title="第2章 半導体とダイオード">2</span><span class="nw-cell" title="第3章 トランジスタ">3</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">II 計算機</span><div class="nw-cells"><span class="nw-cell" title="第4章 論理ゲートと2進数">4</span><span class="nw-cell" title="第5章 記憶">5</span><span class="nw-cell" title="第6章 CPU">6</span><span class="nw-cell" title="第7章 入出力と周辺機器">7</span><span class="nw-cell" title="第8章 画面と音">8</span></div></div><div class="nw-grp" style="--n:2"><span class="nw-part">III ソフト</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/09-os.html" title="第9章 OS">9</a><span class="nw-cell" title="第10章 ブラウザ">10</span></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IV つながる</span><div class="nw-cells"><span class="nw-cell" title="第11章 ネットワークの層">11</span><span class="nw-cell" title="第12章 Wi-Fi">12</span><span class="nw-cell" title="第13章 Ethernet とスイッチ">13</span><span class="nw-cell" title="第14章 ホームルーター">14</span><span class="nw-cell" title="第15章 光回線">15</span><span class="nw-cell" title="第16章 インターネットの骨格">16</span></div></div><div class="nw-grp" style="--n:5"><span class="nw-part">V 約束ごと</span><div class="nw-cells"><span class="nw-cell" title="第17章 DNS">17</span><span class="nw-cell" title="第18章 IP">18</span><a class="nw-cell on" href="../chapters/19-tcp.html" title="第19章 TCP・UDP・QUIC">19</a><span class="nw-cell" title="第20章 TLS">20</span><a class="nw-cell on" href="../chapters/21-http.html" title="第21章 HTTP">21</a></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VI YouTube</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/22-server.html" title="第22章 YouTube のサーバー側">22</a><span class="nw-cell" title="第23章 動画の圧縮">23</span><span class="nw-cell" title="第24章 ストリーミングと再生">24</span><span class="nw-cell" title="第25章 通しで見る">25</span></div></div><div class="nw-grp" style="--n:4"><span class="nw-part">VII 横断</span><div class="nw-cells"><a class="nw-cell on" href="../chapters/26-kata.html" title="第26章 型とメモリ">26</a><span class="nw-cell" title="第27章 データ構造とアルゴリズム">27</span><span class="nw-cell" title="第28章 コンパイラ">28</span><span class="nw-cell" title="第29章 型で意味を表す">29</span></div></div><div class="nw-grp" style="--n:1"><span class="nw-part">VIII </span><div class="nw-cells"><span class="nw-cell" title="第30章 エミュレータの外側">30</span></div></div><div class="nw-grp" style="--n:6"><span class="nw-part">IX ブラウザ</span><div class="nw-cells"><span class="nw-cell" title="第31章 URL と HTTP">31</span><span class="nw-cell" title="第32章 HTML トークナイザ">32</span><span class="nw-cell" title="第33章 HTML パーサと DOM">33</span><span class="nw-cell" title="第34章 CSS とスタイル">34</span><span class="nw-cell" title="第35章 レイアウトと描画">35</span><span class="nw-cell" title="第36章 JavaScript エンジン">36</span></div></div></div>
+    <p class="keys fit-only">上のタブで場面を選ぶ。<kbd>↓</kbd><kbd>↑</kbd>（または右上の <kbd>‹</kbd><kbd>›</kbd>）で場面を移る。上の札はこのノートの層（太字が中心の層。押すと層の地図で絞る）、帯の塗りつぶした番号はリンクしている章。</p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>どの層の話か</a></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>何が起きたか</a></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>中身</a></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>前提と出典</a></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">読む ›</a><a href="index.html">ニュースの一覧</a><a href="2026-11.html">2026 年 11 月</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
+    <p>元のノート: <a href="https://github.com/okayus/youtube-ga-mieru-made/blob/main/news/2026-11-18-nginx-http2-rce-vulnerabilities.md" target="_blank" rel="noopener">news/2026-11-18-nginx-http2-rce-vulnerabilities.md</a>（このページは <code>node tools/build-news.mjs</code> で作る）</p>
+  </footer>
+</section>
+
+<!-- ================= 1 どの層の話か（層の歩き） ================= -->
+<section class="scene sc-anim sc-nwwalk" id="s1" data-tab="層" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>どの層の話か</h2>
+  </header>
+  <div class="col a-left">
+    <div class="prose a-lead nw-wtext"><p>種類は事故（脆弱性の公表と修正）で、働くのは実行時、HTTP/2 で話す相手が nginx に送るフレームの並びで起きる。当たるのは HTTP/2 を有効にした nginx で、CVE-2026-123633 は要求を奥のサーバーへ渡す置き方のときに限る（F5）。</p></div>
+    <ol class="nw-route fit-only" aria-label="表の行（1 行が 1 段階）">
+      <li><a href="#s1.1" data-go="1" data-step="0"><span class="n">1</span><span class="t">逆プロキシ</span></a></li>
+      <li><a href="#s1.2" data-go="1" data-step="1"><span class="n">2</span><span class="t"><b>HTTP/2</b></span></a></li>
+      <li><a href="#s1.3" data-go="1" data-step="2"><span class="n">3</span><span class="t">送れる量の窓</span></a></li>
+      <li><a href="#s1.4" data-go="1" data-step="3"><span class="n">4</span><span class="t">整数の型</span></a></li>
+      <li><a href="#s1.5" data-go="1" data-step="4"><span class="n">5</span><span class="t"><b>メモリの安全</b></span></a></li>
+      <li><a href="#s1.6" data-go="1" data-step="5"><span class="n">6</span><span class="t">プロセス</span></a></li>
+    </ol>
+    <div class="narr-slot a-panel"></div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を列に並べ、このノートの表の行が触れる層を行の順に線でたどる図"></svg></div>
+    <figcaption>図1　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
+  </figure>
+  <div class="nw-wtbl a-tbl"><div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>層</th><th>このニュースで起きること</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="層">逆プロキシ</td><td data-label="このニュースで起きること">nginx は TLS と HTTP を終えて、要求を奥のサーバーへ渡す役でよく使われる。CVE-2026-123633 は、奥への接続を開くときに起きる。CVE-2026-123007 は、奥を持たずに静的なファイルを返す nginx でも起きた（Wiz）</td><td data-label="章・場面"><a href="../chapters/22-server.html#s3" class="nw-ch" data-to="22-server.html#s3">22章 場面3</a></td></tr>
+<tr><td data-label="層"><b>HTTP/2</b></td><td data-label="このニュースで起きること">攻撃者は、HEADERS フレームを途中まで送る、WINDOW_UPDATE フレームを数多く送る、といったフレームの並びで欠陥まで届く</td><td data-label="章・場面"><a href="../chapters/21-http.html#s3" class="nw-ch" data-to="21-http.html#s3">21章 場面3</a></td></tr>
+<tr><td data-label="層">送れる量の窓</td><td data-label="このニュースで起きること">HTTP/2 にも TCP の受信ウィンドウと同じ考え方の窓がある。nginx は接続ごとに、送ってよい残りを <code>send_window</code> で数える。上限は 2³¹−1</td><td data-label="章・場面">教材に無い（HTTP/2 のフロー制御）。近いのは <a href="../chapters/19-tcp.html#s4" class="nw-ch" data-to="19-tcp.html#s4">19章 場面4</a></td></tr>
+<tr><td data-label="層">整数の型</td><td data-label="このニュースで起きること"><code>send_window</code> は符号なしの <code>size_t</code> で、上限を超えた数を上限から引くと、負にならず大きな正の数になる。のちに符号付きの <code>off_t</code> に直すと、十分に大きな数は負の長さになる</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s1" class="nw-ch" data-to="26-kata.html#s1">26章 場面1</a></td></tr>
+<tr><td data-label="層"><b>メモリの安全</b></td><td data-label="このニュースで起きること">解放した接続のメモリを、要求の処理が使い続ける（CVE-2026-123633）。負の長さが、範囲外のメモリの写しになる（CVE-2026-123007）</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s6" class="nw-ch" data-to="26-kata.html#s6">26章 場面6</a></td></tr>
+<tr><td data-label="層">プロセス</td><td data-label="このニュースで起きること">壊れるのはワーカーのプロセスで、CVE-2026-123007 では多くの場合 segmentation fault で落ちる（F5）。コードを実行するには ASLR を破る必要があり、Wiz はどちらの欠陥でもメモリを読み出して破れたと書く</td><td data-label="章・場面">教材に無い（ASLR）。近いのは <a href="../chapters/09-os.html#s4" class="nw-ch" data-to="09-os.html#s4">9章 場面4</a></td></tr>
+</tbody></table></div></div>
+</section>
+
+<!-- ================= 2 何が起きたか（動き：mem） ================= -->
+<section class="scene sc-anim sc-nwanim" id="s2" data-tab="動き" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>何が起きたか</h2>
+  </header>
+  <div class="col a-left">
+    <div class="prose a-lead nw-wtext"><p>CVE-2026-123633 では、要求が始まっても接続が「閉じてよい接続」の列に残る。接続の枠が足りなくなると、nginx は処理中のその接続を閉じに行き、要求の処理は解放されたメモリを使い続ける。</p></div>
+    <div class="narr-slot a-panel"></div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="処理中の接続を閉じ、解放したメモリを使う"></svg></div>
+    <figcaption>図2　左はポインタを持つ所、右はワーカーのメモリ（模式）。破線は解放した区画と、それを指したままのポインタ。関数の名前は 1.31.8 のソース。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 中身 ================= -->
+<section class="scene sc-nw" id="s3" data-tab="中身" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>中身</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 2fr 2fr 2fr">
+<div class="col"><h3>起きたこと</h3>
+<ul><li>2026-11-18、nginx は 1.31.9（mainline）と 1.30.7（stable）を出し、それぞれ 10 個と 9 個の CVE を直した。HTTP/2 の 2 つはその一部である。</li><li>当たる版は、CVE-2026-123007 が 1.9.5（2015 年）〜1.31.8、CVE-2026-123633 が 1.19.7〜1.31.8。どちらも HTTP/2 を有効にしたときだけ当たる。</li><li>深刻度は、F5 の CVE の記録ではどちらも CVSS 4.0 で 9.2（Critical）、CVSS 3.1 で 8.1（High）。</li><li>Wiz・Ikotas Labs・Metnir・Rapid7・Xint が別々に見つけて F5 へ知らせた（Wiz）。Wiz は AI を使う自社の道具で見つけたと書き、攻撃のコードは公開していない。</li><li>Wiz は CVE-2026-123007 で、公式の 1.31.7 と 1.31.8 のビルドに対し、ASLR を破ってコードを実行できた。64 ビットの機械で、TLS の上の HTTP/2 で、メモリから応答を返す道を使った。</li></ul></div>
+<div class="col"><h3>CVE-2026-123007 の原因</h3>
+<ul><li>nginx は応答のデータを送る待ち行列に入れるとき、その大きさを <code>send_window</code> から先に引く。ストリームが取り消されると、<code>ngx_http_v2_filter_cleanup()</code> が送らなかった分を戻す。戻すときに上限を確かめない。</li><li>待つ間に相手が WINDOW_UPDATE で窓を広げていると、戻した後の数が上限を超えることがある。検査 <code>window &gt; NGX_HTTP_V2_MAX_WINDOW - h2c-&gt;send_window</code> の引き算が下にあふれ、どの増分も通る。相手は WINDOW_UPDATE を数多く送って、数を好きな大きさにできる。</li><li><code>ngx_http_v2_send_chain()</code> がこの数を <code>off_t</code> に直すと、十分に大きい数は負になり、応答の区画の終わりが始まりより前を指す。TLS で送る <code>ngx_ssl_send_chain()</code> がそれを写すとき、範囲外のメモリを写す。</li></ul></div>
+<div class="col"><h3>対策</h3>
+<ul><li>1.31.9 か 1.30.7 以降に上げる。F5 の商用版 NGINX Plus にも直した版が出た。</li><li>すぐ上げられなければ HTTP/2 を止める（1.25.1 以降は server の <code>http2 off;</code>。<code>listen</code> の <code>http2</code> も外す）。読み込み直したら、古いワーカーが終わったことを確かめる（Wiz）。</li><li>1.31.9 のソースでは、要求を作る <code>ngx_http_v2_create_stream()</code> に、接続を列から外す <code>ngx_reusable_connection(h2c-&gt;connection, 0);</code> の 1 行が足された。送る待ちの量は <code>send_queued</code> で別に数え、WINDOW_UPDATE の検査で <code>send_window</code> と合わせて上限と比べる。</li><li>HTTP/2 を終える CDN や WAF が前にあれば、攻撃のフレームがそのまま nginx に届かず、一部を防げることがある。実装による（Wiz）。</li></ul></div>
+  </div>
+</section>
+
+<!-- ================= 4 前提と出典 ================= -->
+<section class="scene sc-nw" id="s4" data-tab="前提" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>前提と出典</h2>
+  </header>
+  <div class="nw-body a-text" style="--cols: 3fr 2fr">
+<div class="col"><h3>前提知識</h3>
+<div class="tbl-wrap"><table class="plain stack nw-tbl"><thead><tr><th>概念</th><th>このニュースでの役割</th><th>章・場面</th></tr></thead><tbody>
+<tr><td data-label="概念">符号なしと符号付きの整数</td><td data-label="このニュースでの役割">同じビットを符号なしで読むと大きな正の数、符号付きで読むと負の数になる。CVE-2026-123007 の長さが負になった</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s1" class="nw-ch">26章 場面1</a></td></tr>
+<tr><td data-label="概念">解放後の使用</td><td data-label="このニュースでの役割">解放した区画は別の物に使い回される。古いポインタで読み書きすると、別の物を壊す</td><td data-label="章・場面"><a href="../chapters/26-kata.html#s6" class="nw-ch">26章 場面6</a></td></tr>
+<tr><td data-label="概念">ASLR</td><td data-label="このニュースでの役割">プロセスのメモリの配置を起動ごとにずらし、番地を当てにくくする。2 つの欠陥はメモリを読み出せるので、番地を知って破れる（Wiz）</td><td data-label="章・場面">教材に無い。近いのは <a href="../chapters/09-os.html#s4" class="nw-ch">9章 場面4</a></td></tr>
+<tr><td data-label="概念">受信ウィンドウ</td><td data-label="このニュースでの役割">受け手が受け取れる量を知らせ、送り手はその分だけ送る。HTTP/2 は同じ窓を接続とストリームごとに持ち、WINDOW_UPDATE で広げる</td><td data-label="章・場面"><a href="../chapters/19-tcp.html#s4" class="nw-ch">19章 場面4</a></td></tr>
+<tr><td data-label="概念">フレームとストリーム</td><td data-label="このニュースでの役割">1 本の接続に、HEADERS や DATA のフレームで何本もの要求を混ぜる</td><td data-label="章・場面"><a href="../chapters/21-http.html#s3" class="nw-ch">21章 場面3</a></td></tr>
+</tbody></table></div></div>
+<div class="col"><h3>出典と確かさ</h3>
+<ul><li>nginx の<a href="https://nginx.org/en/security_advisories.html" target="_blank" rel="noopener">セキュリティ勧告の一覧</a>と、<a href="https://nginx.org/en/CHANGES" target="_blank" rel="noopener">1.31.9</a>・<a href="https://nginx.org/en/CHANGES-1.30" target="_blank" rel="noopener">1.30.7</a> の変更の記録（2026-11-18）。当たる版、直した CVE の数、nginx の深刻度はここから取った。</li><li>F5 の CVE の記録 <a href="https://www.cve.org/CVERecord?id=CVE-2026-123633" target="_blank" rel="noopener">CVE-2026-123633</a>・<a href="https://www.cve.org/CVERecord?id=CVE-2026-123007" target="_blank" rel="noopener">CVE-2026-123007</a>（2026-11-18 公開）。CVSS と、ASLR を破ればコードを実行できるという説明はここから取った。</li><li><a href="https://www.wiz.io/blog/nginx-http2-rce-vulnerabilities" target="_blank" rel="noopener">Wiz Research の記事</a>（Nir Ohfeld・Tomer Schwartz、2026-11-18）。欠陥の仕組み、攻撃を確かめた条件、HTTP/2 を止める回避策はここから取った。</li><li>確かめたこと: nginx.org の nginx-1.31.8.tar.gz と nginx-1.31.9.tar.gz を tar（GNU tar 1.35）で展開し、<code>src/http/v2</code> を diff（GNU diffutils 3.10）で比べた。ビルドも実行もしていない。関数の名前、<code>send_window</code> の型、上限 <code>(1U &lt;&lt; 31) - 1</code>、フレームの上限 10,000 個、空きが 1/16 以下という条件は、このソースで読んだ。</li><li>出典どうしの食い違い: CVE-2026-123633 の深刻度は、nginx.org の一覧では medium（CVE-2026-123007 は major）で、F5 の CVE の記録の 9.2（Critical）と違う。謝辞も違い、nginx の変更の記録は CVE-2026-123633 を「Albert of Vexera AI」、CVE-2026-123007 を Xint.io に帰し、CVE の記録はそれぞれ 3 組と 4 組を挙げる。</li><li>確かめていないこと: 攻撃のコードは公開されておらず、コードを実行できることは Wiz と F5 の説明だけによる。CVE-2026-123007 で数を負にするのに要る WINDOW_UPDATE の数と時間は調べていない。F5 の勧告のページ（K000163926・K000163928）は、中身をスクリプトで読み込むので機械的な取得では読めず、CVE の記録で代えた。</li></ul></div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+YT.chapter({ meta: {"eyebrow":"ニュースから層へ ／ 日刊 ／ 2026-11-18","title":"nginx の HTTP/2 の処理にあった 2 つのメモリ安全の脆弱性","home":"index.html","actions":[{"href":"index.html","label":"ニュースの一覧"}]}, scenes: { s1: YT_NEWS_GRAPH.walk(document.getElementById('s1'), {"layers":["http","type","os","transport","delivery"],"missing":["HTTP/2 のフロー制御","ASLR"],"rows":[{"l":[{"to":"22-server.html#s3","ids":["delivery"],"n":0}],"m":[]},{"l":[{"to":"21-http.html#s3","ids":["http"],"n":0}],"m":[]},{"l":[{"to":"19-tcp.html#s4","ids":["transport"],"n":1}],"m":[0]},{"l":[{"to":"26-kata.html#s1","ids":["type"],"n":0}],"m":[]},{"l":[{"to":"26-kata.html#s6","ids":["type"],"n":0}],"m":[]},{"l":[{"to":"09-os.html#s4","ids":["os"],"n":1}],"m":[1]}]}), s2: YT_ANIM.scene(document.getElementById('s2'), {"part":"mem","script":{"part":"mem","title":"処理中の接続を閉じ、解放したメモリを使う","caption":"左はポインタを持つ所、右はワーカーのメモリ（模式）。破線は解放した区画と、それを指したままのポインタ。関数の名前は 1.31.8 のソース。","note":"","head":{"left":"ポインタを持つ所","right":"ワーカーのメモリ"},"items":[{"id":"req","kind":"ptr","label":"要求の処理","sub":"ストリーム 1 本","to":"conn"},{"id":"drain","kind":"ptr","label":"`ngx_drain_connections()`","sub":"列から閉じる接続を選ぶ","to":"conn"},{"id":"conn","kind":"block","label":"HTTP/2 の接続","sub":"閉じてよい接続の列にある"}],"steps":[{"title":"HEADERS を途中まで送る","plain":"要求が 1 本も無い接続では、ngx_http_v2_handle_connection() が接続を閉じてよい列に入れる。フレームの残りを待つ間も、列に入れたままにする。","st":{"req":{"v":0,"x":0,"b":0,"l":"要求の処理","s":"ストリーム 1 本","t":"conn"},"drain":{"v":0,"x":0,"b":0,"l":"`ngx_drain_connections()`","s":"列から閉じる接続を選ぶ","t":"conn"},"conn":{"v":1,"x":1,"b":0,"l":"HTTP/2 の接続","s":"閉じてよい接続の列にある"}},"fresh":["conn"],"send":[],"down":[{"id":"conn","to":"21-http.html#s3","bridge":"HEADERS は、要求のヘッダを運ぶ HTTP/2 のフレーム"}]},{"title":"残りが届き、要求が始まる","plain":"ngx_http_v2_create_stream() がストリームを作り、処理中の要求の数 processing を 1 増やす。接続を列から外さないので、処理中なのに閉じてよい接続のままになる。","st":{"req":{"v":1,"x":1,"b":0,"l":"要求の処理","s":"ストリーム 1 本","t":"conn"},"drain":{"v":0,"x":0,"b":0,"l":"`ngx_drain_connections()`","s":"列から閉じる接続を選ぶ","t":"conn"},"conn":{"v":1,"x":1,"b":0,"l":"HTTP/2 の接続","s":"閉じてよい接続の列にある"}},"fresh":["req"],"send":[],"down":[]},{"title":"奥への接続で、枠が足りない","plain":"要求を奥のサーバーへ渡すため、ngx_get_connection() が接続の枠を取る。空きが worker_connections の 1/16 以下だと、列の接続を閉じに行き、この接続が選ばれることがある。","st":{"req":{"v":1,"x":1,"b":0,"l":"要求の処理","s":"奥への接続を開く途中","t":"conn"},"drain":{"v":1,"x":1,"b":0,"l":"`ngx_drain_connections()`","s":"列から閉じる接続を選ぶ","t":"conn"},"conn":{"v":1,"x":0,"b":0,"l":"HTTP/2 の接続","s":"閉じてよい接続の列にある"}},"fresh":["drain"],"send":[],"down":[{"id":"req","to":"22-server.html#s3","bridge":"奥のサーバーへ要求を渡すのは、TLS を終えた逆プロキシ"}]},{"title":"GOAWAY を作れず、解放する","plain":"閉じる前に GOAWAY フレームを作ろうとするが、接続のフレームが上限の 10,000 個に達し、使い回せる物も無いと作れない。誤りの道が接続を閉じ、結びついたメモリを解放する。","st":{"req":{"v":1,"x":0,"b":1,"l":"要求の処理","s":"奥への接続を開く途中","t":"conn"},"drain":{"v":1,"x":0,"b":0,"l":"`ngx_drain_connections()`","s":"列から閉じる接続を選ぶ","t":"conn"},"conn":{"v":1,"x":1,"b":1,"l":"解放した区画","s":"要求の処理はまだ指している"}},"fresh":[],"send":[],"down":[]},{"title":"戻った処理が、古いポインタで読む","plain":"呼び出しから戻ると要求の処理が続き、古いポインタをたどる。解放した区画が別のデータに使い回されていれば、それを要求や接続の中身として扱う。Wiz は、ここから認証なしのコードの実行まで確かめた。","st":{"req":{"v":1,"x":1,"b":1,"l":"要求の処理","s":"奥への接続を開く途中","t":"conn"},"drain":{"v":0,"x":0,"b":0,"l":"`ngx_drain_connections()`","s":"列から閉じる接続を選ぶ","t":"conn"},"conn":{"v":1,"x":1,"b":0,"l":"別のデータ","s":"要求や接続として読まれる"}},"fresh":[],"send":[{"a":"conn","b":"req","label":"古いポインタで読む"}],"down":[{"id":"conn","to":"26-kata.html#s6","bridge":"解放した区画は、別の型の物に使い回される"}]}]},"html":["要求が 1 本も無い接続では、\u003ccode>ngx_http_v2_handle_connection()\u003c/code> が接続を閉じてよい列に入れる。フレームの残りを待つ間も、列に入れたままにする。","\u003ccode>ngx_http_v2_create_stream()\u003c/code> がストリームを作り、処理中の要求の数 \u003ccode>processing\u003c/code> を 1 増やす。接続を列から外さないので、処理中なのに閉じてよい接続のままになる。","要求を奥のサーバーへ渡すため、\u003ccode>ngx_get_connection()\u003c/code> が接続の枠を取る。空きが \u003ccode>worker_connections\u003c/code> の 1/16 以下だと、列の接続を閉じに行き、この接続が選ばれることがある。","閉じる前に GOAWAY フレームを作ろうとするが、接続のフレームが上限の 10,000 個に達し、使い回せる物も無いと作れない。誤りの道が接続を閉じ、結びついたメモリを解放する。","呼び出しから戻ると要求の処理が続き、古いポインタをたどる。解放した区画が別のデータに使い回されていれば、それを要求や接続の中身として扱う。Wiz は、ここから認証なしのコードの実行まで確かめた。"]}) } });
+</script>
+</body>
+</html>
