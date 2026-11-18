@@ -1,6 +1,6 @@
 # 引き継ぎ（2026-10-19）
 
-> **次（2026-11-19 以降）**: 層をつなぐ作業（[layers-plan.md](layers-plan.md)）の **P6（ニュースの台本）を済ませた**（2026-11-18、[log/2026-11-18-p6.md](log/2026-11-18-p6.md)）。ノートの場面に台本（```anim 部品）を書くと、その場面が動きの場面になる。台本は登場する物と段階ごとの変化だけを書き、手で書いた部品 6 つ（seq・mem・stack・boxes・tree・timeline。見本は `parts.html?set=anim`）が描く。ノートに JS を書かない。Linux の TCP のノートの「仕組み」（mem）と、eMudhra のノートの「連鎖」（tree）・「経緯」（timeline）に台本を書いた。コミット `P6HASH`。**P0〜P6 はこれで全部済んだ。次は P5 の続きの候補**（layers-plan.md §3 P5）か、下の「持ち主に頼むこと」の結果しだい。
+> **次（2026-11-19 以降）**: 層をつなぐ作業（[layers-plan.md](layers-plan.md)）の **P6（ニュースの台本）を済ませた**（2026-11-18、[log/2026-11-18-p6.md](log/2026-11-18-p6.md)）。ノートの場面に台本（```anim 部品）を書くと、その場面が動きの場面になる。台本は登場する物と段階ごとの変化だけを書き、手で書いた部品 6 つ（seq・mem・stack・boxes・tree・timeline。見本は `parts.html?set=anim`）が描く。ノートに JS を書かない。Linux の TCP のノートの「仕組み」（mem）と、eMudhra のノートの「連鎖」（tree）・「経緯」（timeline）に台本を書いた。コミット `103f7f9`。**P0〜P6 はこれで全部済んだ。次は P5 の続きの候補**（layers-plan.md §3 P5）か、下の「持ち主に頼むこと」の結果しだい。
 > - 始める前に `git pull --ff-only`、push の前に `git pull --rebase` する（日刊が毎朝 main にマージされる）。文書に書くコミットのハッシュは、rebase した後のものにする。
 > - 日刊の試し: 2026-11-19 の実行から 11-25 まで、日刊のノートは動きの場面を任意で置ける（docs/daily-news.md の 5・6、news/README.md「日刊の型」）。日刊は台本 1 つ、部品は 6 つのどれか、補足なし、`down:` に段階の番号なし。検査は `tools/news-pr-check.mjs`（`assets/anim-script.js` の `checkNote(md, { daily: true })`）。
 > - 台本の書き方は news/README.md「動きの場面（台本）」、読み方と検査は `assets/anim-script.js`、部品の作り方は docs/authoring.md §5.6。台本は `parts.html?part=<部品>&src=<URL エンコードした台本>` で試せる。詳しいノートだけは手書きの部品 `news/anim/<名前>.js` も使える（道だけ作った。まだ無い）。
