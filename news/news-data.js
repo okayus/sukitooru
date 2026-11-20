@@ -2,6 +2,7 @@
    ノートごとに slug・日付・題・日刊か・中心の層・層（assets/layers.js の id。中心が先頭）・リンクしている章の場面（'章-場面'、場面を指さないリンクは '章'）・教材に無い概念、
    台本のあるノートは使う部品（anim。parts.html?set=anim の「使うノート」が読む） */
 window.YT_NEWS = [
+{"slug":"2026-11-19-php-mixed-case-https-plaintext","date":"2026-11-19","title":"PHP が大文字の HTTPS:// を平文で送っていた脆弱性","daily":true,"center":"tls","layers":["tls","http","browser","transport"],"scenes":["19-1","20-1","20-5","21-1","21-2","31-3","31-5"],"missing":["PHP 本体（サーバーの言語処理系）","FTP"],"anim":["seq"]},
 {"slug":"2026-11-18-ruby-case-conversion-heap-overflow","date":"2026-11-18","title":"Ruby の大文字・小文字の変換にあったヒープのあふれ","daily":true,"center":"type","layers":["type","browser","delivery"],"scenes":["10-2","22-5","26-1","26-6","32-3"],"missing":["Web アプリの枠組み（Rails・Sinatra）"],"anim":["mem"]},
 {"slug":"2026-11-18-nginx-http2-rce-vulnerabilities","date":"2026-11-18","title":"nginx の HTTP/2 の処理にあった 2 つのメモリ安全の脆弱性","daily":true,"center":"http","layers":["http","type","os","transport","delivery"],"scenes":["9-4","19-4","21-3","22-3","26-1","26-6"],"missing":["HTTP/2 のフロー制御","ASLR"],"anim":["mem"]},
 {"slug":"2026-11-16-optimizely-snippet-malware-injection","date":"2026-11-16","title":"Optimizely Web の配る JavaScript に悪意のコードが入った事故","daily":true,"center":"browser","layers":["browser","tls","http","delivery"],"scenes":["10-2","20-4","21-5","22-4"],"missing":["CSP（Content Security Policy）"]},
