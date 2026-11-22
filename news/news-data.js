@@ -2,6 +2,7 @@
    ノートごとに slug・日付・題・日刊か・中心の層・層（assets/layers.js の id。中心が先頭）・リンクしている章の場面（'章-場面'、場面を指さないリンクは '章'）・教材に無い概念、
    台本のあるノートは使う部品（anim。parts.html?set=anim の「使うノート」が読む） */
 window.YT_NEWS = [
+{"slug":"2026-11-22-atproto-falsehoods-programmers-believe","date":"2026-11-22","title":"AT Protocol について、プログラマが信じがちな誤りの一覧","daily":true,"center":"http","layers":["http","type","tls","algo"],"scenes":["17-1","17-4","20-4","21-1","21-2","26-1","27-3","29-5"],"missing":["DID（分散識別子）","内容アドレス（CID）"]},
 {"slug":"2026-11-21-cpp26-recompleted-with-enforced-contracts","date":"2026-11-21","title":"C++26 を完成させ直した 2026 年 11 月の ISO C++ の会合","daily":true,"center":"compiler","layers":["compiler","type"],"scenes":["28-1","28-2","28-3","29-3"],"missing":["契約"],"anim":["timeline"]},
 {"slug":"2026-11-19-php-mixed-case-https-plaintext","date":"2026-11-19","title":"PHP が大文字の HTTPS:// を平文で送っていた脆弱性","daily":true,"center":"tls","layers":["tls","http","browser","transport"],"scenes":["19-1","20-1","20-5","21-1","21-2","31-3","31-5"],"missing":["PHP 本体（サーバーの言語処理系）","FTP"],"anim":["seq"]},
 {"slug":"2026-11-18-ruby-case-conversion-heap-overflow","date":"2026-11-18","title":"Ruby の大文字・小文字の変換にあったヒープのあふれ","daily":true,"center":"type","layers":["type","browser","delivery"],"scenes":["10-2","22-5","26-1","26-6","32-3"],"missing":["Web アプリの枠組み（Rails・Sinatra）"],"anim":["mem"]},
