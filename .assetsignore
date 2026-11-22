@@ -1,0 +1,11 @@
+# Worker（wrangler.jsonc）が配らないもの。書き方は .gitignore と同じ。
+# 配るのは、ページ（index.html・glossary.html・parts.html・chapters/・news/）と、ページが読むもの（assets/）だけ。
+# 文書（docs/）・道具（tools/）・ノートの元（news/*.md）・リポジトリの設定は配らない。ページの置き場を足したら、ここにも足す。
+/*
+!/index.html
+!/glossary.html
+!/parts.html
+!/chapters/
+!/assets/
+!/news/
+/news/*.md

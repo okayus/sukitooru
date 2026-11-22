@@ -30,6 +30,9 @@
                         JS のエラー（iframe の中も）、板の中のはみ出し（埋め込みは全段階）、縦読み版の板の横はみ出しを調べる。
                         部品の板は、部品の中の印も開き、時刻送り・段階の行き来・文字の重なり（--nav / --overlap と同じ）を通す。
                         --shots と一緒なら、開いた板（1920x880 と縦読み版）と部品の全段階を撮る
+       --base URL       手元で配らず、配信先（例 https://sukitooru.shiraoka.workers.dev/）のページを測る。
+                        同じサイトへのリンクは配信先に問い合わせ、200 で返るかを確かめる。ページかリンクの行き先が転送されたら失敗にする
+                        （Workers の静的アセットは設定しだいで /x.html を /x へ転送し、engine.js の章の判定が外れる）
    終了コード: エラーかはみ出しがあれば 1
    ============================================================ */
 import { spawn } from 'node:child_process';
@@ -42,10 +45,11 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-const opt = { sizes: 'two', shots: null, phone: true, steps: true, allSteps: false, dark: false, nav: false, overlap: false, drill: false, pages: [] };
+const opt = { sizes: 'two', shots: null, phone: true, steps: true, allSteps: false, dark: false, nav: false, overlap: false, drill: false, base: null, pages: [] };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--sizes') opt.sizes = args[++i];
+  else if (a === '--base') opt.base = args[++i].replace(/\/?$/, '/');
   else if (a === '--shots') opt.shots = path.resolve(args[++i]);
   else if (a === '--no-phone') opt.phone = false;
   else if (a === '--no-steps') opt.steps = false;
@@ -531,6 +535,17 @@ const CLASSES = `(() => {
   return miss;
 })()`;
 
+/* --base のとき、同じサイトのリンクの行き先を配信先に問い合わせる。転送は追わない。URL ごとに 1 回 */
+const remoteCache = new Map();
+function remote(u) {
+  if (!remoteCache.has(u)) {
+    remoteCache.set(u, fetch(u, { redirect: 'manual' }).then(
+      async (r) => ({ status: r.status, to: r.headers.get('location'), text: r.status === 200 ? await r.text() : '' }),
+      (e) => ({ status: 0, to: null, text: '', err: e.message })));
+  }
+  return remoteCache.get(u);
+}
+
 /* ---------- 1ページを測る ---------- */
 async function checkPage(cdp, sid, base, page, report) {
   const url = base + page.replace(/\\/g, '/');
@@ -570,6 +585,10 @@ async function checkPage(cdp, sid, base, page, report) {
   const allErrs = [];
   for (const [w, h] of DESKTOP) {
     await load(w, h, false);
+    if (opt.base && w === DESKTOP[0][0]) {
+      const here = await ev('location.href');
+      if (here.split('#')[0] !== url.split('#')[0]) { bad = true; lines.push('  転送された: ' + url.replace(base, '') + ' → ' + here.replace(base, '')); }
+    }
     const r = await ev(MEASURE_DESKTOP.replace('STEPS', opt.steps ? 'true' : 'false'), true);
     const errs = await ev('window.__errs');
     errs.forEach((e) => allErrs.push(w + 'x' + h + ' ' + e.pos + ': [' + e.kind + '] ' + e.msg));
@@ -596,15 +615,28 @@ async function checkPage(cdp, sid, base, page, report) {
   for (const h of hrefs) {
     if (!h.startsWith(base)) continue;
     const u = new URL(h);
-    let file = path.join(ROOT, decodeURIComponent(u.pathname));
-    if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
-    const rel = path.relative(ROOT, file);
-    if (!fs.existsSync(file)) { (/^chapters\/\d\d-[a-z0-9-]+\.html$/.test(rel) ? todo : broken).push(rel + u.hash); continue; }
+    let rel, self, text;
+    if (opt.base) {
+      rel = decodeURIComponent(u.pathname.slice(new URL(base).pathname.length));
+      const r = await remote(u.origin + u.pathname);
+      if (r.status !== 200) {
+        if (r.status === 404 && /^chapters\/\d\d-[a-z0-9-]+\.html$/.test(rel)) todo.push(rel + u.hash);
+        else broken.push(rel + u.hash + '（' + (r.status || r.err) + (r.to ? ' → ' + r.to : '') + '）');
+        continue;
+      }
+      self = u.pathname === new URL(url).pathname;
+      text = () => r.text;
+    } else {
+      let file = path.join(ROOT, decodeURIComponent(u.pathname));
+      if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
+      rel = path.relative(ROOT, file);
+      if (!fs.existsSync(file)) { (/^chapters\/\d\d-[a-z0-9-]+\.html$/.test(rel) ? todo : broken).push(rel + u.hash); continue; }
+      self = file === path.join(ROOT, pageFile(page));
+      text = () => fs.readFileSync(file, 'utf8');
+    }
     if (u.hash.length > 1) {
       const id = decodeURIComponent(u.hash.slice(1)).replace(/^(s\d+)\.\d+$/, '$1');   // #s4.2（場面4 の段階2）は場面の id で確かめる
-      const found = file === path.join(ROOT, pageFile(page))
-        ? await ev('!!document.getElementById(' + JSON.stringify(id) + ')')
-        : fs.readFileSync(file, 'utf8').includes('id="' + id + '"');
+      const found = self ? await ev('!!document.getElementById(' + JSON.stringify(id) + ')') : text().includes('id="' + id + '"');
       if (!found) broken.push(rel + u.hash + '（行き先の id が無い）');
     }
   }
@@ -755,8 +787,8 @@ async function checkPage(cdp, sid, base, page, report) {
 }
 
 /* ---------- main ---------- */
-const server = await serve();
-const base = `http://127.0.0.1:${server.port}/`;
+const server = opt.base ? null : await serve();
+const base = opt.base || `http://127.0.0.1:${server.port}/`;
 let chrome;
 let ok = true;
 try {
@@ -787,6 +819,6 @@ try {
   cdp.close();
 } finally {
   if (chrome) await chrome.kill();
-  server.close();
+  if (server) server.close();
 }
 process.exit(ok ? 0 : 1);

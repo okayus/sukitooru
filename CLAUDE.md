@@ -15,6 +15,7 @@
 - 用語索引: `glossary.html` が `assets/glossary-data.js` を読む。章の用語表を直したら `node tools/build-glossary.mjs` で作り直す。
 - 配信: `tools/serve.sh` で http://127.0.0.1:8766/ 。止めるのは `tools/serve.sh stop`（pkill は使わない）。
 - 公開: GitHub Pages（https://okayus.github.io/youtube-ga-mieru-made/）。main の root をそのまま配る（`.nojekyll` で Jekyll を止めている）。main に push すると公開サイトも変わる。
+- 公開（Cloudflare）: Worker `sukitooru`（https://sukitooru.shiraoka.workers.dev/）も main を配る。設定は `wrangler.jsonc`（コードの無い、静的アセットだけの Worker）、配る範囲は `.assetsignore`（ページとページが読むものだけ）、`/` と `/news/` は `_redirects`。配信先での検証は `node tools/verify.mjs --base https://sukitooru.shiraoka.workers.dev/ <ページ>`。手元での試しは `wrangler dev`（このリポジトリは依存を持たないので、kokemusu の wrangler を使う）。
 - 表示方針は one-screen-artifact スキルに従う（デスクトップは場面ごとに1画面、スマートフォンは縦読み）。
 - 層の登録簿: `assets/layers.js`（24 の層、層の上下、全 216 場面の層）。ニュースの層・層の地図（`assets/news-graph.js`）・章の見出しのニュースの札が読む。章の場面を足したり層を変えたりしたら `node tools/layercheck.mjs` で確かめる。
 - ニュースの学習: `news/`（tech ニュースを調べ、この教材のどの層＝章・場面の話かに結びつけたノート）。ノートは Markdown で書き、`node tools/build-news.mjs` でページ（`news/*.html`）、一覧（`news/index.html`。層の地図と「教材に無い」を含む）、月のページ（`news/YYYY-MM.html`）、ノートのデータ（`news/news-data.js`）を作る。ノートの「層」の場面の表は、行を段階にした層の歩き（`assets/news-graph.js` の `walk`。行の層を図で光らせ、章の場面を掘り下げの板で開く）になる。書き方は `news/README.md`。

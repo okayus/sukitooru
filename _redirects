@@ -1,0 +1,3 @@
+# Worker（wrangler.jsonc）の html_handling が none なので、ディレクトリの URL は index.html を返さない。index.html を持つ 2 つだけ、200 で中身を返す。
+/ /index.html 200
+/news/ /news/index.html 200

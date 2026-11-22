@@ -1,0 +1,13 @@
+{
+  // workers.dev の名前（sukitooru.shiraoka.workers.dev）。Workers Builds の設定の名前と同じにする。違うと Worker がもう 1 つできる。
+  "name": "sukitooru",
+  // 手元の wrangler dev（kokemusu の wrangler 4.125.0）が読める最新の日付。新しくするときは、手元の wrangler も新しくする。
+  "compatibility_date": "2026-08-27",
+  // Worker のコードは持たず、リポジトリの root を静的アセットとして配る。配る範囲は .assetsignore、ディレクトリの URL は _redirects。
+  "assets": {
+    "directory": ".",
+    // 既定の auto-trailing-slash は /x.html を /x へ 307 で転送する。assets/engine.js は location.pathname の末尾の .html で章を決めるので、転送させない。
+    // none ではディレクトリの URL（/ と /news/）が index.html を返さないので、_redirects で返す。
+    "html_handling": "none"
+  }
+}
