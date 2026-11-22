@@ -2,7 +2,8 @@
 
 「インターネットで YouTube の動画が見られるまで」を電子から画素まで追う、アニメーション学習教材（純粋な HTML/CSS/JS、ビルドなし）。
 
-- 引き継ぎ: `docs/handoff.md`（前のセッションで止まった所と次の作業。セッションの最初に読む）。担当への指示書の雛形は `docs/briefs.md`、作業記録は `docs/log/`。
+- いま: `docs/status.md`（今の段と次の 3 手。40 行・3 KB まで）。手元のセッションでは SessionStart hook（`.claude/hooks/session-start.sh`）が最初に出す。節目は `docs/log.md`（新しい順に 1 行ずつ）、題ごとの計画は `docs/plans/`（済んだら消す）。区切りで持ち主が `/handoff` を打って書き戻す。進み具合と履歴はこのファイルに書かない。日刊のクラウドの実行（`docs/daily-news.md`）は、この 3 つを読まない。
+- 始める前に `git pull --ff-only`、push の前に `git pull --rebase`（日刊が毎朝 main にマージされる）。担当への指示書の雛形は `docs/briefs.md`、作業の詳しい記録は `docs/log/`。
 - 全体計画と進捗: `docs/plan.md`（全36章・9部。章ごとの6場面の題材と進捗表）
 - 章の書き方: `docs/authoring.md`（骨組み、場面の型、エンジン API、高さの予算、検証、文章の書き方）
 - 手本の章: `chapters/01-denshi.html`
