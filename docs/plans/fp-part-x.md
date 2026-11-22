@@ -5,9 +5,12 @@
 ## 1. 決めたこと
 
 - 置き場所: 末尾に第X部「関数型」を足す（第VII部を足したときと同じ。既存の章の番号と URL は変えない）。全 43 章・10 部になる。
+- 章立ては次の 7 章で確定（2026-11-22、持ち主）。
 - 章: 37 ラムダ計算（37-lambda.html）、38 高階関数とクロージャ（38-closure.html）、39 不変データ（39-immutable.html）、40 遅延評価（40-lazy.html）、41 型推論と多相（41-inference.html）、42 モナド（42-monad.html）、43 カリー＝ハワード対応（43-curry-howard.html）。
 - 部の問いと答え、章ごとの 6 場面の設計、共通の例の値、言語と版（GHC 9.6.7・rustc 1.95.0・Node.js 24.22.1・gcc 15.2.0）は、指示書 [log/2026-11-22-fp-brief.md](../log/2026-11-22-fp-brief.md)。§4 の値は調整役が手元で確かめた。§9 の文献は未確認（担当が確かめる）。
-- 層は新しく立てない。第37〜43章は、言語処理系・データ構造・型・コンパイラの層に振り分ける。
+- 層「関数型」を足す（2026-11-22、持ち主: 「関数型の層は欲しいが、各層にも重複してあってもよい。その場合詳細は関数型の層を参照するようにして」）。調整役の読みは次の 2 つ。違えば持ち主が直す。
+  1. 層の登録簿に「関数型」を足す。第37〜43章の場面は「関数型」を先頭にし、重なる既存の層（言語処理系・データ構造・型・コンパイラ）にも入れてよい。
+  2. 関数型の概念の詳しい説明は第X部に置く。ほかの層の章が同じ概念に触れる所は、説明を足さず、第X部の場面へのリンクで指す。
 - 掘り下げの印は置かない（第28〜36章と同じ）。
 
 ## 2. いまの状態（2026-11-22）
@@ -22,7 +25,7 @@
 | glossary.html | 全43章、第X部の場面 s11（同じ語は s12 へ）、`partOrder`・`partTitle` | 未検証（章ができて用語索引を作り直してから） |
 | chapters/36-saba-js.html | `meta.next` を第37章へ（lead は仮）、構成 7 とまとめの注記を第X部への橋に | 未検証 |
 | chapters/01〜36 | 表紙の「全36章」→「全43章」 | 置き換えだけ |
-| assets/layers.js | 第37〜43章の層 | `layercheck.mjs` は章ができるまで落ちる |
+| assets/layers.js | 第37〜43章を既存の層に振り分けただけ。層「関数型」はまだ無い（§3 の 5） | `layercheck.mjs` は章ができるまで落ちる |
 | tools/build-news.mjs | 帯に第X部 | ニュースは作り直していない |
 | docs/plan.md | 全43章・10部、読む順、部の説明 | 場面の表と進捗表は未記入 |
 | CLAUDE.md・README.md・docs/authoring.md・news/README.md | 章と場面の数、最後の章 | — |
@@ -33,9 +36,15 @@
 2. **報告を受ける**: 場面の題と段階数、申告された不確かな事実を作業記録（`docs/log/` に新しく作る）へ。章の間のリンクの場面の番号が実物と合うかを `node tools/xrefcheck.mjs` で見る。
 3. **仕上げ確認**: briefs.md §3 の雛形に指示書 §10 を足し、章ごとに別の担当へ。
 4. **共通の変更を入れる**: `git cherry-pick wip/fp-part-x`（ぶつかったら §2 の表を見て手で直す。表紙の数は `sed -i 's/全36章/全43章/'`）。続けて `node tools/sync-lead.mjs`、`node tools/build-glossary.mjs`、`node tools/build-news.mjs`、`node tools/layercheck.mjs`。
-5. **文書**: plan.md の場面の表（第37〜43章の行）と進捗表、進捗の 1 段落、作業記録。
-6. **全ページの検証**: 新しい 7 章・第36章・index.html・glossary.html・news/index.html とノートを、1 ページずつ `timeout 600 node tools/verify.mjs --nav --overlap <ページ>`。`node tools/xrefcheck.mjs chapters/*.html` と `node tools/lencheck.mjs chapters/*.html` も。
-7. **コミットと push**: push は持ち主に確かめる。ニュースの作り直しを含むので、その朝の日刊のマージの後に、`git pull --rebase` してから。
+5. **層「関数型」を足す**（§1 の読みの 1）:
+   - `assets/layers.js` に層を足す。案は `{ id: 'fp', name: '関数型', col: 'cross', row: 3, home: '37-lambda.html', down: ['runtime', 'type', 'algo', 'compiler'] }`。`chapters` の 37〜43 は先頭に `'fp'` を置き、いまの振り分けを後ろに残す。
+   - `assets/news-graph.js` は横断の層を 3 つまでしか置けない（`boxOf` が `CROSS = ['pc', 'net', 'media']` の列の下に 1 つずつ置く）。4 つめの置き場と、線の引き方（`route` は札の `col` を使う）を直す。
+   - 数と文を直す: `tools/build-news.mjs` の aria-label「24 の層」2 か所、CLAUDE.md の「24 の層」、docs/plan.md の「層は新しく立てず…」の文、layers.js の第X部のコメント、docs/layers-plan.md §4。
+   - 確かめ: `node tools/layercheck.mjs`、ニュースの一覧と全ノートを `verify.mjs --sizes all --nav --overlap`、`node tools/news-pr-check.mjs`（日刊の検査が新しい層の id を通すか）、`node tools/drillcheck.mjs chapters/*.html`。
+6. **既存の章から第X部へ指す**（§1 の読みの 2）: 関数型の概念に触れている所に「詳しくは第NN章 場面K」を 1 句ずつ足す（説明は足さない。字数は `lencheck.mjs`、行き先は `xrefcheck.mjs`）。候補: 第28章 s2.4 型推論 → 第41章、第28章 s3.6 単相化 → 第41章、第30章 s5.2 閉包と第36章 s4.6 スコープ → 第38章 場面2、第36章 s3.3 木を歩く評価器 → 第37章、第29章 s2 直積と直和 → 第43章 場面2、第30章 s3 Option と map → 第42章 場面2、第27章 s1.3 連結リスト → 第39章 場面2、第10章 s5 の Promise → 第42章 場面6。
+7. **文書**: plan.md の場面の表（第37〜43章の行）と進捗表、進捗の 1 段落、作業記録。
+8. **全ページの検証**: 新しい 7 章・リンクを足した章・第36章・index.html・glossary.html・news/index.html とノートを、1 ページずつ `timeout 600 node tools/verify.mjs --nav --overlap <ページ>`。`node tools/xrefcheck.mjs chapters/*.html` と `node tools/lencheck.mjs chapters/*.html` も。
+9. **コミットと push**: push は持ち主に確かめる。ニュースの作り直しを含むので、その朝の日刊のマージの後に、`git pull --rebase` してから。
 
 ## 4. 注意
 
@@ -45,5 +54,5 @@
 
 ## 5. 持ち主に聞くこと
 
-- 層の地図に「関数型」の層を足すか（いまは既存の層に振り分けた。足すとニュースの層の図が変わる）。
-- 検収: 章立て（7 章の切り方と題）と、目次の地図・章の一覧の見た目。
+- §1 の層の読み（1・2）が合っているか。
+- 検収: 目次の地図・章の一覧の見た目（章ができてから）。
