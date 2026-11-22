@@ -140,10 +140,10 @@ kokemusu の側で決めること（grill-with-docs）:
 
 ## 8. 確かめていないこと
 
-| 点 | 確かめる段 |
-|---|---|
-| `GITHUB_TOKEN` によるマージで Workers Builds が起動するか（GitHub の文書は、新しいワークフローの実行を作らない、とだけ書く） | P1 の並走 |
-| `html_handling` を `none` にしたとき、`/` が `index.html` を返すか | P1 の並走 |
-| 静的アセットのディレクトリにリポジトリの root を指定できるか | P1 の並走 |
-| リポジトリの改名の後に、Workers Builds の接続が残るか | P1 の切り替え |
-| SessionStart hook が、日刊のクラウドの実行でも発火するか | P0 か P1 の並走 |
+| 点 | 確かめる段 | 結果（2026-11-22。詳細は [log/2026-11-22-p1.md](../log/2026-11-22-p1.md)） |
+|---|---|---|
+| `GITHUB_TOKEN` によるマージで Workers Builds が起動するか（GitHub の文書は、新しいワークフローの実行を作らない、とだけ書く） | P1 の並走 | 11-23 朝の日刊のマージで見る |
+| `html_handling` を `none` にしたとき、`/` が `index.html` を返すか | P1 の並走 | 返さない。`_redirects` の `/ /index.html 200` で返す |
+| 静的アセットのディレクトリにリポジトリの root を指定できるか | P1 の並走 | できる（`"directory": "."`。配る範囲は `.assetsignore`） |
+| リポジトリの改名の後に、Workers Builds の接続が残るか | P1 の切り替え | — |
+| SessionStart hook が、日刊のクラウドの実行でも発火するか | P0 か P1 の並走 | 確かめなくてよくなった。hook はクラウドの実行（`CLAUDE_CODE_REMOTE=true`）では何も出さない |

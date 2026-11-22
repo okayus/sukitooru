@@ -3,6 +3,8 @@
 1 行が 1 つの節目（push・マージ・持ち主の作業の完了・公開の状態の変化）。形は `- YYYY-MM-DD 何を（コミット・記録）`。記録は `docs/log/` からの相対パス。
 自動では全体を読まない（SessionStart hook が新しい 5 行を出す）。作業中の試行錯誤は書かない（git log と `docs/log/` の作業記録にある）。
 
+- 2026-11-22 Workers Builds を Worker sukitooru につないだ。push（440b3da）で最初のビルドが起動し、デプロイまで通った（check-run `Workers Builds: sukitooru` success、2026-11-22-p1.md）
+- 2026-11-22 Worker sukitooru を作り、main と同じ内容を https://sukitooru.shiraoka.workers.dev/ で配り始めた。全 60 ページが verify.mjs --base で ✓（153ae67、2026-11-22-p1.md）
 - 2026-11-22 引き継ぎを status hub に替えた（docs/status.md・docs/log.md・SessionStart hook・/handoff）。それまでの docs/handoff.md は 2026-11-22-handoff.md（plans/learning-loop.md の P0）
 - 2026-11-22 持ち主の依頼: 名前を「透き通る」に変え、Cloudflare に移し、タグでニュース・クイズ・記録をつなぐ（plans/learning-loop.md）
 - 2026-11-19 日刊のルーティンを effort max にした（Opus 5.5、環境 daily news）。動きの場面の試しは 11-25 まで
