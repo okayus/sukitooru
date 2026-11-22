@@ -6,17 +6,21 @@
 
 ## フェーズ
 
-透き通る（[plans/learning-loop.md](plans/learning-loop.md)）の P1 並走。P0 は 2026-11-22 に済んだ。Worker `sukitooru`（https://sukitooru.shiraoka.workers.dev/）は Workers Builds で main を配り、GitHub Pages も動いたまま。経緯は log/2026-11-22-p1.md。
+2 本が並行。
+
+- 第X部「関数型」（第37〜43章）を足す（[plans/fp-part-x.md](plans/fp-part-x.md)）。指示書まで済み、章のファイルはまだ無い。
+- 透き通る（[plans/learning-loop.md](plans/learning-loop.md)）の P1 並走。Worker `sukitooru` は Workers Builds で main を配り、GitHub Pages も動いたまま（log/2026-11-22-p1.md）。
 
 ## 次の 3 手
 
-1. 11-23 朝の日刊のマージの後、そのマージのコミットに check-run `Workers Builds: sukitooru` が付き、新しいノートが新しい URL で 200 になるかを見る（learning-loop.md §8 の 1 つ目）。付けば P1 の並走の出口を満たす。付かなければ、GITHUB_TOKEN のマージでは起動しないとみて、切り替えの前に手を考える。
-2. セッション 2: P1 の切り替え（learning-loop.md §4・§6 P1）。古い URL を転送するか（§3 の 5）を先に持ち主に聞く。
-3. kokemusu で開くセッション 3（P2）は、1・2 と並行できる。
+1. 第X部の章を作る: plans/fp-part-x.md §3 の 1。指示書 log/2026-11-22-fp-brief.md の §11 の型で、第37〜42章の担当を並行で頼む（第43章はその後）。新しいセッションで行う。
+2. 11-23 朝の日刊のマージのコミットに check-run `Workers Builds: sukitooru` が付き、新しいノートが新しい URL で 200 になるかを見る（learning-loop.md §8 の 1 つ目）。付かなければ、切り替えの前に手を考える。
+3. P1 の切り替え（learning-loop.md §4・§6 P1）。古い URL を転送するか（§3 の 5）を先に持ち主に聞く。kokemusu の P2 は並行できる。
 
 ## 詰まり・人手待ち
 
-- 持ち主が決めること: learning-loop.md §3 の 1〜5。
+- 第X部の共通の変更（目次・用語索引・第36章・層の登録簿など）は手元のブランチ `wip/fp-part-x` にある。main に入れるのは 7 章ができてから（plans/fp-part-x.md §2）。
+- 持ち主が決めること: learning-loop.md §3 の 1〜5、fp-part-x.md §5。
 - 日刊の動きの場面の試しは 11-25 まで。必須にするかを 11-26 ごろ持ち主が決める（P3 で日刊の型を変えるのはその後）。
 - 検収をまだ聞いていない: 層をつなぐ作業の P2〜P6（log/2026-11-22-handoff.md の各項）。
 
