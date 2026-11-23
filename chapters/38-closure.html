@@ -100,7 +100,7 @@
     <p class="prose a-lead">場面2 の addN は、Int を 1 つ受け取って関数を返した。2 つの数を足す関数も、同じ形で書ける。引数を 1 つ受け取るたびに関数を返す形にすると、引数の一部だけを先に渡して部品を作れる。</p>
     <div class="narr-slot a-panel"></div>
     <div class="prose a-after">
-      <p class="note">多引数の関数を 1 引数の関数の連なりで表す考えは、Schönfinkel の 1924 年の論文（Mathematische Annalen 92 巻）にあり、Curry が組合せ論理で多く使った。カリー化の名は Curry から来ている。</p>
+      <p class="note">多引数の関数を 1 引数の関数の連なりで表す考えは Frege（1893 年）にさかのぼり、Schönfinkel の 1924 年の論文（Mathematische Annalen 92 巻）にもある。Curry が組合せ論理で多く使い、名は Curry にちなむ。</p>
     </div>
   </div>
   <figure class="anim-fig a-fig">
@@ -116,7 +116,7 @@
     <p class="sh-meta"><span class="chip">(.)</span><span class="chip">filter odd</span><span class="chip">map (*2)</span><span class="chip">sum</span></p>
   </header>
   <div class="col a-left">
-    <p class="prose a-lead">部分適用で作った部品は、出力を次の部品の入力につなげられる。つないだものも 1 つの関数で、途中の値に名前を付けず、書き換える変数も置かずに手順を書ける。</p>
+    <p class="prose a-lead">部分適用などで作った部品は、出力を次の部品の入力につなげられる。つないだものも 1 つの関数で、途中の値に名前を付けず、書き換える変数も置かずに手順を書ける。</p>
     <div class="narr-slot a-panel"></div>
     <div class="prose a-after">
       <p class="note">JavaScript の配列の filter と map は、仕様どおり途中の配列 [3,1] と [6,2] を作ってから次へ渡す。要素を 1 つずつ流して途中を作らない書き方は、遅延評価と Iterator の話になる（<a class="xref" href="40-lazy.html#s6">第40章 場面6</a>）。</p>
@@ -176,7 +176,7 @@
       <li>関数を数と同じように渡し、返し、しまえるとき第一級の関数と呼び、map のように関数を受け取る関数を高階関数と呼ぶ。C の関数ポインタは番地だけで、実行中に関数を作れない（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
       <li>関数の値は、コードの番地と自由変数の値を入れた環境の組（クロージャ）。Rust は捕まえた変数を欄に持つ構造体、V8 は Context を指す関数の物で表す（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
       <li>Int -&gt; Int -&gt; Int は Int -&gt; (Int -&gt; Int) で、引数を一部だけ渡す部分適用で部品を作れる。カリー化は関数の形を変えることで、別の語（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
-      <li>合成 f . g は、型の合う部品を、途中の名前も書き換える変数も無しにつなぐ。rustc -O と GHC -O2 は、つないだ全体を 1 つのループにした（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>合成 f . g は、型の合う部品を、途中の名前も書き換える変数も無しにつなぐ。rustc -O は全体を 1 つのループに、GHC -O2 は 1 つの再帰にまとめた（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
       <li>リストの 2 つの形に沿った再帰を 1 つにまとめたのが foldr で、: を f に、[] を z に置き換える。有限のリストなら、f が止まる限り止まる（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
       <li>最後が呼び出しだけなら枠を使い回せ、機械語では先頭へ戻るループになる。繰り返しの状態は累積引数に移り、保証は言語ごとに違う（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
     </ol>
@@ -188,7 +188,7 @@
         <tr><th>高階関数</th><td>関数を受け取るか返す関数。map・filter・foldr・(.)。</td></tr>
         <tr><th><i class="sw d"></i>クロージャ・環境</th><td>関数の値を、コードの番地と、自由変数の値を入れた環境の組で表したもの（Landin、1964 年）。Rust で i32 を 1 つ move すると 4 バイト。</td></tr>
         <tr><th>字句的スコープ</th><td>関数の中の名前を、定義した場所の環境で探す決まり。呼び出した側で探す決まり（第36章の saba）は動的スコープ。</td></tr>
-        <tr><th>カリー化</th><td>組を受け取る関数を、引数を 1 つずつ受け取る関数の連なりに変えること。curry・uncurry。考えは Schönfinkel（1924 年）、名は Curry から。</td></tr>
+        <tr><th>カリー化</th><td>組を受け取る関数を、引数を 1 つずつ受け取る関数の連なりに変えること。curry・uncurry。考えは Frege（1893 年）・Schönfinkel（1924 年）、名は Curry にちなむ。</td></tr>
         <tr><th>部分適用</th><td>引数の一部だけを渡し、残りを待つ関数を得ること。add 3 :: Int -&gt; Int。</td></tr>
         <tr><th>関数合成</th><td>(f . g) x = f (g x)。g の出力の型と f の入力の型が同じときだけつながる。</td></tr>
         <tr><th>畳み込み（fold）</th><td>リストの : を f に、[] を z に置き換えて 1 つの値にする高階関数。foldr (+) 0 [3,2,1] ＝ 6。</td></tr>
@@ -650,7 +650,7 @@
       codeCol(P[4], 40, 332, 430, [['CreateFunctionContext [0], [1]', 'Context を作る'], ['PushContext r0', ''], ['Ldar a0', '引数 n'], ['StaCurrentContextSlot [2]', 'n を欄 2 へ書く', 1], ['CreateClosure [1], [0], #2', 'inner の関数の物を作る', 1], ['Return', '']], { lh: 17, cls: 't-xs t-mono', nx: 250 });
       S.text(490, 326, 'inner', { cls: 't-xs t-b' }, P[4]);
       codeCol(P[4], 490, 332, 430, [['LdaImmutableCurrentContextSlot [2]', 'n を欄 2 から読む', 1], ['Add a0, [0]', 'x（a0）を足す'], ['Return', '']], { lh: 17, cls: 't-xs t-mono', nx: 270 });
-      S.text(490, 428, 'Context の欄 0・1 は V8 が使い、変数は欄 2 から入る（と読める）', { cls: 't-xs t-mid' }, P[4]);
+      S.text(490, 428, '欄 0・1 は ScopeInfo と外側の Context（V8 の contexts.h）。n は欄 2', { cls: 't-xs t-mid' }, P[4]);
       head(P[4], 40, 466, '%DebugPrint', '--allow-natives-syntax。番地は実行ごとに変わる');
       [['add3', '0x16a8d20f53c9 <SharedFunctionInfo inner>', '0x3f84920ec1d1 <FunctionContext[3]>'],
        ['add5', '0x16a8d20f53c9 <SharedFunctionInfo inner>', '0x3f84920ec239 <FunctionContext[3]>']].forEach(([a, b, c], j) => {
@@ -841,7 +841,7 @@
       S.text(400, 516, 'NOINLINE を外すと two は + $fNumInt sat sat になった（addN を展開した形）', { cls: 't-xs t-mid' }, P[3]);
 
       // ---- 段階5: 部分適用で部品を作る
-      head(P[4], 40, 214, '部分適用で作った部品');
+      head(P[4], 40, 214, '部分適用などで作った部品');
       codeCol(P[4], 40, 226, 400, [['odds :: [Int] -> [Int]', ''], ['odds = filter odd', '奇数を残す'], ['doubles :: [Int] -> [Int]', ''], ['doubles = map (*2)', '2 倍にする'], ['total :: [Int] -> Int', ''], ['total = sum', '足す']], { lh: 26, cls: 't-md t-mono', nx: 260 });
       [['odds', '[Int]', '[Int]'], ['doubles', '[Int]', '[Int]'], ['total', '[Int]', 'Int']].forEach(([f, a, b], j) => {
         const y = 250 + j * 66;
@@ -1016,7 +1016,7 @@
       S.lines(40, 528, ['前に 4 要素ずつの SIMD のループが付く。for で書いた版も同じ本体になった'], { cls: 't-xs t-mid' }, P[4], 16);
       head(P[4], 510, 238, 'GHC の Core', 'ghc -O2 -ddump-simpl。空白を詰めた');
       codeCol(P[4], 510, 250, 410, [
-        ['$wgo1 = \\ ds ww ->', ''], ['  case ds of {', ''], ['    [] -> I# ww;', '終わりなら合計'], [': y ys -> case y of { I# ipv ->', ''],
+        ['$wgo1 = \\ ds ww ->', ''], ['  case ds of {', ''], ['    [] -> I# ww;', '終わりなら合計'], ['    : y ys -> case y of { I# ipv ->', ''],
         ['  case remInt# ipv 2# of {', '奇数か'], ['    __DEFAULT -> $wgo1 ys (+# ww (*# ipv 2#));', '', 1], ['    0# -> $wgo1 ys ww } } }', ''], ['pipeline = \\ x -> $wgo1 x 0#', '合計 0 から']
       ], { lh: 22, cls: 't-xs t-mono', nx: 280 });
       S.lines(510, 464, ['3 つの部品が 1 つの再帰になり、途中のリストを作らない。', 'ww が合計を持って次の呼び出しへ渡る（場面6 の累積引数）'], { cls: 't-xs t-mid' }, P[4], 17);
@@ -1089,7 +1089,7 @@
       // 段階6: 残りの長さ
       st.lens = S.g({ cls: 'fade hide' }, svg);
       [['n0', '3 個'], ['n1', '2 個'], ['n2', '1 個']].forEach(([k, s]) => S.text(T5[k][0] + 24, T5[k][1] - 14, s, { cls: 't-xs t-b t-x' }, st.lens));
-      S.text(T5.nil[0], T5.nil[1] + 34, '0 個', { cls: 't-c t-xs t-b t-x' }, st.lens);
+      S.text(T5.nil[0] + 30, T5.nil[1] + 5, '0 個', { cls: 't-xs t-b t-x' }, st.lens);
       // ---- 上の右: 式
       S.text(560, 56, '[3,2,1]', { cls: 't-lg t-mono t-b' }, svg);
       S.text(560, 86, '＝ 3 : (2 : (1 : []))', { cls: 't-md t-mono pre' }, svg);
@@ -1202,8 +1202,9 @@
 
   /* ================================================================
      場面6 末尾呼び出し
-     Node.js 24.22.1（V8 13.6、--stack-size の既定 984）で 'use strict' のファイルを node で走らせ、sumTo(9649) は 46556425、
-     sumTo(9650) は RangeError、go(0, 8960) は 40145280、go(0, 8961) は RangeError。node -e で走らせると sumTo(9649) も落ちた。
+     Node.js 24.22.1（V8 13.6、--stack-size の既定 984）で 'use strict' のファイルを node で走らせ、sumTo(9000) は 40504500、
+     sumTo(10000) と go(0, 10000) は RangeError。境は作成者の実測で sumTo 9650・go 8961、確認者の実測で sumTo 9651（9650 は通った）・go 8961。
+     node -e で走らせると sumTo(9649) も落ちた。1 つのファイルで繰り返し二分探索すると sumTo は 10937 まで通った（2026-11-23 確認）。
      gcc 15.2.0 -S -masm=intel -fno-asynchronous-unwind-tables -fcf-protection=none の go（long）: -O0 は call go、-O2 は
      .L11: add rax, rsi / sub rsi, 1 / jne .L11。末尾でない sum_to も -O2 では同じ 3 命令のループになった。
      __attribute__((musttail)) を付けると -O0 でも jmp go、sum_to に付けると「error: cannot tail-call: return value must be a call」。
@@ -1218,10 +1219,10 @@
   const s6 = {
     steps: [
       { title: '枠が積もる', text: '`sumTo 3` は sumTo 2 を呼び、返ってきた答えに 3 を足す。足し算が呼び出しの後に残るので、呼ぶたびに枠を積んで n を覚えておく。sumTo 3 は 4 枚、sumTo n は n ＋ 1 枚の枠を使う（[[27-algorithm.html#s5.5|第27章 場面5]]のスタック）。' },
-      { title: '深い再帰はスタックを使い切る', text: 'スタックの大きさには上限がある。Node.js 24.22.1 の既定の設定では、`sumTo(9650)` が RangeError で落ちた。深さ 1 万に届かない。枠の大きさは関数の形で変わるので、落ちる深さも関数ごとに違う。' },
+      { title: '深い再帰はスタックを使い切る', text: 'スタックの大きさには上限がある。Node.js 24.22.1 の既定の設定では、`sumTo(9000)` は通り、`sumTo(10000)` は RangeError で落ちた。境は 9,650 前後。枠の大きさは関数の形や JIT の最適化で変わるので、落ちる深さは関数と走らせ方で違う。' },
       { title: '最後が呼び出しだけなら', text: '`go acc n = if n == 0 then acc else go (acc + n) (n - 1)` は、呼んだ後に何もしない（**末尾呼び出し**）。枠の値はもう要らないので、枠を使い回して引数を入れ替えればよい。途中の和は**累積引数** acc に入り、acc と n は第6章の sum と n と同じ列をたどる。' },
       { title: '機械語では飛び越し', text: 'gcc 15.2 の -O0 では go は自分を `call` し、呼ぶたびに枠を積んだ。-O2 では `add`・`sub`・`jne` の 3 命令のループで、[[06-cpu.html#s4.3|第6章 場面4]]の ADD・SUB・JNZ と同じ形。GHC 9.6.7 の -O2 も同じ形にした。rustc -O はループも消し、和を式で求めた。' },
-      { title: '保証は言語ごとに違う', text: 'Scheme（R7RS）は末尾呼び出しで枠を増やさないことを処理系に求め、ECMAScript 2015 も仕様にしたが、Node.js 24 は `go(0, 8961)` で落ちた。C と Rust は最適化しだいで、gcc 15 は `musttail` で強制でき、Rust の `become` は安定版に無い。' },
+      { title: '保証は言語ごとに違う', text: 'Scheme（R7RS）は末尾呼び出しで枠を増やさないことを処理系に求め、ECMAScript 2015 も仕様にしたが、Node.js 24 は `go(0, 10000)` で落ちた。C と Rust は最適化しだいで、gcc 15 は `musttail` で強制でき、Rust の `become` は安定版に無い。' },
       { title: '章の答え', text: '関数を値にすると、map・filter・foldr・合成のように、手順の骨組みそのものが部品になる。機械の上では、関数の値はコードの番地と環境の組で、環境をヒープに置けば割り当ての費用がかかる。繰り返しで書き換えていた状態（sum と n）は引数（acc と n）に移り、末尾呼び出しなら機械語のループに戻る。' }
     ],
     setup(ctx) {
@@ -1279,14 +1280,14 @@
       // ---- 段階2: Node.js で深く呼ぶ
       head(P[1], 40, 300, 'Node.js で深く呼ぶ', 'ファイルに書いて node で走らせた（Node.js 24.22.1）');
       codeCol(P[1], 40, 312, 880, [["'use strict';", ''], ['function sumTo(n) { return n === 0 ? 0 : n + sumTo(n - 1); }', '']], { lh: 24, cls: 't-md t-mono' });
-      [['sumTo(9649)', '46556425', 0], ['sumTo(9650)', 'RangeError: Maximum call stack size exceeded', 1]].forEach(([a, b, hl], j) => {
+      [['sumTo(9000)', '40504500', 0], ['sumTo(10000)', 'RangeError: Maximum call stack size exceeded', 1]].forEach(([a, b, hl], j) => {
         const y = 410 + j * 32;
         if (hl) S.rect(40, y - 20, 880, 28, { rx: 4, cls: 'f-x-soft s-none' }, P[1]);
         S.text(52, y, a, { cls: 't-md t-mono t-b' }, P[1]);
         S.text(220, y, b, { cls: 't-md t-mono pre' + (hl ? ' t-x t-b' : ' t-d t-b') }, P[1]);
       });
       S.text(40, 496, 'V8 の既定のスタックは 984 KB（node --v8-options の --stack-size）', { cls: 't-sm t-mid' }, P[1]);
-      S.text(40, 520, '同じ関数でも node -e で走らせると sumTo(9649) で落ちた。段数は走らせ方でも変わる', { cls: 't-sm t-mid' }, P[1]);
+      S.text(40, 520, '境は 9,650 前後で、確かめた環境ごとに 1 つずれた。node -e では 9,649 で落ち、繰り返し呼んで最適化された後は 1 万を超えた', { cls: 't-sm t-mid' }, P[1]);
 
       // ---- 段階3: go の簡約
       head(P[2], 40, 300, 'go 0 3 の簡約', '式の長さが変わらない');
@@ -1313,12 +1314,12 @@
       S.text(500, 326, '手元で見たこと', { cls: 't-xs t-dim' }, P[4]);
       S.line(40, 334, 920, 334, { cls: 's-rule w1' }, P[4]);
       [['Scheme', 'R7RS（2013 年）3.5 節が処理系に求める', '手元に処理系は無い'],
-       ['JavaScript', 'ECMAScript 2015 が strict mode で決めた', 'Node.js 24 は go(0, 8961) で RangeError'],
+       ['JavaScript', 'ECMAScript 2015 が strict mode で決めた', 'Node.js 24 は go(0, 10000) で RangeError'],
        ['', 'WebKit の JavaScriptCore は実装した（2016 年の記事）', ''],
        ['C（gcc 15.2）', '最適化しだい。musttail で強制できる', '-O0 でも jmp go。sum_to には誤り'],
        ['', '', 'cannot tail-call: return value must be a call'],
        ['Rust（rustc 1.95）', '最適化しだい', 'become は E0658（実験中）'],
-       ['Haskell（GHC 9.6.7）', '末尾呼び出しは枠を積まずに飛ぶ（GHC の作り）', '-O0 でも go は jmp で先頭へ戻った']].forEach(([a, b, c], j) => {
+       ['Haskell（GHC 9.6.7）', '言語の定めは無い。GHC は末尾呼び出しを jmp にする', '-O0 でも go は jmp で先頭へ戻った']].forEach(([a, b, c], j) => {
         const y = 358 + j * 26;
         if (a && j) S.line(40, y - 18, 920, y - 18, { cls: 's-soft w1' }, P[4]);
         S.text(40, y, a, { cls: 't-sm t-b' }, P[4]);
@@ -1330,7 +1331,7 @@
       // ---- 段階6: 章の答え
       head(P[5], 40, 300, 'この章の答え');
       [['手順の骨組みが部品になる', ['map・filter・foldr・(.) は', '関数を受け取る関数', '（場面1・4・5）']],
-       ['関数の値はコードと環境の組', ['番地と、自由変数の値の組', '作るたびに割り当て', '（場面2・3）']],
+       ['関数の値はコードと環境の組', ['番地と、自由変数の値の組', 'ヒープに置けば割り当て', '（場面2・3）']],
        ['繰り返しの状態は引数へ', ['sum と n は acc と n に', '末尾呼び出しならループ', '（場面6）']]].forEach(([t, ls], j) => {
         const x = 40 + j * 300;
         S.rect(x, 316, 280, 150, { rx: 8, cls: j === 2 ? 'f-x-soft s-x w15' : 'f-sf s-d w15' }, P[5]);

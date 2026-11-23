@@ -119,7 +119,7 @@
     <p class="prose a-lead">状態を書き換えずに扱うには、いまの状態を引数で受け取り、新しい状態を戻り値で返せばよい。第6章 場面4 の sum の列 0 → 3 → 5 → 6 をこの形で書き、受け渡しを State の &gt;&gt;= に任せる。</p>
     <div class="narr-slot a-panel"></div>
     <div class="prose a-after">
-      <p class="note">seq の無い add では、状態は足し算のサンクの鎖として渡る。n ＝ 100 万で最大の常駐量は 38,551,800 バイト（seq 付きは 44,328 バイト。GHC 9.6.7 -O2 の +RTS -s）。State も遅延評価の代償（<a class="xref" href="40-lazy.html#s5">第40章 場面5</a>）を免れない。</p>
+      <p class="note">seq の無い add では、-O2 でも sumS は状態をサンクの鎖で渡す。別のモジュールから n ＝ 10⁶ で呼ぶと最大の常駐量は 38,551,800 バイト（seq 付きは 44,328。+RTS -s）。<a class="xref" href="40-lazy.html#s5">第40章 場面5</a>の代償は State にも出る。</p>
     </div>
   </div>
   <figure class="anim-fig a-fig">
@@ -274,7 +274,7 @@
      ================================================================ */
   const s1 = {
     steps: [
-      { title: '純粋な関数', text: '純粋な関数は、同じ引数には同じ値を返し、値を返すほかに何もしない。`add3 2` はいつ何回呼んでも 5 で、式 `add3 2` をどこでも 5 に置き換えられる（参照透過性。[[37-lambda.html#s1|第37章 場面1]]）。Haskell で型が `Int -> Int` の関数は、unsafe の付く関数を使わない限り、状態の読み書きも入出力もしない。' },
+      { title: '純粋な関数', text: '純粋な関数は、同じ引数には同じ値を返し、値を返すほかに何もしない。式 `add3 2` はどこでも 5 に置き換えられる（参照透過性。[[37-lambda.html#s1|第37章 場面1]]）。Haskell で型が `Int -> Int` の関数は、`unsafePerformIO` などの抜け道（trace も使う）を除けば、状態の読み書きも入出力もしない。' },
       { title: '呼ぶたびに違う値', text: 'JavaScript の `next = () => ++counter` は、呼ぶたびに 1、2、3 を返す。関数の外の変数 counter を読んで書き換えるからで、tsc 7.0.2 が推した型 `() => number` にそれは出ない。式 `next()` は 1 つの値に置き換えられない。' },
       { title: '作用 — 型に出ない 3 つ', text: '引数から戻り値を決める以外のことを**作用**（副作用）と呼ぶ。状態の読み書き、外の世界との入出力（時計を読む `Date.now()` も入力）、失敗。Haskell の `div` は、Int での型が `Int -> Int -> Int` のまま `div 6 0` で例外を投げる。どれも型からは見えない。' },
       { title: '作用を戻り値の型に出す', text: '方針は、作用を戻り値の型に書くこと。失敗するかもしれない Int は `Maybe Int`（場面2）、状態 s を使う計算は `s -> (a, s)`（場面4）、入出力をする計算は `IO a`（場面5）。関数は純粋なままで、型を見れば何が起こりうるかが分かる。型を作る型（[[41-inference.html#s6|第41章 場面6]]）が作用の名前になる。' },
@@ -667,9 +667,9 @@
       { title: '3 つの部品', text: 'モナドは、型を作る型 M（種は `* -> *`。[[41-inference.html#s6|第41章 場面6]]）と 2 つの演算の組。`return :: a -> M a` は作用の無い計算を作り、`>>=` は計算の結果を次の計算につなぐ。Maybe では return が `Just`。GHC の型クラス Monad では、return の既定の定義が `pure`。' },
       { title: '左単位と右単位', text: '則 1（左単位）: `return a >>= f` ＝ `f a`。`return 6 >>= divBy 3` も `divBy 3 6` も `Just 2`。則 2（右単位）: `m >>= return` ＝ `m`。m が `Just 6` でも `Nothing` でも成り立つ。return は前後どちらにつないでも何もしない。' },
       { title: '結合', text: '則 3（結合）: `(m >>= f) >>= g` ＝ `m >>= (\\x -> f x >>= g)`。m を `Just 6`、f と g を divBy 3 と divBy 2 にすると両辺とも `Just 1`、f を divBy 0 にすると両辺とも `Nothing`。括弧の位置を変えても結果は同じ。' },
-      { title: '則は合成の則', text: '`a -> M b` の形の関数どうしをつなぐ `>=>`（Control.Monad）で書くと、則は「return を前後に挟んでも変わらない」「括弧の付け方によらない」になる。普通の関数の合成 `.` と id の則（[[38-closure.html#s4|第38章 場面4]]）と同じ形で、作用のある関数も括弧を気にせずに部品として組める。' },
+      { title: '則は合成の則', text: '`a -> M b` の関数どうしをつなぐ `>=>`（Control.Monad）で書くと、則は「return を前後に挟んでも変わらない」「括弧の付け方によらない」になる。普通の関数の合成 `.`（[[38-closure.html#s4|第38章 場面4]]）と id も同じ形の 2 つの則を満たす（図の表）。則があるので、作用のある関数も括弧を気にせず部品にできる。' },
       { title: 'do 記法', text: '`do` は `>>=` の書き方の 1 つで、`do { x <- m; f x }` は `m >>= \\x -> f x` と同じ。`a <- divBy 3 n` は「divBy 3 n の結果を a と名付けて続ける」と読む。代入文の並びに見えるが、中身は `>>=` の連鎖で、Nothing が出た行から先は計算されない。' },
-      { title: '則は約束', text: '則はコンパイラが確かめない。return が 1 を数える `Count` は則 1 を破るが、GHC 9.6.7 は -Wall でも警告を出さなかった。Monad には Applicative の instance も要る。Applicative は、前の結果を見ずに作用を並べる、Monad より弱い形。' }
+      { title: '則は約束', text: '則はコンパイラが確かめない（Functor も同じ。[[41-inference.html#s6.4|第41章 場面6]]）。return が 1 を数える `Count` は則 1 を破るが、GHC 9.6.7 は -Wall でもこの instance を咎めなかった。Monad の上位の Applicative は、前の結果を見ずに作用を並べる、Monad より弱い形。' }
     ],
     setup(ctx) {
       const svg = ctx.svg, st = ctx.state;
@@ -727,7 +727,7 @@
       // 段階4: >=> と関数の合成
       code(P[2], 52, 380, ['(>=>) :: Monad m => (a -> m b) -> (b -> m c) -> a -> m c'], 20, 't-mono t-sm t-b');
       S.text(520, 380, '← Control.Monad', { cls: 't-sm t-mid' }, P[2]);
-      table(P[2], 40, 408, 880, [52, 220, 560], ['', '普通の関数の合成（第38章 場面4）', 'a -> M b の形の関数の合成'], [
+      table(P[2], 40, 408, 880, [52, 220, 560], ['', '普通の関数の合成（. の定義は第38章 場面4）', 'a -> M b の形の関数の合成'], [
         ['何もしない部品', 'id', 'return'],
         ['f の後に g', 'g . f', 'f >=> g'],
         ['単位の則', 'id . f ＝ f ＝ f . id', 'return >=> f ＝ f ＝ f >=> return'],
@@ -797,7 +797,9 @@
      sumS_$s$wsumS の形になった。go は第38章の if の形（$wgo、束縛の名前は wild）。
      機械語（-ddump-asm）はどちらも addq %rsi,%r14 / decq %rsi / testq %rsi,%rsi / jne のループで、
      sumS にはヒープの残りを確かめる 4 命令（addq $-16,%r12 など）が加わる。
-     seq の無い add の sumS 1000000 は、+RTS -s で最大の常駐量 38,551,800 バイト（seq 付きは 44,328 バイト）
+     wrong は型の注釈付きで -Wall を通した（注釈が無いと -Wmissing-signatures も出る）。
+     seq の無い add の sumS 1000000 は、sumS を別のモジュールに置いて main から呼ぶと、+RTS -s で最大の常駐量 38,551,800 バイト
+     （seq 付きは 44,328 バイト）。main と同じモジュールに置くと、-O2 が呼ぶ所で特殊化して正格にし、どちらも 44,328 バイトになる（仕上げ確認で再測）
      ================================================================ */
   const SX = [80, 320, 540, 760], FX = [140, 380, 600];   // 状態の値の札の中央、関数の箱の左端（幅 120）
   const SV = [0, 3, 5, 6];
@@ -856,16 +858,16 @@
       S.text(52, 422, 'ghci> manual 0', { cls: 't-mono t-md pre' }, P[1]);
       S.text(200, 422, '→ ((),6)', { cls: 't-mono t-md t-b t-d' }, P[1]);
       // 段階3
-      const wc = code(P[2], 52, 280, ['wrong s0 =', '  let ((), s1) = addS 3 s0', '      ((), s2) = addS 2 s1', '      ((), s3) = addS 1 s1', '  in ((), s3)'], 21, 't-mono t-md');
-      wc[3].setAttribute('class', 't-mono t-md t-b t-x pre');
-      S.text(330, 343, '← s2 のはずが s1', { cls: 't-sm t-b t-x' }, P[2]);
-      S.text(52, 400, 'ghci> wrong 0', { cls: 't-mono t-md pre' }, P[2]);
-      S.text(200, 400, '→ ((),4)', { cls: 't-mono t-md t-b t-x' }, P[2]);
-      S.text(52, 436, 'ghc -Wall の出力（ファイルの位置は省いた）', { cls: 't-xs t-dim' }, P[2]);
+      const wc = code(P[2], 52, 280, ['wrong :: Int -> ((), Int)', 'wrong s0 =', '  let ((), s1) = addS 3 s0', '      ((), s2) = addS 2 s1', '      ((), s3) = addS 1 s1', '  in ((), s3)'], 21, 't-mono t-md');
+      wc[4].setAttribute('class', 't-mono t-md t-b t-x pre');
+      S.text(330, 364, '← s2 のはずが s1', { cls: 't-sm t-b t-x' }, P[2]);
+      S.text(52, 418, 'ghci> wrong 0', { cls: 't-mono t-md pre' }, P[2]);
+      S.text(200, 418, '→ ((),4)', { cls: 't-mono t-md t-b t-x' }, P[2]);
+      S.text(52, 450, 'ghc -Wall の出力（ファイルの位置は省いた）', { cls: 't-xs t-dim' }, P[2]);
       const wb = S.g({}, P[2]);
-      S.rect(52, 446, 560, 52, { rx: 5, cls: 'f-sf s-mid w1' }, wb);
-      S.text(64, 467, 'warning: [-Wunused-local-binds]', { cls: 't-mono t-sm t-b pre' }, wb);
-      S.text(64, 487, '    Defined but not used: ‘s2’', { cls: 't-mono t-sm pre' }, wb);
+      S.rect(52, 460, 560, 52, { rx: 5, cls: 'f-sf s-mid w1' }, wb);
+      S.text(64, 481, 'warning: [-Wunused-local-binds]', { cls: 't-mono t-sm t-b pre' }, wb);
+      S.text(64, 501, '    Defined but not used: ‘s2’', { cls: 't-mono t-sm pre' }, wb);
       // 段階4
       code(P[3], 52, 280, ['newtype State s a = State (s -> (a, s))', 'runState :: State s a -> s -> (a, s)', 'runState (State g) = g'], 21, 't-mono t-md');
       code(P[3], 52, 360, ['instance Monad (State s) where', '  State g >>= f = State (\\s -> case g s of', '                               (a, s1) -> runState (f a) s1)'], 21, 't-mono t-md');
@@ -940,7 +942,7 @@
      getLine ++ "!" の誤りは ghci の出力（[GHC-83865]）。:i IO は GHC.Exts を読み込んだ ghci の出力
      （読み込まないと GHC.Prim.State# GHC.Prim.RealWorld と長い名前で出る）。
      Core は main = getLine >>= putStrLn を ghc -ddump-simpl（-dsuppress-idinfo -dsuppress-coercions -dsuppress-module-prefixes
-     -dsuppress-uniques -dsuppress-type-applications。-O0 は -dsuppress-coercions なし）で出したもの。-O2 の版は、
+     -dsuppress-uniques -dsuppress-type-applications。-O0 は -dsuppress-module-prefixes と -dsuppress-coercions なし）で出したもの。-O2 の版は、
      wantReadableHandle_1 の引数の改行を詰め、cast の部分を (…) にした。機械語（-O2 -ddump-asm）の main1 は
      wantReadableHandle_1 に r14・rsi・rdi の 3 つ（hGetLine3・stdin・hGetLine2）だけを渡して飛ぶ。STG（-ddump-stg-final）では印が void# になる。
      State# の説明は GHC 9.6.7 の GHC.Prim の文書（It is represented by nothing at all.）。
@@ -1129,7 +1131,7 @@
   const s6 = {
     steps: [
       { title: 'リスト — 答えが複数ある計算', text: 'リストもモナドで、return x は `[x]`、`xs >>= f` は要素ごとに f を当てて結果をつなぐ。`[1,2] >>= \\x -> [x, x*10]` は `[1,10,2,20]`。答えの数だけ道が分かれ、空のリストを返した道は消える。Rust の `flat_map` も同じ列を返した。' },
-      { title: 'Rust — まとめる名前の無い同じ形', text: 'Rust の `Option::and_then`・`Result::and_then`・`Iterator::flat_map` は `>>=` の形。M を型の変数にできない（[[41-inference.html#s6|第41章 場面6]]）ので、std にこれらをまとめるトレイトは無い。async の中の `.await?` は、do と同じく文の並びで書く。' },
+      { title: 'Rust — まとめる名前の無い同じ形', text: 'Rust の `Option::and_then`・`Result::and_then`・`Iterator::flat_map` は `>>=` の形。Rust では M を型の変数にできず（[[41-inference.html#s6|第41章 場面6]]）、std にもこれらをまとめるトレイトは無い。async の中の `.await?` は、do と同じく文の並びで書く。' },
       { title: 'Promise の then', text: 'JavaScript の `then` は map と `>>=` を兼ね、返した値が Promise なら平らにする。そのため a が Promise だと、則 1 の両辺 `Promise.resolve(a).then(f)` と `f(a)` が違う値になった。async／await は then の連鎖を文で書く形。' },
       { title: '作用を重ねる — 変換子', text: '失敗と状態を一緒に使うには、モナドを重ねる変換子を使う。割った回数を状態に数えながら 0 で割ると、`StateT Int Maybe` は状態ごと Nothing になり、`MaybeT (State Int)` は失敗しても回数 2 が残った。重ねる順で意味が変わり、作用が増えるたびに組み方を選ぶ。' },
       { title: '別の道 — 代数的エフェクト', text: '代数的エフェクトとハンドラ（Plotkin と Pretnar、2009 年）では、計算は「状態を読む」「失敗する」などの操作を呼ぶだけで、意味は外側のハンドラが決め、その順もハンドラを置く側が選ぶ。OCaml 5.0（2022 年）や Koka が持ち、GHC 9.6 は土台の限定継続を RTS に入れた。' },
@@ -1191,7 +1193,7 @@
       S.text(420, 378, '← f は Promise そのものを受け取る', { cls: 't-sm t-x' }, P[2]);
       S.text(52, 424, '則 1（return a >>= f ＝ f a）の両辺が、a が Promise のときに食い違う', { cls: 't-sm t-b t-x' }, P[2]);
       S.text(52, 450, 'a ＝ 6、f ＝ x => Promise.resolve(x / 3) なら両辺とも 2。then のこの動きで、Promise は厳密にはモナドの則を満たさない', { cls: 't-sm t-mid' }, P[2]);
-      S.text(52, 490, 'Node.js 24.22.1 で確かめた', { cls: 't-xs t-dim' }, P[2]);
+      S.text(52, 490, 'Node.js 24.22.1 で確かめた（→ の右は、できた Promise が解決した値）', { cls: 't-xs t-dim' }, P[2]);
       // 段階4: 変換子
       code(P[3], 52, 268, [
         'stepA :: Int -> Int -> StateT Int Maybe Int',
@@ -1227,7 +1229,7 @@
       S.text(446, 306, '操作', { cls: 't-c t-xs t-b t-x' }, P[4]);
       S.text(446, 352, '続きを再開', { cls: 't-c t-xs t-b t-d' }, P[4]);
       S.text(52, 462, 'A を外に置くか B を外に置くかは、ハンドラを置く側が決める（計算の側は変えない）', { cls: 't-sm t-mid' }, P[4]);
-      S.text(52, 488, 'OCaml 5.0（2022 年 12 月）は標準ライブラリの Effect モジュールで、Koka は言語の機能として持つ', { cls: 't-sm t-mid' }, P[4]);
+      S.text(52, 488, 'OCaml 5.0（2022 年 12 月）は標準ライブラリの Effect（unstable の警告付き）で、Koka は言語の機能として持つ', { cls: 't-sm t-mid' }, P[4]);
       S.text(52, 512, 'GHC 9.6.1 は限定継続の primop（prompt#・control0#）を入れた。base に安全な API は無く、ライブラリが使う', { cls: 't-sm t-mid' }, P[4]);
       // 段階6: 答え
       table(P[5], 40, 266, 880, [52, 330, 760], ['第37章で言語から外したもの', 'モナドで戻ってくる形', '場面'], [

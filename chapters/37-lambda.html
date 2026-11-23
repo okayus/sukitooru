@@ -508,7 +508,7 @@
         const T = st.E[1].T;
         st.rtMark = find(S1E[1], 'sumTo 2');
         S.text(T.end + 16, EY(1), '＝ 3 + 3', { cls: 't-md t-mono t-b t-x pre' }, st.gRT);
-        S.text(T.end + 16, EY(1) + 18, 'sumTo 2 は、いつ計算しても 3', { cls: 't-xs t-x t-b' }, st.gRT);
+        S.text(T.end + 16, EY(1) - 20, 'sumTo 2 は、いつ計算しても 3', { cls: 't-xs t-x t-b' }, st.gRT);
         S.text(290, RY(22) + 20, 'sum は 0・3・5・6', { cls: 't-c t-xs t-x t-b' }, st.gRT);
       }
       // 段階5: Backus の分け方
@@ -1234,7 +1234,7 @@
       { title: '不動点コンビネータ Y', text: '`Y = λf. (λx. f (x x)) (λx. f (x x))`。`Y G` は 1 歩で W になり、W は 1 歩で `G W` になる。W は簡約のたびに G を 1 枚外へ出し、自分の写しを G に渡す。`Y G` と `G (Y G)` はどちらも `G W` に簡約されるので等しく、Y G が G の不動点になる。' },
       { title: 'Y で sumTo を書く', text: 'W に 3 を渡すと、G が n == 0 を調べ、3 ＋ W 2 を作る。W は要るたびに G を出すので、n が 0 になるまで続いて 6 に着く。列の形は [[1|状態か、式か]] の sumTo 3 と同じ。引数を先に計算する JavaScript で Y を書くと、x(x) を先に呼び続けてスタックがあふれる。' },
       { title: 'λ で計算できること', text: 'Church は 1936 年、実際に計算できる正の整数の関数を、λ で定義できる関数と定めることを提案した。Turing は 1937 年、λ で定義できる関数とチューリング機械で計算できる関数が一致することを示した。第6章の CPU が計算できることは、3 つの形と β簡約で書ける。' },
-      { title: 'Haskell の記法', text: 'Haskell は λx. M を `\\x -> M`、適用を `f x` と書く。`f x = …` の形の定義は名前を付けた λ で、本体で自分の名前を使える（再帰）。標準の `fix` は Y と同じ役をする関数。Y そのものは Haskell では型が付かない（[[41-inference.html#s2|第41章 場面2]]）。' },
+      { title: 'Haskell の記法', text: 'Haskell は λx. M を `\\x -> M`、適用を `f x` と書く。`f x = …` の形の定義は名前を付けた λ で、本体で自分の名前を使える（再帰）。標準の `fix` は Y と同じ役をする関数。Y そのものは Haskell では型が付かない（[[41-inference.html#s2.4|第41章 場面2]]）。' },
       { title: '章の答えと、第X部の道', text: '関数型が立つのは、状態の書き換えではなく、式の置き換えという計算のモデル。実際の関数型言語は、これに、関数を値として機械で扱う仕組み・変えないデータ・評価の時期・型・作用の扱いを足したもので、第38〜43章で 1 つずつ見る。機械は第6章の状態機械のままで、差はコンパイラとランタイムが埋める。' }
     ],
     setup(ctx) {
@@ -1275,7 +1275,7 @@
       });
       st.U.forEach((o, k) => { if (k >= 2) o.T.paint(0, 1, 't-b t-d'); if (k >= 3) o.T.paint(3, 4, 't-b t-d'); if (k >= 4) o.T.paint(6, 7, 't-b t-d'); });
       S.text(560, 230, 'W は G を 1 枚ずつ外へ出す。', { cls: 't-sm' }, P[1]);
-      S.text(560, 252, '中の W は、G がそれを使うときだけ開く。', { cls: 't-sm' }, P[1]);
+      S.text(560, 252, '正規順序なら、中の W は G が使うときに開く。', { cls: 't-sm' }, P[1]);
       S.text(560, 316, 'Y G も G (Y G) も G W に簡約される', { cls: 't-sm t-b' }, P[1]);
       S.text(560, 338, '→ 2 つは等しい。Y G は G の不動点', { cls: 't-sm t-b' }, P[1]);
 
@@ -1332,7 +1332,7 @@
       code(P[4], 52, 306, ['ghci> sumTo 3', '6', 'ghci> fix (\\s n -> if n == 0 then 0 else n + s (n - 1)) 3', '6', 'ghci> :t fix', 'fix :: (a -> a) -> a'], 18.5, 't-mono t-md');
       S.text(500, 343, '← s が sumTo 自身に当たる', { cls: 't-xs t-mid' }, P[4]);
       S.text(52, 448, 'fix は関数を受け取り、その不動点を返す関数。Y を Haskell でそのまま書くと、型検査が x x を拒む。', { cls: 't-sm' }, P[4]);
-      xlink(P[4], 52, 476, '41-inference.html#s2', '第41章 場面2（型の付かない項）');
+      xlink(P[4], 52, 476, '41-inference.html#s2.4', '第41章 場面2（自分を含む型）');
 
       /* 段階6: 第X部の道 */
       S.rect(40, 150, 270, 150, { rx: 10, cls: 'f-sf s-fg w2' }, P[5]);
