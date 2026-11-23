@@ -672,7 +672,7 @@ function walkScene(n, s, k, fig) {
     <div class="narr-slot a-panel"></div>${after}
   </div>
   <figure class="anim-fig a-fig">
-    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を列に並べ、このノートの表の行が触れる層を行の順に線でたどる図"></svg></div>
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 25 の層を列に並べ、このノートの表の行が触れる層を行の順に線でたどる図"></svg></div>
     <figcaption>図${fig || 1}　濃い札がこのノートの層、札の右の数字が表の行。<span class="nw-fit">x の枠がいまの行の層で、線は前の行の層から伸びる。</span><span class="nw-phone">線は行の順に層をたどる。</span>破線は「教材に無い」行（枠は近い層）。<span class="nw-fit">↓ の札で章の場面を開く。</span></figcaption>
   </figure>
   <div class="nw-wtbl a-tbl">${render([w.table], n.refs, { drill: true })}</div>
@@ -727,7 +727,7 @@ function graphScene(k, what) {
   </header>
   <div class="nwg-side a-left"></div>
   <figure class="nwg-fig anim-fig a-fig">
-    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 24 の層を、計算機の中・通信・配信と動画・横断の列に並べ、層ごとのノートの数と、選んだノートの層を線で結んだ図"></svg></div>
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="教材の 25 の層を、計算機の中・通信・配信と動画・横断の列に並べ、層ごとのノートの数と、選んだノートの層を線で結んだ図"></svg></div>
     <figcaption>図1　列の中は、下ほど電子に近い層。x の枠が選んだノートの層で、線は中心の層（塗った札）から引く。下の破線の札は、そのノートが挙げた教材に無い概念。</figcaption>
   </figure>
 </section>`

@@ -26,22 +26,47 @@
   var S = YT.svg, U = YT.util;
   /* 層の札の位置（viewBox 960×560）。列の間（110px 余り）に線と掘り下げの札を通す */
   var COLX = { pc: 16, net: 362, media: 708 }, BW = 220, BH = 27, TOP = 40, RH = 33;
-  var CROSS = ['pc', 'net', 'media'];   // 横断の層は、row の順に 3 つの列の下へ置く
+  /* 横断の層は、row の順に下の段へ左から並べる（4 つ。札の間 36px に掘り下げの印を置く） */
+  var CROSS_X = [16, 257, 498, 739], CROSS_W = 205;
   var CROSS_Y = 474, MISS_Y = 528;
   /* 通信の列の、札の無い帯（y の中心）。計算機の中と配信と動画を結ぶ線は、この帯を横切る */
   var BANDS = [52, 284, 419];
+  /* 横断の札から列の札へ向かう線が通る所: 列の札の下の帯（y）と、列の間の隙間（x） */
+  var UNDER_Y = 446, GAP = { pcnet: 299, netmedia: 645 };
   var DAY = 86400000;
 
   /* 層 x の札の位置 */
   function boxOf(x) {
-    if (x.col === 'cross') return { x: COLX[CROSS[x.row]], y: CROSS_Y, w: BW, h: BH, col: CROSS[x.row] };
+    if (x.col === 'cross') return { x: CROSS_X[x.row], y: CROSS_Y, w: CROSS_W, h: BH, col: 'cross' };
     return { x: COLX[x.col], y: TOP + (11 - x.row) * RH, w: BW, h: BH, col: x.col };
+  }
+  /* 横断の札 c から列の札 k への線。c の上の辺（隙間の真下か、隙間に近い端から 24px。左端の札の上の段の見出しを避ける）から
+     列の札の下の帯へ出て、列の間の隙間を上り、k の横の辺に入る */
+  function crossRoute(c, k) {
+    var mid = c.x + c.w / 2, ky = k.y + k.h / 2;
+    var gx = k.col === 'pc' ? GAP.pcnet : k.col === 'media' ? GAP.netmedia : (mid < COLX.net + BW / 2 ? GAP.pcnet : GAP.netmedia);
+    var cx = Math.max(c.x + 24, Math.min(c.x + c.w - 24, gx));
+    var kx = gx < k.x ? k.x : k.x + k.w, d = gx < k.x ? 1 : -1;
+    return 'M' + cx + ',' + c.y + ' C' + cx + ',' + UNDER_Y + ' ' + gx + ',' + UNDER_Y + ' ' + gx + ',' + (UNDER_Y - 24) +
+      ' L' + gx + ',' + (ky + 12) + ' Q' + gx + ',' + ky + ' ' + (gx + d * 12) + ',' + ky + ' L' + kx + ',' + ky;
+  }
+  /* 線が b の側から始まるか（層の歩きで、線を伸ばす向きを逆にする） */
+  function revOf(a, b) {
+    if (a.col === 'cross' || b.col === 'cross') return a.col !== 'cross' && b.col === 'cross';
+    return a.col !== b.col && a.x > b.x;
   }
   /* 2 つの札を結ぶ線。札の上は通らない。
      同じ列: 列の右の隙間へ膨らませる（右端の列だけ左へ）。札の右の掘り下げの印（中心が札から 16px）より外まで膨らませ、
      隣り合う札の間の短い線も印に隠れないようにする。隣の列: 列の間の隙間で曲げる。
-     計算機の中と配信と動画: 通信の列の札の無い帯（BANDS のうち近い方）を横切る */
+     計算機の中と配信と動画: 通信の列の札の無い帯（BANDS のうち近い方）を横切る。
+     横断どうし: 札の上へ浅く膨らませる（向き合う端から 24px。左端の札の上の見出しを避ける）。横断と列: crossRoute（線は横断の札から始まる。向きは revOf） */
   function route(a, b) {
+    if (a.col === 'cross' && b.col === 'cross') {
+      var p = b.x > a.x ? a.x + a.w - 24 : a.x + 24, q = b.x > a.x ? b.x + 24 : b.x + b.w - 24;
+      return 'M' + p + ',' + CROSS_Y + ' C' + p + ',' + (CROSS_Y - 16) + ' ' + q + ',' + (CROSS_Y - 16) + ' ' + q + ',' + CROSS_Y;
+    }
+    if (a.col === 'cross') return crossRoute(a, b);
+    if (b.col === 'cross') return crossRoute(b, a);
     var ay = a.y + a.h / 2, by = b.y + b.h / 2;
     if (a.col === b.col) {
       var d = a.col === 'media' ? -1 : 1;
@@ -290,7 +315,7 @@
     /* 札の文字: 番号と並べて収まらなければ短い名前 */
     function nameFor(x) {
       var ks = seenIn[x.id] || [];
-      return !ks.length || textW(x.name) + numsW(ks) + 32 <= BW ? x.name : L.label(x.id);
+      return !ks.length || textW(x.name) + numsW(ks) + 32 <= boxOf(x).w ? x.name : L.label(x.id);
     }
     /* 番号を tspan で並べる。cur（0 始まり。-1 なら無し）の番号だけ x の太字 */
     function putNums(t, ks, cur) {
@@ -336,9 +361,14 @@
           var id = ids.filter(function (k) { return !used[k]; })[0] || ids[0];
           used[id] = 1;
           var o = st.box[id], k = n[id] = (n[id] || 0) + 1, bx = o.b;
-          var x0 = bx.x + bx.w + 16 + (k - 1) * 28;
-          if (x0 > 960 - 15) x0 = bx.x - 16 - (k - 2) * 28;
-          YT.drill.mark(o.rect, { to: x.to, label: L.label(id), bridge: bridge(i), steps: [i + 1], at: [x0, bx.y + bx.h / 2] });
+          var x0 = bx.x + bx.w + 16 + (k - 1) * 28, y0 = bx.y + bx.h / 2;
+          if (bx.col === 'cross') {
+            /* 横断の札の間は 36px で印 1 つ分。右の隙間に置けない分（右端の札と 2 つめから）は、札の上の辺に右から並べる */
+            var gap = bx.x + bx.w + 18 < 960 - 15 ? 1 : 0;
+            if (k <= gap) x0 = bx.x + bx.w + 18;
+            else { x0 = bx.x + bx.w - 16 - (k - 1 - gap) * 28; y0 = bx.y - 15; }
+          } else if (x0 > 960 - 15) x0 = bx.x - 16 - (k - 2) * 28;
+          YT.drill.mark(o.rect, { to: x.to, label: L.label(id), bridge: bridge(i), steps: [i + 1], at: [x0, y0] });
         });
       });
 
@@ -383,7 +413,7 @@
         hs.forEach(function (h) {
           var a = boxOf(L.byId[h.from]), b = boxOf(L.byId[h.to]), d = route(a, b);
           // route は列が違うと左の札から引くので、前の行の層が右にあれば線の終わりの側から伸ばす
-          if (i === cur) st.grow.push({ p: S.path(d, h.near ? { cls: 'f-none s-x w2 round dash' } : { cls: 'f-none s-x w2 round', pathLength: 1 }, st.gHop), near: h.near, rev: a.col !== b.col && a.x > b.x });
+          if (i === cur) st.grow.push({ p: S.path(d, h.near ? { cls: 'f-none s-x w2 round dash' } : { cls: 'f-none s-x w2 round', pathLength: 1 }, st.gHop), near: h.near, rev: revOf(a, b) });
           else S.path(d, { cls: 'f-none s-mid w15 round' + (h.near ? ' dash' : '') }, st.gTrail);
         });
       });

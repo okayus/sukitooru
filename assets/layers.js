@@ -1,7 +1,7 @@
 /* ============================================================
    層の登録簿 (assets/layers.js)
 
-   教材の層（24 個）、層の上下（down: その層が使う下の層）、全章の場面がどの層か、を手で書く正本。
+   教材の層（25 個）、層の上下（down: その層が使う下の層）、全章の場面がどの層か、を手で書く正本。
    ニュースのタグとグラフ（tools/build-news.mjs・assets/news-graph.js）と、章の札（engine.js）が読む。
    設計は docs/layers-plan.md §4。直したら node tools/layercheck.mjs で、全場面が層を持つか確かめる。
 
@@ -46,7 +46,8 @@
       { id: 'streaming', name: 'ストリーミング', col: 'media', row: 10, home: '24-streaming.html', down: ['http', 'codec'] },
       { id: 'type', name: '型とメモリ', col: 'cross', row: 0, home: '26-kata.html', down: ['kioku', 'cpu'] },
       { id: 'algo', name: 'データ構造とアルゴリズム', short: 'データ構造', col: 'cross', row: 1, home: '27-algorithm.html', down: ['kioku'] },
-      { id: 'compiler', name: 'コンパイラ', col: 'cross', row: 2, home: '28-compiler.html', down: ['cpu', 'type'] }
+      { id: 'compiler', name: 'コンパイラ', col: 'cross', row: 2, home: '28-compiler.html', down: ['cpu', 'type'] },
+      { id: 'fp', name: '関数型', col: 'cross', row: 3, home: '37-lambda.html', down: ['runtime', 'type', 'algo', 'compiler'] }
     ],
     chapters: {
       1: ['denshi'], 2: ['handoutai'], 3: ['transistor'], 4: ['ronri'], 5: ['kioku'], 6: ['cpu'], 7: ['io'], 8: ['display'],
@@ -54,7 +55,7 @@
       17: ['http'], 18: ['ip'], 19: ['transport'], 20: ['tls'], 21: ['http'], 22: ['delivery'], 23: ['codec'], 24: ['streaming'],
       25: ['streaming'], 26: ['type'], 27: ['algo'], 28: ['compiler'], 29: ['type'], 30: ['os'],
       31: ['browser', 'http'], 32: ['browser'], 33: ['browser'], 34: ['browser'], 35: ['browser'], 36: ['runtime'],
-      37: ['runtime'], 38: ['runtime'], 39: ['algo'], 40: ['runtime'], 41: ['type', 'compiler'], 42: ['type', 'runtime'], 43: ['type']
+      37: ['fp', 'runtime'], 38: ['fp', 'runtime'], 39: ['fp', 'algo'], 40: ['fp', 'runtime'], 41: ['fp', 'type', 'compiler'], 42: ['fp', 'type', 'runtime'], 43: ['fp', 'type']
     },
     // 第11章（層モデル）・第25章（通しで見る）・第30章（エミュレータの外側）は、場面ごとに扱う層へ振り分ける
     scenes: {
@@ -76,10 +77,10 @@
       '30-2': ['cpu', 'os'], '30-3': ['io'], '30-4': ['display'], '30-5': ['display'], '30-6': ['os', 'io'],
       '31-1': ['browser'], '31-2': ['browser'],
       '36-5': ['runtime', 'browser'], '36-6': ['runtime', 'browser'],
-      // 第X部（関数型）は新しい層を立てず、言語処理系・データ構造・型・コンパイラに振り分ける
-      '38-2': ['runtime', 'type'], '38-6': ['runtime', 'compiler', 'cpu'],
-      '39-5': ['runtime'], '39-6': ['algo', 'os'],
-      '41-4': ['type'], '41-6': ['type']
+      // 第X部は層「関数型」を先頭に置き、扱う下の層（言語処理系・データ構造・型・コンパイラ）を後ろに残す
+      '38-2': ['fp', 'runtime', 'type'], '38-6': ['fp', 'runtime', 'compiler', 'cpu'],
+      '39-5': ['fp', 'runtime'], '39-6': ['fp', 'algo', 'os'],
+      '41-4': ['fp', 'type'], '41-6': ['fp', 'type']
     }
   };
 
