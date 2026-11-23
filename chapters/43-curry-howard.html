@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>カリー＝ハワード対応 — YouTubeが見えるまで</title>
+<meta name="description" content="型検査の規則と、論理の証明の規則は、同じ形をしている。型を命題、その型の式を証明と読むと、型検査は証明の検査になり、評価は証明の回り道を取り除く操作になる。">
+<meta property="og:title" content="カリー＝ハワード対応 — YouTubeが見えるまで">
+<meta property="og:description" content="型検査の規則と、論理の証明の規則は、同じ形をしている。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第X部 関数型 ／ 第43章 ／ 全43章</p>
+    <h1 id="h-s0">カリー＝ハワード対応</h1>
+    <p class="standfirst">型検査の規則と、論理の証明の規則は、同じ形をしている。型を命題、その型の式（プログラム）を証明と読むと、型検査は証明の検査になり、式の評価は証明の回り道を取り除く操作になる。この対応を GHC の型検査で確かめ、依存型と証明支援系まで進む。最後に、第X部の問い「関数型は計算機の何に立ち向かうのか」に答える。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>同じ形の規則</a><p>論理の規則と型の規則を並べ、項を消すと同じ形になることを見る。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>論理と型</a><p>かつ・または・ならばを、組・Either・関数で書き、GHC の型検査に通す。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>偽と否定</a><p>偽は Void、否定は a -&gt; Void。排中律の項は書けない。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>評価は証明の整理</a><p>証明の回り道を消す操作が、β簡約と同じになる。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>依存型</a><p>値についての「すべて」「ある」。長さを型に持つ列と証明支援系。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>どこまで信じられるか</a><p>論理としての Haskell の穴、型が証明すること、第X部の答え。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。教材の終わり。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードと出力は GHC 9.6.7（x86-64 の Linux）で 2026 年 11 月に動かして確かめた。Lean のコードは手元では動かしていない。出力は版と設定で変わる。文献は原典の年を添えた: Curry「Functionality in combinatory logic」（1934 年）、Gentzen「Untersuchungen über das logische Schließen」（1935 年）、Prawitz『Natural Deduction』（1965 年）、Howard「The formulae-as-types notion of construction」（1969 年の原稿、1980 年に出版）、Griffin「A formulae-as-types notion of control」（1990 年）。図は模式図。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 同じ形の規則 ================= -->
+<section class="scene sc-anim" id="s1" data-tab="同じ形" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>同じ形の規則 — 型は命題、プログラムは証明</h2>
+    <p class="sh-meta"><span class="chip">→除去</span><span class="chip">適用</span><span class="chip">→導入</span><span class="chip">λ抽象</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">第42章は、作用を戻り値の型に出し、型を見れば何が起こりうるかが分かるようにした。この章は、型そのものが論理の命題として読めることを見る。まず、論理の推論規則と型検査の規則を並べる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">記号の読み: → ならば、∧ かつ、∨ または、¬ でない、⊥ 偽、∀ すべての、∃ ある。場面1〜4 の論理は自然演繹の命題論理で、場面5 で ∀・∃ を足す。Haskell の型変数 a・b は、図の命題 A・B に当たる。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="論理の推論規則と型の規則を左右に並べた図。型の規則から項を消すと論理の規則と同じ形になる"></svg></div>
+    <figcaption>図1　上は論理の規則（左）と型の規則（右）。下は段階ごとの証明の木と GHC 9.6.7 の ghci の出力。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 論理と型 ================= -->
+<section class="scene sc-anim" id="s2" data-tab="論理と型" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>「かつ」「または」「ならば」はデータ型</h2>
+    <p class="sh-meta"><span class="chip">(a, b)</span><span class="chip">Either a b</span><span class="chip">a -&gt; b</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">場面1 の対応は「ならば」だけだった。論理には「かつ」「または」もあり、それぞれに当たる型は第29章で数えた直積と直和である。命題を証明することは、その型の値を作るプログラムを書くことになる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">ghci が表示する型変数の名前（p・t1 など）は ghci が付けたもの。名前を付け替えても同じ型で（α変換。<a class="xref" href="37-lambda.html#s2.4">第37章 場面2</a>）、同じ命題を表す。表の (x, y) の x・y は、それぞれ A・B の証明。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="論理の結合子（かつ・または・ならば）と型（組・Either・関数）の対応表と、命題の証明を書いたコード"></svg></div>
+    <figcaption>図2　上は論理の結合子と型の対応。下は段階ごとの証明の木と、GHC 9.6.7 の型検査を通したコードと出力。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 偽と否定 ================= -->
+<section class="scene sc-anim" id="s3" data-tab="否定" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>偽と否定 — 直観主義論理</h2>
+    <p class="sh-meta"><span class="chip">Void</span><span class="chip">absurd</span><span class="chip">a -&gt; Void</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">場面2 の表には「でない」が無かった。否定を型にするには、まず「偽」に当たる型が要る。ここで、型として読める論理が、普通の数学で使う古典論理と違う所が出てくる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">古典論理にも計算としての読みがある。Griffin は 1990 年に、制御の演算子 call/cc に Peirce の法則 ((A → B) → A) → A の型が付くことを示した。図3 の段階5 の callCC も、ContT を消すと同じ形をしている。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="直観主義論理で書ける命題と書けない命題の型の一覧と、排中律を書こうとしたときの GHC の型付きの穴の出力"></svg></div>
+    <figcaption>図3　上は書ける命題（左）と書けない命題（右）の型。下は段階ごとのコードと GHC 9.6.7 の出力（誤りの文は抜粋）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 評価は証明の整理 ================= -->
+<section class="scene sc-anim" id="s4" data-tab="正規化" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>評価は証明の整理 — 回り道を消す</h2>
+    <p class="sh-meta"><span class="chip">fst (a, b)</span><span class="chip">β簡約</span><span class="chip">正規形</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">場面1〜3 は、型を命題、項を証明として読んだ。では、項を評価することは、証明の側では何に当たるか。第37章の β簡約を、証明の木の上でたどる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">正規化の証明を最初に出版したのは Prawitz（1965 年）。Gentzen は 1935 年の論文で自然演繹を導入し、同じ論文で、別の体系（シーケント計算）の回り道を消す定理（カット除去）を示した。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="導入してすぐ除去する回り道のある証明の木と、回り道を消した証明の木。項の簡約と同じ"></svg></div>
+    <figcaption>図4　上は回り道のある証明（強調した線が回り道の規則）と、消した後の証明。下は段階ごとの GHC 9.6.7 の ghci の出力。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 依存型 ================= -->
+<section class="scene sc-anim" id="s5" data-tab="依存型" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>「すべて」「ある」と依存型</h2>
+    <p class="sh-meta"><span class="chip">forall</span><span class="chip">Π・Σ</span><span class="chip">Vec n a</span><span class="chip">証明支援系</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">場面1〜4 の論理には「すべての」「ある」が無かった。値についての命題、たとえば「どの自然数 n でも n + 0 = n」を型にするには、型が値に依存できなければならない。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">図5 の Lean のコードは Lean 4 の文法で書いたが、手元では動かしていない。GHC の Vec の長さは型の段の Nat で、値の段の数とは別物なので、本物の依存型ではない（実行時の値から型の長さを作るには、さらに工夫が要る）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="すべて・あると型の対応表と、長さを型に持つ列、証明支援系の一覧"></svg></div>
+    <figcaption>図5　上は「すべて」「ある」と型の対応。下は段階ごとのコード（GHC 9.6.7 で確かめたものと、手元では動かしていない Lean 4 のもの）と出力。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 どこまで信じられるか ================= -->
+<section class="scene sc-anim" id="s6" data-tab="答え" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>どこまで信じられるか — 第X部の答え</h2>
+    <p class="sh-meta"><span class="chip">undefined</span><span class="chip">全域性</span><span class="chip">第37〜43章</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">型検査が証明の検査なら、型の付いたプログラムはどこまで信じられるか。Haskell の論理としての穴と、それを塞ぐ証明支援系の代償を見て、最後に第X部の問いに答える。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">第X部の答えは、関数型を命令型より上に置くものではない。Rust は所有と借用で書き換えを残し、別名と書き換えを同時には許さない（<a class="xref" href="39-immutable.html#s1">第39章 場面1</a>）。コンパイラの中間表現 SSA も、値を 1 回だけ決める形を使う。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="第37〜43章の道具と、書き換えと順序の扱いの表。Haskell の論理の穴、全域性、機械の上での費用"></svg></div>
+    <figcaption>図6　上は第X部の 7 章の道具と答え。下は段階ごとのコードと出力（GHC 9.6.7）と表。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — 型は命題、型検査は証明検査</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>論理の推論規則と型の規則は同じ形で、型の規則から項を消すと論理の規則になる。命題は型、証明は項、仮定は変数、含意の除去は適用、導入は λ抽象に当たる（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>A ∧ B は組 (a, b)、A ∨ B は Either a b、A → B は関数。命題を証明することは、その型の止まる項を書くことで、GHC の型検査がその証明を検査する（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>偽は値の無い型 Void、否定 ¬A は a -&gt; Void。排中律と二重否定の除去には項が無く、型として読める論理は直観主義論理になる（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>導入してすぐ除去する回り道を消す操作が、β簡約と場合分けの簡約に当たる。評価は証明の正規化で、閉じた Either の項は Left か Right まで評価できる（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>値についての「すべて」「ある」は依存型の Π 型と Σ 型。長さを型に持つ列は範囲外を実行の前に防ぎ、証明支援系は依存型で書いた証明を検査する（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>止まらない項を許す Haskell は論理として穴があり、証明支援系は全域性を検査する。関数型は書き換えできる状態と順序に立ち向かい、機械との差は処理系が埋める（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th>カリー＝ハワード対応</th><td>命題と型、証明とプログラム、証明の正規化と評価の対応。Curry（1934 年）と Howard（1969 年の原稿、1980 年に出版）。</td></tr>
+        <tr><th>自然演繹</th><td>結合子ごとの導入と除去の規則で、証明を木に組む論理の体系。Gentzen（1935 年）。</td></tr>
+        <tr><th>含意（→）</th><td>「ならば」。導入は λ抽象、除去は関数の適用に当たる。型では関数の型 a -&gt; b。</td></tr>
+        <tr><th>連言と直積</th><td>A ∧ B（かつ）は組の型 (a, b)。導入は組を作ること、除去は fst・snd。</td></tr>
+        <tr><th>選言と直和</th><td>A ∨ B（または）は Either a b。証明はどちらの側かの印を持ち、除去は場合分け（either）。</td></tr>
+        <tr><th>空の型（Void）</th><td>値が 1 つも無い型で、偽 ⊥ に当たる。否定 ¬A は a -&gt; Void。absurd :: Void -&gt; a。</td></tr>
+        <tr><th>直観主義論理</th><td>証明を作り方として読む論理。排中律 A ∨ ¬A と二重否定の除去 ¬¬A → A を一般には認めない。</td></tr>
+        <tr><th>証明の正規化</th><td>導入してすぐ除去する回り道を消すこと。項では β簡約と場合分けの簡約。どの証明も正規形に直せる（Prawitz、1965 年）。</td></tr>
+        <tr><th>依存型</th><td>値に依存する型。Π 型（関数）が「すべて」、Σ 型（値と証明の組）が「ある」に当たる。</td></tr>
+        <tr><th>証明支援系と全域性</th><td>依存型で書いた証明を機械が検査する言語（Rocq・Agda・Lean・Idris など）。全域性は、どの入力でも止まり、場合分けに漏れが無いこと。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <p class="note">この章で教材は終わり。第X部が土台にした型の話は<a href="26-kata.html">第26章</a>・<a href="28-compiler.html">第28章</a>・<a href="29-imi.html">第29章</a>にある。<a href="../index.html">目次</a>の地図から気になる層へ戻るか、<a href="01-denshi.html">第1章</a>から通して読み直せる。</p>
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg;
+
+  /* ---------- この章で使う部品（第42章の部品に、証明の木を足した） ---------- */
+
+  /* 濃さ（fade の付いた要素は 0.35 秒かけて変わる） */
+  const op = (el, v) => { el.style.opacity = v; };
+  /* 動きを止めているときは、段階の動きの終わりの姿を見せる */
+  const playing = () => YT.motion.playing;
+  /* 文字の幅の見積もり（等幅は 0.6 em、全角は 1 em）。札の幅を書体の読み込みに左右されずに決める */
+  const tw = (s, fs, mono) => Array.from(String(s)).reduce((a, c) => a + (c.charCodeAt(0) > 0x2000 ? fs : fs * (mono ? 0.6 : 0.58)), 0);
+  /* 等幅の行の並び（空白を詰めない）。文字の要素の配列を返す */
+  function code(parent, x, y, lines, lh, cls) {
+    return lines.map((s, k) => S.text(x, y + k * lh, s, { cls: (cls || 't-mono t-sm') + ' pre' }, parent));
+  }
+  /* 誤りの札（GHC の出力）。1 行目が見出し */
+  function errBox(parent, x, y, w, lines, lh) {
+    const g = S.g({}, parent);
+    lh = lh || 18;
+    S.rect(x, y, w, 14 + lines.length * lh, { rx: 5, cls: 'f-sf s-x w15' }, g);
+    S.rect(x, y, w, 14 + lines.length * lh, { rx: 5, cls: 'f-x-soft s-none' }, g);
+    lines.forEach((s, k) => S.text(x + 12, y + 22 + k * lh, s, { cls: 't-sm t-mono pre' + (k ? '' : ' t-b t-x') }, g));
+    return g;
+  }
+  /* 表（列の左端 xs、行の高さ lh）。見出しの行を薄く、区切りの線を引く。行ごとの { bg, ts } を返す */
+  function table(parent, x0, y0, w, xs, head, rows, lh, cls) {
+    xs.forEach((x, j) => S.text(x, y0, head[j], { cls: 't-xs t-dim' }, parent));
+    S.line(x0, y0 + 8, x0 + w, y0 + 8, { cls: 's-rule w1' }, parent);
+    return rows.map((row, k) => {
+      const y = y0 + 8 + (k + 1) * lh - lh * 0.32;
+      const bg = S.rect(x0, y - lh * 0.66, w, lh - 4, { rx: 4, cls: 'f-none' }, parent);
+      const ts = row.map((s, j) => S.text(xs[j], y, s, { cls: ((cls && cls[j]) || 't-sm') + ' pre' }, parent));
+      return { bg, ts };
+    });
+  }
+  /* 段階ごとの下の板の区切り */
+  const sep = (svg, y) => S.line(30, y, 930, y, { cls: 's-rule w1' }, svg);
+
+  /* 項と型を分けて書いた式（中央 x）。item は文字列（全部が型・命題）か、[文字, 't'（項）| 'y'（型）] の並び。
+     項の部分は d の色の tspan にし、terms に集める（場面1 で項を消すため） */
+  const FS = 12.5;
+  function formula(parent, x, y, item, cls) {
+    const segs = typeof item === 'string' ? [[item, 'y']] : item;
+    const t = S.text(x, y, '', { cls: 't-c ' + (cls || 't-mono t-md') + ' pre' }, parent);
+    const terms = [];
+    segs.forEach(([s, k]) => {
+      const sp = S.el('tspan', { text: s, cls: k === 't' ? 't-d t-b' : null }, t);
+      if (k === 't') terms.push(sp);
+    });
+    return { t, terms, w: segs.reduce((a, [s]) => a + tw(s, FS, true), 0) };
+  }
+  /* 推論規則 1 つ（横線の上に前提、下に結論）。前提は y、横線は y + 12、結論は y + 34。
+     o.xs で前提の x を決められる（null の前提は描かず、下の段の結論がそこにある印。幅は o.nw）。
+     名前は横線の右。{ g, terms, x1, x2, cx, cy } を返す（cx・cy は結論の位置） */
+  function rule(parent, cx, y, prem, concl, name, o) {
+    o = o || {};
+    const g = S.g({}, parent), gap = o.gap || 34;
+    const ws = prem.map((p) => (p === null ? (o.nw || 14) : formula(g, 0, -999, p).w));
+    // 幅を測るためだけに作った文字を消す
+    S.clear(g);
+    const total = ws.reduce((a, b) => a + b, 0) + gap * (prem.length - 1);
+    let xs = o.xs;
+    if (!xs) { let x = cx - total / 2; xs = ws.map((w) => { const c = x + w / 2; x += w + gap; return c; }); }
+    const terms = [];
+    let x1 = Infinity, x2 = -Infinity;
+    prem.forEach((p, k) => {
+      x1 = Math.min(x1, xs[k] - ws[k] / 2); x2 = Math.max(x2, xs[k] + ws[k] / 2);
+      if (p === null) return;
+      terms.push(...formula(g, xs[k], y, p, o.cls).terms);
+    });
+    const ccx = o.xs ? (x1 + x2) / 2 : cx;
+    const c = formula(g, ccx, y + 34, concl, o.cls);
+    x1 = Math.min(x1, ccx - c.w / 2) - 8; x2 = Math.max(x2, ccx + c.w / 2) + 8;
+    terms.push(...c.terms);
+    S.line(x1, y + 12, x2, y + 12, { cls: o.lcls || 's-fg w15' }, g);
+    if (name) S.text(x2 + 6, y + 16, name, { cls: o.ncls || 't-xs t-mid' }, g);
+    return { g, terms, x1, x2, cx: ccx, cy: y + 34 };
+  }
+  /* 動かす札（原点が中央）。at で置く */
+  function chip(parent, s, o) {
+    o = o || {};
+    const w = o.w || tw(s, FS, true) + 18;
+    const g = S.g({}, parent);
+    S.rect(-w / 2, -12, w, 24, { rx: 5, cls: o.box || 'f-sf s-d w15' }, g);
+    S.text(0, 4.5, s, { cls: 't-c t-mono t-b t-md ' + (o.cls || 't-d') }, g);
+    return { g, at(x, y) { g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`); return this; } };
+  }
+  /* 項の濃さ（tspan は opacity が効かないので fill-opacity で） */
+  const termOp = (terms, v) => terms.forEach((sp) => { sp.style.fillOpacity = v; });
+
+  /* ================================================================
+     場面1 同じ形の規則
+     出力は GHC 9.6.7 の ghci: :t \f g x -> g (f x) は (t1 -> t2) -> (t2 -> t3) -> t1 -> t3、
+     :t \x -> x は p -> p（ghci が λ の型変数に付ける名前は p・t1 など）
+     ================================================================ */
+  const s1 = {
+    steps: [
+      { title: '論理の規則：含意の除去', text: '論理記号 → は「ならば」と読む。自然演繹（Gentzen、1935 年）は、証明を推論規則の木で書く。横線の上が前提、下が結論。**含意の除去**は「A → B と A から B」を導く規則で、図1 の下の木は、これを 2 回使って A → B・B → C・A から C を導く。' },
+      { title: '型の規則：関数の適用', text: '関数の適用の型の規則は「f : A → B と x : A から f x : B」（[[41-inference.html#s1.2|第41章 場面1]] の等式の元）。下の木は、f と g を続けて当てる式 `g (f x)` の型を、葉から根へ決める。ghci の答えの t1・t2・t3 が A・B・C に当たる。' },
+      { title: '項を消すと同じ形', text: '型の規則から項（f、x、f x）を消すと、残る型の並びは含意の除去と同じになる。逆に、証明の木の節に項を付ければ、木から式が 1 つ決まる。型の付いた式は、その型を結論とする証明の木を、式の形に畳んで書いたものと読める。' },
+      { title: '仮定は変数：含意の導入', text: '**含意の導入**は「A を仮定して B を導けたら、仮定を閉じて A → B」。印 ¹ は、どの規則が仮定を閉じたかを示す。型では、変数 x : A を仮定して本体 M : B を作り、λ で x を束縛して `λx. M : A → B`。仮定を閉じることが、変数を束縛すること。' },
+      { title: '対応の表', text: '命題は型、証明は項（プログラム）、仮定は変数、含意の除去は適用、導入は λ抽象に当たる。Curry が組合せ論理で 1934 年に気付き、Howard が自然演繹について 1969 年の原稿（1980 年に出版）に書いた。表の最後の行は[[4|評価は証明の整理]]で見る。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      // 上: 論理の規則（左）と型の規則（右）
+      S.text(240, 26, '論理の規則（自然演繹）', { cls: 't-c t-sm t-dim' }, svg);
+      S.text(700, 26, '型の規則（型検査）', { cls: 't-c t-sm t-dim' }, svg);
+      // 段階で色を付ける下地（左右 × 上下）
+      st.hl = [
+        S.rect(110, 52, 260, 84, { rx: 8, cls: 'f-none' }, svg), S.rect(550, 52, 300, 84, { rx: 8, cls: 'f-none' }, svg),
+        S.rect(110, 142, 260, 116, { rx: 8, cls: 'f-none' }, svg), S.rect(550, 142, 300, 116, { rx: 8, cls: 'f-none' }, svg)
+      ];
+      // 含意の除去と適用
+      rule(svg, 240, 78, ['A → B', 'A'], 'B', '→除去');
+      const rA = rule(svg, 700, 78, [[['f', 't'], [' : A → B', 'y']], [['x', 't'], [' : A', 'y']]], [['f x', 't'], [' : B', 'y']], '適用');
+      // 含意の導入と λ抽象
+      S.text(240, 160, '[A]¹', { cls: 't-c t-mono t-md' }, svg);
+      S.text(240, 180, '⋮', { cls: 't-c t-md' }, svg);
+      rule(svg, 240, 198, ['B'], 'A → B', '→導入¹');
+      const top = formula(svg, 700, 160, [['[', 'y'], ['x', 't'], [' : A]', 'y']]);
+      S.text(700, 180, '⋮', { cls: 't-c t-md' }, svg);
+      const rB = rule(svg, 700, 198, [[['M', 't'], [' : B', 'y']]], [['λx. M', 't'], [' : A → B', 'y']], 'λ抽象');
+      st.terms = rA.terms.concat(top.terms, rB.terms);
+      // 左右が同じ形だという印
+      st.eqA = S.text(460, 104, '＝', { cls: 't-c t-xl t-b t-x fade hide' }, svg);
+      st.eqB = S.text(460, 214, '＝', { cls: 't-c t-xl t-b t-x fade hide' }, svg);
+      st.eqT = S.text(460, 128, '項を消す', { cls: 't-c t-xs t-x fade hide' }, svg);
+
+      // 下: 段階ごとの中身
+      sep(svg, 276);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1: 証明の木（2 段）
+      S.text(52, 302, '証明の木：A → B、B → C、A から C', { cls: 't-sm t-dim' }, P[0]);
+      const t1 = rule(P[0], 330, 350, ['A → B', 'A'], 'B', '→除去');
+      rule(P[0], 0, 384, ['B → C', null], 'C', '→除去', { xs: [190, t1.cx] });
+      S.text(560, 352, '葉：前提（A → B、B → C、A）', { cls: 't-sm' }, P[0]);
+      S.text(560, 378, '横線：規則を 1 回使う', { cls: 't-sm' }, P[0]);
+      S.text(560, 404, '根：結論 C', { cls: 't-sm' }, P[0]);
+      S.text(52, 480, '上の段の結論 B が、下の段の前提になる。木全体が「A → B、B → C、A ならば C」の証明', { cls: 't-sm t-mid' }, P[0]);
+      // 段階2: 同じ木に項を付ける
+      S.text(52, 302, '同じ木に項を付ける：式 g (f x) の型を決める', { cls: 't-sm t-dim' }, P[1]);
+      const t2 = rule(P[1], 360, 350, [[['f', 't'], [' : A → B', 'y']], [['x', 't'], [' : A', 'y']]], [['f x', 't'], [' : B', 'y']], '適用');
+      rule(P[1], 0, 384, [[['g', 't'], [' : B → C', 'y']], null], [['g (f x)', 't'], [' : C', 'y']], '適用', { xs: [180, t2.cx], nw: 70 });
+      code(P[1], 52, 470, ['ghci> :t \\f g x -> g (f x)', '\\f g x -> g (f x) :: (t1 -> t2) -> (t2 -> t3) -> t1 -> t3'], 22, 't-mono t-sm');
+      // 段階3: 項を消す
+      S.text(52, 302, '型の規則 − 項 ＝ 論理の規則', { cls: 't-sm t-dim' }, P[2]);
+      const e1 = rule(P[2], 230, 350, [[['f', 't'], [' : A → B', 'y']], [['x', 't'], [' : A', 'y']]], [['f x', 't'], [' : B', 'y']], '');
+      S.text(420, 380, '項を消す →', { cls: 't-c t-sm t-x t-b' }, P[2]);
+      rule(P[2], 640, 350, ['A → B', 'A'], 'B', '');
+      st.terms3 = e1.terms;
+      S.text(52, 450, '逆向き：証明の木の節ごとに項を付けると、根の項（式）が 1 つ決まる', { cls: 't-sm' }, P[2]);
+      S.text(52, 476, '式 ＝ 証明の木を畳んだもの、型 ＝ その木が導いた結論', { cls: 't-sm t-b' }, P[2]);
+      // 段階4: A → A の証明と \x -> x
+      S.text(52, 302, 'A → A の証明と、それに当たる式', { cls: 't-sm t-dim' }, P[3]);
+      S.text(230, 332, '[A]¹', { cls: 't-c t-mono t-md' }, P[3]);
+      rule(P[3], 230, 362, ['A'], 'A → A', '→導入¹');
+      S.text(640, 332, '[x : A]', { cls: 't-c t-mono t-md' }, P[3]);
+      rule(P[3], 640, 362, [[['x', 't'], [' : A', 'y']]], [['λx. x', 't'], [' : A → A', 'y']], 'λ抽象');
+      code(P[3], 52, 452, ['ghci> :t \\x -> x', '\\x -> x :: p -> p'], 22, 't-mono t-sm');
+      S.text(330, 474, '← p は ghci が付けた型変数の名前（命題 A に当たる）', { cls: 't-sm t-mid' }, P[3]);
+      // 段階5: 対応の表
+      st.rows5 = table(P[4], 40, 300, 880, [60, 330, 620], ['論理', 'プログラム', 'この章の場面'], [
+        ['命題', '型', '1・2'],
+        ['証明', '項（プログラム、式）', '1・2'],
+        ['仮定', '変数', '1'],
+        ['含意の除去 ／ 導入', '関数の適用 ／ λ抽象', '1'],
+        ['証明の正規化（回り道を消す）', '評価（β簡約）', '4']
+      ], 30, ['t-sm t-b', 't-sm t-b t-d', 't-sm t-mono']);
+      S.text(52, 498, 'Curry（1934 年、組合せ論理）と Howard（1969 年の原稿、自然演繹）の名から、カリー＝ハワード対応と呼ぶ', { cls: 't-sm t-mid' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      const HL = [[0], [1], [0, 1], [2, 3], []];
+      st.hl.forEach((r, k) => r.setAttribute('class', HL[i].includes(k) ? 'f-x-soft s-none' : 'f-none'));
+      S.fade(st.eqA, i === 2 || i === 4);
+      S.fade(st.eqB, i === 3 || i === 4);
+      S.fade(st.eqT, i === 2);
+      termOp(st.terms, 1);
+      termOp(st.terms3, 1);
+      st.rows5[4].ts.forEach((t) => op(t, 0.55));
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      if (i !== 2) return;
+      // 項が消えて型だけが残り、また戻る（止めているときは消えた姿）
+      const c = playing() ? U.mod(ctx.ts, 5) : 2.5;
+      const v = c < 1 ? 1 : c < 1.8 ? 1 - 0.88 * U.ease.inOut((c - 1) / 0.8) : c < 4 ? 0.12 : 0.12 + 0.88 * U.ease.inOut((c - 4) / 1);
+      termOp(st.terms, v.toFixed(2));
+      termOp(st.terms3, v.toFixed(2));
+    }
+  };
+
+  /* ================================================================
+     場面2 「かつ」「または」「ならば」はデータ型
+     GHC 9.6.7 で型検査を通した（一時置き場の Props.hs）。ghci の出力:
+     swap :: (a, b) -> (b, a)、konst :: a -> b -> a、trans :: (a -> b) -> (b -> c) -> a -> c、
+     cases :: Either a b -> (a -> c) -> (b -> c) -> c、swap (3, True) ＝ (True,3)、trans (+1) (*2) 3 ＝ 8、
+     cases (Left 3) show … ＝ "3"、cases (Right True) … ＝ "T"。
+     :t \a b -> (a, b) は a -> b -> (a, b)、:t fst は (a, b) -> a、:t Left は a -> Either a b、
+     :t either は (a -> c) -> (b -> c) -> Either a b -> c。
+     bogus :: a -> b; bogus x = x は GHC-25897（ghc -fno-code の出力）
+     ================================================================ */
+  const s2 = {
+    steps: [
+      { title: '「かつ」は組', text: '∧ は「かつ」。A ∧ B の証明は、A の証明と B の証明の両方を持つ物で、型では組 `(a, b)`（直積。[[29-imi.html#s2.1|第29章 場面2]]）。組を作るのが ∧ の導入、`fst`・`snd` で取り出すのが除去。Haskell は組の型を `(a, b)`、値を `(3, True)` と書く。' },
+      { title: '「または」は Either', text: '∨ は「または」。A ∨ B の証明は、一方の証明と、どちらの側かの印を持つ物で、型では直和 `Either a b`（[[29-imi.html#s2.3|第29章 場面2]]）。`Left`・`Right` が導入。除去は場合分けで、A から C と B から C が示せれば、どちらの側でも C が出る（`either`）。' },
+      { title: '証明を書く（1）', text: '`(A ∧ B) → (B ∧ A)` の証明は、組を受け取って入れ替える関数 `\\(a, b) -> (b, a)`。`A → (B → A)` は、1 つめを返して 2 つめを捨てる `\\a _ -> a`。注釈の型のまま GHC 9.6.7 の型検査を通る。→ は右に結合するので、ghci は括弧を省いて表示する。' },
+      { title: '証明を書く（2）', text: '`(A → B) → (B → C) → (A → C)` の証明は合成 `\\f g -> g . f`（[[38-closure.html#s4|第38章 場面4]]）。場合分けの命題 `(A ∨ B) → (A → C) → (B → C) → C` は `either` で書ける。どの証明も、具体的な型の値に当てれば、普通の関数として動く。' },
+      { title: '書けない命題', text: '`A → B` は一般には成り立たない。`bogus :: a -> b` に `bogus x = x` と書くと、GHC は a と b が合わない（GHC-25897）と拒む。a の値から b の値を作る手段が無いので、止まる項はどう書いても作れない。型に止まる項があることが、その命題が証明できること。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 上: 結合子と型の表
+      st.rows = table(svg, 40, 30, 880, [56, 250, 430, 620], ['論理（読み）', '型（Haskell）', '証明を作る（導入）', '証明を使う（除去）'], [
+        ['A ∧ B（かつ）', '(a, b)', '(x, y)', 'fst p ／ snd p'],
+        ['A ∨ B（または）', 'Either a b', 'Left x ／ Right y', 'either f g e（場合分け）'],
+        ['A → B（ならば）', 'a -> b', '\\x -> M', 'f x（適用）']
+      ], 34, ['t-sm t-b', 't-mono t-md t-b t-d', 't-mono t-sm', 't-mono t-sm']);
+
+      sep(svg, 160);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1: ∧ の導入と除去
+      S.text(52, 190, '∧ の導入', { cls: 't-sm t-dim' }, P[0]);
+      rule(P[0], 230, 236, [[['a', 't'], [' : A', 'y']], [['b', 't'], [' : B', 'y']]], [['(a, b)', 't'], [' : A ∧ B', 'y']], '∧導入');
+      S.text(520, 190, '∧ の除去', { cls: 't-sm t-dim' }, P[0]);
+      rule(P[0], 700, 236, [[['p', 't'], [' : A ∧ B', 'y']]], [['fst p', 't'], [' : A', 'y']], '∧除去');
+      code(P[0], 52, 360, ['ghci> :t \\a b -> (a, b)', '\\a b -> (a, b) :: a -> b -> (a, b)', 'ghci> :t fst', 'fst :: (a, b) -> a'], 22, 't-mono t-sm');
+      S.text(520, 382, '← 2 つの証明から組（∧ の証明）を作る', { cls: 't-sm t-mid' }, P[0]);
+      S.text(520, 426, '← 組から A の証明を取り出す', { cls: 't-sm t-mid' }, P[0]);
+      // 段階2: ∨ の導入と除去
+      S.text(52, 190, '∨ の導入', { cls: 't-sm t-dim' }, P[1]);
+      rule(P[1], 170, 236, [[['a', 't'], [' : A', 'y']]], [['Left a', 't'], [' : A ∨ B', 'y']], '∨導入');
+      S.text(420, 190, '∨ の除去（場合分け）', { cls: 't-sm t-dim' }, P[1]);
+      rule(P[1], 650, 236, [[['e', 't'], [' : A ∨ B', 'y']], [['f', 't'], [' : A → C', 'y']], [['g', 't'], [' : B → C', 'y']]], [['either f g e', 't'], [' : C', 'y']], '∨除去', { gap: 26 });
+      code(P[1], 52, 360, ['ghci> :t Left', 'Left :: a -> Either a b', 'ghci> :t either', 'either :: (a -> c) -> (b -> c) -> Either a b -> c'], 22, 't-mono t-sm');
+      S.text(52, 470, 'Left か Right かの印が、どちらの側が成り立つかを証明に残す', { cls: 't-sm t-mid' }, P[1]);
+      // 段階3: swap と konst
+      code(P[2], 52, 192, ['swap :: (a, b) -> (b, a)          -- (A ∧ B) → (B ∧ A)', 'swap = \\(a, b) -> (b, a)', '', 'konst :: a -> (b -> a)            -- A → (B → A)', 'konst = \\a _ -> a'], 20, 't-mono t-sm');
+      code(P[2], 560, 192, ['ghci> :t swap', 'swap :: (a, b) -> (b, a)', 'ghci> :t konst', 'konst :: a -> b -> a'], 20, 't-mono t-sm');
+      S.text(52, 316, 'swap に (A ∧ B) の証明を渡すと、(B ∧ A) の証明が返る', { cls: 't-sm t-dim' }, P[2]);
+      [[70, '('], [160, ','], [250, ')'], [410, '('], [500, ','], [590, ')']].forEach(([x, c]) => S.text(x, 377, c, { cls: 't-c t-mono t-lg' }, P[2]));
+      S.line(250, 372, 400, 372, { cls: 's-mid w15', 'marker-end': mk('mid') }, P[2]);
+      S.text(325, 362, 'swap', { cls: 't-c t-mono t-sm t-b' }, P[2]);
+      S.text(160, 404, '3 : Int、True : Bool', { cls: 't-c t-xs t-dim' }, P[2]);
+      st.ca = chip(P[2], '3');
+      st.cb = chip(P[2], 'True');
+      code(P[2], 52, 452, ['ghci> swap (3, True)', '(True,3)'], 20, 't-mono t-sm');
+      // 段階4: trans と cases
+      code(P[3], 52, 192, [
+        'trans :: (a -> b) -> (b -> c) -> (a -> c)      -- (A → B) → (B → C) → (A → C)',
+        'trans = \\f g -> g . f',
+        '',
+        'cases :: Either a b -> (a -> c) -> (b -> c) -> c   -- (A ∨ B) → (A → C) → (B → C) → C',
+        'cases = \\e f g -> either f g e'
+      ], 20, 't-mono t-sm');
+      code(P[3], 52, 320, [
+        'ghci> trans (+1) (*2) 3',
+        '8',
+        'ghci> cases (Left 3 :: Either Int Bool) show (\\b -> if b then "T" else "F")',
+        '"3"',
+        'ghci> cases (Right True :: Either Int Bool) show (\\b -> if b then "T" else "F")',
+        '"T"'
+      ], 20, 't-mono t-sm');
+      S.text(52, 466, '証明は値に当てれば動く関数。trans は (+1) の後に (*2)、cases は印で腕を選ぶ', { cls: 't-sm t-mid' }, P[3]);
+      // 段階5: 書けない命題
+      code(P[4], 52, 192, ['bogus :: a -> b       -- A → B', 'bogus x = x'], 20, 't-mono t-sm');
+      errBox(P[4], 52, 236, 600, [
+        'Bad.hs:3:11: error: [GHC-25897]',
+        '    • Couldn’t match expected type ‘b’ with actual type ‘a’',
+        '      ‘a’ is a rigid type variable bound by',
+        '        the type signature for:',
+        '          bogus :: forall a b. a -> b'
+      ], 20);
+      S.text(680, 266, 'a も b も呼ぶ側が決める型', { cls: 't-sm t-mid' }, P[4]);
+      S.text(680, 290, 'a の値から b の値を作る手段は無い', { cls: 't-sm t-mid' }, P[4]);
+      S.text(52, 380, 'その型に（止まる）項がある', { cls: 't-md t-b t-d' }, P[4]);
+      S.text(330, 380, '⇔', { cls: 't-c t-lg t-b' }, P[4]);
+      S.text(370, 380, 'その命題が証明できる', { cls: 't-md t-b' }, P[4]);
+      S.text(52, 420, '「止まる」の但し書きは場面6 で見る（Haskell では止まらない項がどの型にも属する）', { cls: 't-sm t-mid' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      const HL = [[0], [1], [0, 2], [1, 2], [2]];
+      st.rows.forEach((r, k) => {
+        const on = HL[i].includes(k);
+        r.bg.setAttribute('class', on ? 'f-x-soft' : 'f-none');
+        r.ts.forEach((t) => op(t, on ? '' : 0.5));
+      });
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step;
+      if (i !== 2) return;
+      // 組の 2 つの欄が入れ替わって出てくる（止めているときは入れ替わった後）
+      const c = playing() ? U.mod(ctx.ts, 5) : 5;
+      const f = U.ease.inOut(U.prog(c, 1, 1.8));
+      st.ca.at(U.lerp(118, 542, f), U.lerp(372, 372, f) - Math.sin(f * Math.PI) * 26);
+      st.cb.at(U.lerp(200, 460, f), 372 + Math.sin(f * Math.PI) * 26);
+    }
+  };
+
+  /* ================================================================
+     場面3 偽と否定
+     GHC 9.6.7: Props.hs の dni・contra・nnlem・absurd は型検査を通った。ghci の :t は
+     dni :: a -> (a -> Void) -> Void、contra :: (a -> b) -> (b -> Void) -> a -> Void、
+     nnlem :: (Either a (a -> Void) -> Void) -> Void、:i Void は「data Void」（-- Defined in ‘GHC.Base’）。
+     lem = Right (\x -> _) は「Found hole: _ :: Void」、dne k = _ は「Found hole: _ :: a」（ghc -fno-code、GHC-88464）。
+     Control.Monad.Trans.Cont（transformers 0.6.1.0）の :t callCC は
+     forall {k} a (r :: k) (m :: k -> *) b. ((a -> ContT r m b) -> ContT r m a) -> ContT r m a（forall の部分は図では省いた）
+     ================================================================ */
+  const CAN = [
+    ['absurd :: Void -> a', '⊥ → A（偽からは何でも出る）'],
+    ['dni    :: a -> ((a -> Void) -> Void)', 'A → ¬¬A（二重否定の導入）'],
+    ['contra :: (a -> b) -> ((b -> Void) -> (a -> Void))', '(A → B) → (¬B → ¬A)（対偶）'],
+    ['nnlem  :: (Either a (a -> Void) -> Void) -> Void', '¬¬(A ∨ ¬A)（排中律の二重否定）']
+  ];
+  const CANNOT = [
+    ['lem    :: Either a (a -> Void)', 'A ∨ ¬A（排中律）'],
+    ['dne    :: ((a -> Void) -> Void) -> a', '¬¬A → A（二重否定の除去）'],
+    ['peirce :: ((a -> b) -> a) -> a', '((A → B) → A) → A（Peirce の法則）']
+  ];
+  const s3 = {
+    steps: [
+      { title: '偽は値の無い型', text: '⊥（偽）は証明が 1 つも無い命題で、型では構築子が 0 個の `Void`（Data.Void）。値が無いので、Void の値を受け取る関数は場合分けの腕が 0 本で済み、どの型を返すとも言える（`absurd :: Void -> a`）。「偽からは何でも導ける」に当たる。' },
+      { title: '否定は Void への関数', text: '¬A（A でない）は `a -> Void`。A の証明を渡されたら偽の証明を返す関数で、A の証明があり得ないことを表す。二重否定の導入 `A → ¬¬A` は `\\a k -> k a`、対偶 `(A → B) → (¬B → ¬A)` は `\\f nb a -> nb (f a)` で、どちらも型検査を通る。' },
+      { title: '排中律を書こうとする', text: '排中律 A ∨ ¬A は `Either a (a -> Void)`。Left を選ぶには、どの a についても a の値が要るが、作る手段が無い。Right を選ぶと、x : a から Void を作る所が残る。型付きの穴 `_` を置いて GHC に何が要るかを問うと、答えは `Void` だった。' },
+      { title: '書けないことは定理', text: 'コンパイルが失敗しても、書けないことの証拠にはならない。排中律と二重否定の除去が直観主義論理で証明できないことは、反例のモデル（Kripke モデルなど）を作って示す定理である。一方、排中律の二重否定 ¬¬(A ∨ ¬A) は書ける（図3 の nnlem）。' },
+      { title: '証明は作り方', text: 'この論理を**直観主義論理**と呼ぶ。A ∨ B の証明はどちらが成り立つかの印を持つので、「どの n でも P(n) か ¬P(n)」の証明は、P を決める手続きになる。正規形を持つかのように、決める手続きの無い性質もある（[[37-lambda.html#s4.5|第37章 場面4]]）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      // 上: 書ける命題と書けない命題
+      S.text(52, 26, '書ける（直観主義論理で証明できる）', { cls: 't-sm t-b' }, svg);
+      S.text(552, 26, '書けない（古典論理では成り立つ）', { cls: 't-sm t-b' }, svg);
+      S.line(530, 14, 530, 214, { cls: 's-rule w1' }, svg);
+      const item = (x, y, [ty, lg], w) => {
+        const bg = S.rect(x - 10, y - 16, w, 40, { rx: 5, cls: 'f-none' }, svg);
+        const a = S.text(x, y, ty, { cls: 't-mono t-sm pre' }, svg);
+        const b = S.text(x, y + 17, lg, { cls: 't-xs t-mid' }, svg);
+        return { bg, ts: [a, b] };
+      };
+      st.can = CAN.map((r, k) => item(52, 56 + k * 44, r, 466));
+      st.cannot = CANNOT.map((r, k) => item(552, 56 + k * 44, r, 378));
+
+      sep(svg, 230);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1: Void
+      code(P[0], 52, 262, ['import Data.Void', 'ghci> :i Void', 'data Void', '  \t-- Defined in ‘GHC.Base’', 'ghci> :t absurd', 'absurd :: Void -> a'], 20, 't-mono t-sm');
+      S.text(330, 302, '← 構築子が 0 個：値が無い型（偽の証明は無い）', { cls: 't-sm t-x' }, P[0]);
+      S.text(330, 362, '← 受け取る値が無いので、どの型 a を返すとも言える', { cls: 't-sm t-x' }, P[0]);
+      S.text(52, 410, '比べる型', { cls: 't-xs t-dim' }, P[0]);
+      table(P[0], 40, 430, 600, [52, 200, 400], ['型', '値の数', '命題'], [
+        ['Void', '0', '⊥（偽）'],
+        ['()', '1', '⊤（真）'],
+        ['Bool', '2', '⊤（証明が 2 つある）']
+      ], 28, ['t-mono t-sm t-b', 't-sm', 't-sm']);
+      // 段階2: 否定
+      code(P[1], 52, 262, [
+        'dni :: a -> ((a -> Void) -> Void)                   -- A → ¬¬A',
+        'dni = \\a k -> k a',
+        '',
+        'contra :: (a -> b) -> ((b -> Void) -> (a -> Void))  -- (A → B) → (¬B → ¬A)',
+        'contra = \\f nb a -> nb (f a)'
+      ], 20, 't-mono t-sm');
+      code(P[1], 52, 392, ['ghci> :t dni', 'dni :: a -> (a -> Void) -> Void', 'ghci> :t contra', 'contra :: (a -> b) -> (b -> Void) -> a -> Void'], 20, 't-mono t-sm');
+      S.text(52, 490, '¬A ＝ a -> Void：A の証明を受け取ると、偽の証明を返す関数', { cls: 't-sm t-b' }, P[1]);
+      S.text(52, 514, 'k は ¬A の証明。a を渡せば Void が返る', { cls: 't-sm t-mid' }, P[1]);
+      // 段階3: 排中律の穴
+      code(P[2], 52, 262, ['lem :: Either a (a -> Void)', 'lem = Right (\\x -> _)'], 20, 't-mono t-sm');
+      S.text(330, 282, '← _ は型付きの穴（何が要るかを GHC に問う）', { cls: 't-sm t-mid' }, P[2]);
+      errBox(P[2], 52, 306, 560, [
+        'Lem.hs:4:20: error: [GHC-88464]',
+        '    • Found hole: _ :: Void',
+        '    • Relevant bindings include',
+        '        x :: a (bound at Lem.hs:4:15)'
+      ], 20);
+      S.text(640, 340, 'x : a から Void を作る手段が無い', { cls: 't-sm t-x' }, P[2]);
+      S.text(52, 432, 'Left の側：どの a についても a の値が要る（作れない）', { cls: 't-sm' }, P[2]);
+      S.text(52, 456, 'Right の側：a の値を受け取って Void を返す関数が要る（作れない）', { cls: 't-sm' }, P[2]);
+      // 段階4: 定理と、書ける二重否定
+      code(P[3], 52, 262, ['dne :: ((a -> Void) -> Void) -> a', 'dne k = _'], 20, 't-mono t-sm');
+      errBox(P[3], 52, 298, 560, [
+        'Dne.hs:4:9: error: [GHC-88464]',
+        '    • Found hole: _ :: a',
+        '        k :: (a -> Void) -> Void (bound at Dne.hs:4:5)'
+      ], 20);
+      S.text(640, 334, '穴は a。k に渡す ¬A も無い', { cls: 't-sm t-x' }, P[3]);
+      code(P[3], 52, 400, ['nnlem :: (Either a (a -> Void) -> Void) -> Void      -- ¬¬(A ∨ ¬A)', 'nnlem = \\k -> k (Right (\\a -> k (Left a)))'], 20, 't-mono t-sm');
+      S.text(52, 452, 'まず Right で答え、a が渡されたら k を呼び直して Left a で答え直す（k を 2 回使う）', { cls: 't-sm t-mid' }, P[3]);
+      S.text(52, 480, '型検査を通る（GHC 9.6.7）', { cls: 't-sm t-b t-d' }, P[3]);
+      // 段階5: 作り方と、古典論理の読み
+      table(P[4], 40, 262, 880, [52, 330], ['命題の証明', '持っているもの'], [
+        ['A ∧ B', '両方の証明（組）'],
+        ['A ∨ B', 'どちらが成り立つかの印と、その側の証明'],
+        ['A → B', 'A の証明を B の証明に変える手続き（関数）'],
+        ['どの n でも P(n) ∨ ¬P(n)', 'P(n) かどうかを決める手続き']
+      ], 28, ['t-sm t-b', 't-sm']);
+      S.text(52, 420, '古典論理の読み（Griffin、1990 年）', { cls: 't-xs t-dim' }, P[4]);
+      code(P[4], 52, 444, ['ghci> :t callCC          -- Control.Monad.Trans.Cont（transformers 0.6.1.0）', 'callCC :: ((a -> ContT r m b) -> ContT r m a) -> ContT r m a'], 20, 't-mono t-sm');
+      S.text(52, 494, 'ContT r m を消すと ((A → B) → A) → A（Peirce の法則）。古典論理は制御の演算子 call/cc に当たる', { cls: 't-sm t-mid' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      const HC = [[0], [1, 2], [], [3], []], HN = [[], [], [0], [1], [2]];
+      const paint = (rows, hl, dim) => rows.forEach((r, k) => {
+        const on = hl.includes(k);
+        r.bg.setAttribute('class', on ? 'f-x-soft' : 'f-none');
+        r.ts.forEach((t) => op(t, on || !dim ? '' : 0.5));
+      });
+      paint(st.can, HC[i], true);
+      paint(st.cannot, HN[i], true);
+    }
+  };
+
+  /* ================================================================
+     場面4 評価は証明の整理
+     GHC 9.6.7 の ghci: fst (3, True) ＝ 3、(\x -> (x, x)) 3 ＝ (3,3)、fst ((\x -> (x, x)) 3) ＝ 3、
+     either (+1) length (Left 3 :: Either Int String) ＝ 4
+     ================================================================ */
+  const tm = (t, y) => [[t, 't'], [y, 'y']];          // 項と型の組の式
+  const DET = { lcls: 's-x w2', ncls: 't-xs t-x t-b' };  // 回り道の規則の線
+  const s4 = {
+    steps: [
+      { title: '回り道：作ってすぐ壊す', text: '証明の中で、ある結合子を導入してすぐに除去する所を**回り道**と呼ぶ。a と b から A ∧ B を作り、すぐ fst で A を取り出すのは、a をそのまま使うのと同じ。式では `fst (a, b)` を `a` に簡約することで、証明の木から規則が 2 つ減る。' },
+      { title: '→ の回り道は β簡約', text: '仮定 x : A から A ∧ A を導いて →導入で閉じ、すぐ a : A に当てる証明を考える。回り道を消すには、仮定 x を使った 2 か所に a の証明を差し込む。これは `(λx. (x, x)) a` を `(a, a)` にする β簡約（[[37-lambda.html#s3.1|第37章 場面3]]）そのもの。' },
+      { title: '∨ の回り道は場合分けの簡約', text: '`Left a` で A ∨ B を作り、すぐ either で場合分けするのも回り道。印が Left と分かっているので、f の側だけを残して `f a` に直せる。Haskell の評価で、構築子の分かった値の場合分けが、腕 1 本に簡約されるのと同じ。' },
+      { title: '回り道を全部消す', text: '回り道の無い証明を**正規形**と呼ぶ。`fst ((λx. (x, x)) a)` は β と fst の 2 回で `a` になる。どの証明も正規形に直せる（正規化定理。Prawitz、1965 年）。型の付く単純型付きの項がどの順でも止まる性質（[[41-inference.html#s2.5|第41章 場面2]]）は、これを強めた形に当たる。' },
+      { title: '評価 ＝ 証明の正規化', text: '仮定の無い正規形の証明は、最後が導入規則で終わる。だから `Either A B` 型の閉じた項を評価すると `Left a` か `Right b` になり、どちらの側が成り立つかと、その側の証明が取り出せる。対応の表の最後の行は、評価が証明の正規化であること。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      st.head = S.g({}, svg);
+      S.text(230, 26, '回り道のある証明', { cls: 't-c t-sm t-dim' }, st.head);
+      S.text(740, 26, '回り道を消した証明', { cls: 't-c t-sm t-dim' }, st.head);
+      st.arrow = S.line(500, 126, 580, 126, { cls: 's-x w2', 'marker-end': mk('x') }, st.head);
+      st.arrT = S.text(540, 114, '簡約', { cls: 't-c t-sm t-b t-x' }, st.head);
+      const T = st.T = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));   // 上（木）
+      st.after = [0, 1, 2].map((k) => S.g({}, T[k]));                              // 消した後の木
+      // 段階1: ∧ の回り道
+      rule(T[0], 230, 80, [tm('a', ' : A'), tm('b', ' : B')], tm('(a, b)', ' : A ∧ B'), '∧導入', DET);
+      rule(T[0], 0, 114, [null], tm('fst (a, b)', ' : A'), '∧除去', Object.assign({ xs: [230], nw: 130 }, DET));
+      formula(st.after[0], 740, 148, tm('a', ' : A'));
+      S.text(740, 176, '仮定 a : A そのもの（規則 0 回）', { cls: 't-c t-xs t-mid' }, st.after[0]);
+      // 段階2: → の回り道
+      rule(T[1], 200, 46, ['[x : A]¹', '[x : A]¹'], tm('(x, x)', ' : A ∧ A'), '∧導入');
+      rule(T[1], 0, 80, [null], tm('λx. (x, x)', ' : A → A ∧ A'), '→導入¹', Object.assign({ xs: [200], nw: 120 }, DET));
+      rule(T[1], 0, 114, [null, tm('a', ' : A')], tm('(λx. (x, x)) a', ' : A ∧ A'), '→除去', Object.assign({ xs: [200, 380], nw: 190 }, DET));
+      rule(st.after[1], 740, 114, [tm('a', ' : A'), tm('a', ' : A')], tm('(a, a)', ' : A ∧ A'), '∧導入');
+      S.text(740, 182, '仮定 x の 2 か所に a の証明を差し込んだ', { cls: 't-c t-xs t-mid' }, st.after[1]);
+      // 段階3: ∨ の回り道
+      rule(T[2], 140, 80, [tm('a', ' : A')], tm('Left a', ' : A ∨ B'), '∨導入', DET);
+      rule(T[2], 0, 114, [null, tm('f', ' : A → C'), tm('g', ' : B → C')], tm('either f g (Left a)', ' : C'), '∨除去', Object.assign({ xs: [140, 270, 380], nw: 120 }, DET));
+      rule(st.after[2], 740, 114, [tm('f', ' : A → C'), tm('a', ' : A')], tm('f a', ' : C'), '→除去');
+      S.text(740, 182, 'g の側は使われずに消える', { cls: 't-c t-xs t-mid' }, st.after[2]);
+      // 段階4: 項の簡約の列
+      st.seq = [
+        formula(T[3], 230, 70, tm('fst ((λx. (x, x)) a)', ''), 't-mono t-lg'),
+        formula(T[3], 230, 130, tm('fst (a, a)', ''), 't-mono t-lg'),
+        formula(T[3], 230, 190, tm('a', ''), 't-mono t-lg')
+      ];
+      S.text(330, 104, '↓ β（→ の回り道）', { cls: 't-sm t-x' }, T[3]);
+      S.text(330, 164, '↓ fst（∧ の回り道）', { cls: 't-sm t-x' }, T[3]);
+      S.text(600, 70, '回り道 2 つ', { cls: 't-sm' }, T[3]);
+      S.text(600, 130, '回り道 1 つ', { cls: 't-sm' }, T[3]);
+      S.text(600, 190, '正規形（回り道 0）', { cls: 't-sm t-b t-d' }, T[3]);
+      // 段階5: 閉じた正規形の外側
+      table(T[4], 40, 40, 880, [56, 300, 600], ['型（命題）', '仮定の無い正規形の項の外側', '証明の最後の規則'], [
+        ['(a, b)　　A ∧ B', '(x, y)', '∧導入'],
+        ['Either a b　　A ∨ B', 'Left x　か　Right y', '∨導入（どちらの側かが分かる）'],
+        ['a -> b　　A → B', '\\x -> M', '→導入']
+      ], 36, ['t-mono t-sm t-b', 't-mono t-md t-b t-d', 't-sm']);
+
+      sep(svg, 236);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      code(P[0], 52, 274, ['ghci> fst (3, True)', '3'], 20, 't-mono t-sm');
+      S.text(52, 340, '∧ を導入して（組を作って）、すぐに除去する（fst で取り出す）。消すと規則が 2 つ減る', { cls: 't-sm t-mid' }, P[0]);
+      code(P[1], 52, 274, ['ghci> (\\x -> (x, x)) 3', '(3,3)'], 20, 't-mono t-sm');
+      S.text(52, 340, '→導入（λ）の直後に →除去（適用）。仮定 x を閉じた木に、a の木を写して差し込む', { cls: 't-sm t-mid' }, P[1]);
+      S.text(52, 366, '仮定を 2 回使えば証明は 2 部写る（証明は小さくなるとは限らないが、回り道は減る）', { cls: 't-sm t-mid' }, P[1]);
+      code(P[2], 52, 274, ['ghci> either (+1) length (Left 3 :: Either Int String)', '4'], 20, 't-mono t-sm');
+      S.text(52, 340, '∨導入（Left）の直後に ∨除去（either）。印が Left なので、length の腕は使われない', { cls: 't-sm t-mid' }, P[2]);
+      code(P[3], 52, 274, ['ghci> fst ((\\x -> (x, x)) 3)', '3'], 20, 't-mono t-sm');
+      table(P[3], 40, 340, 880, [52, 330], ['', ''], [
+        ['自然演繹（論理）', 'どの証明も、回り道の無い正規形に直せる（Prawitz、1965 年）'],
+        ['単純型付きラムダ計算', '型の付く項は、どの順で簡約しても止まる（強正規化。第41章 場面2）']
+      ], 32, ['t-sm t-b', 't-sm']);
+      table(P[4], 40, 274, 880, [60, 330], ['論理', 'プログラム'], [
+        ['命題 ／ 証明 ／ 仮定', '型 ／ 項 ／ 変数'],
+        ['含意・連言・選言・偽', '関数・組・Either・Void'],
+        ['証明の正規化（回り道を消す）', '評価（β簡約と場合分けの簡約）']
+      ], 32, ['t-sm t-b', 't-sm t-b t-d']);
+      S.text(52, 420, 'Haskell の評価は弱頭部正規形（外側の構築子が見える所）で止まる（第40章 場面3）。外側の形はこの表のとおり', { cls: 't-sm t-mid' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.T.forEach((g, k) => S.fade(g, k === i));
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      op(st.head, i <= 2 ? '' : 0);
+      st.after.forEach((g) => op(g, ''));
+      st.seq.forEach((f) => f.t.setAttribute('class', 't-c t-mono t-lg pre'));
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      if (i <= 2) {
+        // 回り道のある木を見せてから、消した木が現れる（止めているときは両方）
+        const c = run ? U.mod(ctx.ts, 6) : 6;
+        const f = U.prog(c, 1.2, 0.8);
+        op(st.after[i], f.toFixed(2));
+        op(st.arrow, (0.2 + 0.8 * f).toFixed(2));
+      } else if (i === 3) {
+        // いま簡約する式を順に強める
+        const c = run ? U.mod(ctx.ts, 6) : 6;
+        const k = c < 2 ? 0 : c < 4 ? 1 : 2;
+        st.seq.forEach((f, j) => f.t.setAttribute('class', 't-c t-mono t-lg pre' + (run ? (j === k ? ' t-b' : ' t-dim') : (j === 2 ? ' t-b' : ''))));
+      }
+    }
+  };
+
+  /* ================================================================
+     場面5 「すべて」「ある」と依存型
+     GHC 9.6.7 で確かめた（一時置き場の Vec.hs・Vec2.hs）: ghci の :t append は
+     Vec n a -> Vec m a -> Vec (Plus n m) a、:t append xs3 xs3 は Vec (S (S (S (S (S (S Z)))))) Int、
+     toList (append xs3 xs3) ＝ [3,2,1,3,2,1]、vhead xs3 ＝ 3。vhead VNil は GHC-83865
+     （Couldn't match type ‘Z’ with ‘S n0’）。ghc -Wall は VNil の腕の無い vhead に警告を出さなかった。
+     Lean 4 のコードは手元では動かしていない（Lean 4 の文法で書いた）
+     ================================================================ */
+  const s5 = {
+    steps: [
+      { title: '型についての「すべて」', text: '`forall a. a -> a`（[[41-inference.html#s3.1|第41章 場面3]]）は「どの命題 A についても A → A」と読める。∀ は「すべての」と読む。ただし a が動くのは型（命題）で、数のような値ではない。「どの自然数 n についても n + 0 = n」は、この型では書けない。' },
+      { title: '値についての「すべて」「ある」', text: '値についての命題を書くには、型が値に依存できなければならない（**依存型**）。Π 型は、引数の値 n によって戻り値の型 P n が変わる関数の型で、「すべての n」の証明になる。Σ 型は、値 n と P n の証明の組で、∃（ある）の証明になる。' },
+      { title: '長さを型に持つ列', text: 'GHC は拡張（DataKinds・GADTs・TypeFamilies）で、数を型の段に写して依存型を真似る。`Vec n a` は長さ n を型に持つ列で、`append` の型は「長さ n と m をつなぐと長さ n + m」という命題。GHC 9.6.7 は `append xs3 xs3` の長さを型の上で 6 とした。' },
+      { title: '範囲外を型で防ぐ', text: '`vhead` は長さが 1 以上の列しか受け取らない。`vhead VNil` は実行の前に型の誤り（GHC-83865）で止まり、vhead に空の場合の腕が無くても -Wall は警告しなかった。[[26-kata.html#s6.4|第26章 場面6]] で実行のたびに確かめた範囲を、型が先に証明する。' },
+      { title: '証明支援系', text: '依存型を中心に作った言語が**証明支援系**で、Rocq（旧 Coq。2025 年に改名）・Agda・Lean・Idris がある。Coq で四色定理（2005 年）や C コンパイラ CompCert の正しさが証明された。seL4 のカーネルの証明は Isabelle/HOL で、依存型ではなく高階論理による。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      st.rows = table(svg, 40, 30, 880, [56, 340, 600], ['論理', '型', '証明の形'], [
+        ['∀A. A → A（命題についてのすべて）', 'forall a. a -> a', '型を受け取る関数（第41章）'],
+        ['∀n. P(n)（値についてのすべて）', 'Π 型　(n : Nat) → P n', 'n を受け取り P n の証明を返す関数'],
+        ['∃n. P(n)（ある）', 'Σ 型　(n : Nat) × P n', '値 n と、P n の証明の組']
+      ], 36, ['t-sm t-b', 't-mono t-md t-b t-d', 't-sm']);
+
+      sep(svg, 170);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1: forall
+      code(P[0], 52, 200, ['ghci> :set -fprint-explicit-foralls', 'ghci> :t id', 'id :: forall a. a -> a'], 20, 't-mono t-sm');
+      S.text(52, 272, 'a が動くのは型（命題）：Int・Bool・Either Int Bool …', { cls: 't-sm' }, P[0]);
+      S.text(52, 298, '値は動かない：「どの n についても n + 0 = n」の n は数', { cls: 't-sm t-x' }, P[0]);
+      S.text(52, 346, 'n + 0 = n を命題として書くには', { cls: 't-sm t-dim' }, P[0]);
+      S.text(52, 370, '・等しさ n + 0 = n を型にする（値が型の中に入る）', { cls: 't-sm' }, P[0]);
+      S.text(52, 394, '・その型が、引数 n の値ごとに変わる', { cls: 't-sm' }, P[0]);
+      // 段階2: Π と Σ（Lean 4）
+      S.text(52, 200, 'Lean 4 で書いた例（手元では動かしていない）', { cls: 't-xs t-dim' }, P[1]);
+      code(P[1], 52, 226, ['example : ∀ n : Nat, n + 0 = n := fun n => rfl', '', 'example : ∃ n : Nat, n + 2 = 5 := ⟨3, rfl⟩'], 22, 't-mono t-md');
+      S.text(52, 300, '∀ の証明は関数：n を受け取り、その n についての n + 0 = n の証明（rfl）を返す', { cls: 't-sm t-mid' }, P[1]);
+      S.text(52, 324, '∃ の証明は組：値 3 と、3 + 2 = 5 の証明（rfl）', { cls: 't-sm t-mid' }, P[1]);
+      S.text(52, 348, 'rfl は「両辺を計算すると同じ」ことによる等しさの証明。n + 0 は定義から n に簡約される', { cls: 't-sm t-mid' }, P[1]);
+      S.text(52, 392, '∃ の証明から、値（ここでは 3）を取り出せる。場面4 の ∨ と同じく、証明が作り方を持つ', { cls: 't-sm t-b' }, P[1]);
+      // 段階3: Vec
+      code(P[2], 52, 198, [
+        'data Nat = Z | S Nat',
+        'data Vec (n :: Nat) a where',
+        '  VNil  :: Vec Z a',
+        '  VCons :: a -> Vec n a -> Vec (S n) a',
+        'type family Plus n m where',
+        '  Plus Z     m = m',
+        '  Plus (S n) m = S (Plus n m)',
+        'append :: Vec n a -> Vec m a -> Vec (Plus n m) a'
+      ], 18, 't-mono t-sm');
+      S.text(470, 198, '← 長さ（型の段の Nat）を型に持つ', { cls: 't-sm t-mid' }, P[2]);
+      S.text(470, 288, '← 型の段の足し算', { cls: 't-sm t-mid' }, P[2]);
+      S.text(470, 324, '← 長さ n + m（命題）', { cls: 't-sm t-x' }, P[2]);
+      code(P[2], 52, 362, ['ghci> :t append xs3 xs3       -- xs3 は [3,2,1] の Vec（長さ 3）', 'append xs3 xs3 :: Vec (S (S (S (S (S (S Z)))))) Int', 'ghci> toList (append xs3 xs3)', '[3,2,1,3,2,1]'], 20, 't-mono t-sm');
+      S.text(52, 456, '拡張 DataKinds・GADTs・KindSignatures・TypeFamilies（GHC 9.6.7）。append・toList の本体と xs3 の定義は省いた', { cls: 't-xs t-dim' }, P[2]);
+      // 段階4: vhead
+      code(P[3], 52, 200, ['vhead :: Vec (S n) a -> a', 'vhead (VCons x _) = x        -- VNil の腕は無い', 'bad :: Int', 'bad = vhead VNil'], 20, 't-mono t-sm');
+      errBox(P[3], 52, 280, 520, [
+        'Vec2.hs:5:13: error: [GHC-83865]',
+        '    • Couldn’t match type ‘Z’ with ‘S n0’',
+        '      Expected: Vec (S n0) Int',
+        '        Actual: Vec Z Int'
+      ], 20);
+      S.text(600, 220, '-Wall でも VNil の腕の漏れを警告しない', { cls: 't-sm t-mid' }, P[3]);
+      S.text(600, 244, '（長さ 0 の列は型で渡せないと分かる）', { cls: 't-sm t-mid' }, P[3]);
+      table(P[3], 40, 400, 880, [52, 260], ['範囲の確かめ方', ''], [
+        ['実行のたびに', 'Rust のスライスは長さと比べ、外れたら panic（第26章 場面6）'],
+        ['実行の前に', 'vhead は空の列を型で受け取らない（証明は型検査）']
+      ], 28, ['t-sm t-b', 't-sm']);
+      // 段階5: 証明支援系
+      table(P[4], 40, 200, 880, [52, 300], ['証明支援系', '例'], [
+        ['Rocq（旧 Coq）', '四色定理（Gonthier・Werner、2005 年）、C コンパイラ CompCert（Leroy）'],
+        ['Agda', '依存型のプログラミング言語でもある'],
+        ['Lean', '数学のライブラリ Mathlib'],
+        ['Idris', '依存型を持つ汎用のプログラミング言語'],
+        ['Isabelle/HOL（高階論理）', 'seL4 のカーネル（Klein ら、2009 年）。依存型の例ではない']
+      ], 30, ['t-sm t-b', 't-sm']);
+      S.text(52, 400, 'CompCert：生成した機械語が、元の C のプログラムの意味どおりに動くことを Coq で証明（Leroy、CACM 2009 年）', { cls: 't-sm t-mid' }, P[4]);
+      S.text(52, 424, '人が読むのは定理の主張だけで、証明は機械が検査する（型検査 ＝ 証明の検査）', { cls: 't-sm t-b' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      const HL = [[0], [1, 2], [1], [1], []];
+      st.rows.forEach((r, k) => {
+        const on = HL[i].includes(k);
+        r.bg.setAttribute('class', on ? 'f-x-soft' : 'f-none');
+        r.ts.forEach((t) => op(t, on || i === 4 ? '' : 0.5));
+      });
+    }
+  };
+
+  /* ================================================================
+     場面6 どこまで信じられるか — 第X部の答え
+     GHC 9.6.7（ghc -O0 -Wall、一時置き場の Cheat.hs・Cheat2.hs）: lem = lem も lem = undefined も警告なしに通り、
+     実行すると「cheat: <<loop>>」と「cheat2: Prelude.undefined」（終了コード 1）。
+     f (Just x) = x だけの f は -Wall で [GHC-62161] [-Wincomplete-patterns] の警告（誤りではない）。
+     mySort :: Ord a => [a] -> [a]; mySort = reverse は -Wall で警告なしに通る。ghci: sort [3,1,2] ＝ [1,2,3]、reverse [3,1,2] ＝ [2,1,3]。
+     各章の答えの場面は stepindex で確かめた（37・38・40・41・42 は s6.6、39 は s6.5）
+     ================================================================ */
+  const PART = [
+    ['37 ラムダ計算', '式の簡約', '計算を、状態の書き換えではなく式の置き換えにする'],
+    ['38 高階関数とクロージャ', '値としての関数', '繰り返しで書き換えていた状態を、引数に移す'],
+    ['39 不変データ', '変えないデータ', '書き換えをやめ、いつ読むかを意味から消す'],
+    ['40 遅延評価', '評価の時期を預ける', 'いつ計算するかを、書き手から処理系に移す'],
+    ['41 型推論と多相', '振る舞いを縛る型', '関数が値にできることを、型で縛る'],
+    ['42 モナド', '作用を型に出す', '外した状態と順序を、型に現れる形で戻す'],
+    ['43 カリー＝ハワード対応', '型は命題', '性質を型に書き、実行の前に型検査で証明する']
+  ];
+  const s6 = {
+    steps: [
+      { title: 'Haskell では何でも「証明」できる', text: 'Haskell では `undefined` と止まらない定義がどの型にも属する。排中律の型 `Either a (a -> Void)` に `lem = lem` と書くと、GHC 9.6.7 は -Wall でも何も言わずに通し、実行すると `<<loop>>` で止まった。論理として読めば、どの命題も証明できてしまう。' },
+      { title: '証明支援系は全域性を検査する', text: '証明支援系は、関数がどの入力でも止まり、場合分けに漏れが無いこと（**全域性**）を検査し、通らない定義を拒む。代償に、止まるかどうか分からない計算は、そのままでは書けない。Haskell は止まらない計算を書ける方を選び、論理としての穴を受け入れている。' },
+      { title: '型が証明するのは型に書いたことだけ', text: '`sort` の型 `Ord a => [a] -> [a]` は「並べ替えた結果を返す」とは言っていない。`reverse` を同じ型で書いても型検査は通る。型検査が証明するのは、型として書いた命題だけ（[[29-imi.html#s6.3|第29章 場面6]]）。並んでいることまで型にするには依存型が要り、証明の手間がかかる。' },
+      { title: 'この章の答え', text: '型は命題、プログラムは証明、評価は証明の正規化。型検査は、書いた命題の証明を機械が検査することに当たる。これは何かに立ち向かう手法ではなく、静的な型がもともと論理だったという観察で、止まらない項を許す言語では、その論理に穴がある。' },
+      { title: '第X部の答え：相手は状態と順序', text: '関数型が立ち向かう相手は、書き換えできる状態と、書き換えの順序（時間）。式の簡約（[[37-lambda.html#s6.6|第37章 場面6]]）、値としての関数（[[38-closure.html#s6.6|第38章 場面6]]）、変えないデータ（[[39-immutable.html#s6.5|第39章 場面6]]）が、状態を言語の意味から外す。' },
+      { title: '第X部の答え：順序は処理系と型へ', text: '順序は処理系に預け（[[40-lazy.html#s6.6|第40章 場面6]]）、型で振る舞いを縛り（[[41-inference.html#s6.6|第41章 場面6]]）、作用と順序は型に現れる形で戻す（[[42-monad.html#s6.6|第42章 場面6]]）。機械は第6章の状態機械のままで、その差はコンパイラとランタイムが、割り当て・ごみ集め・サンクの上書きなどの費用で埋める。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      st.rows = table(svg, 40, 26, 880, [52, 262, 430], ['章', '道具', '書き換えと順序をどう扱うか（各章の答え）'], PART, 28,
+        ['t-sm t-b', 't-sm t-b t-d', 't-sm']);
+
+      sep(svg, 250);
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1: 何でも証明できる
+      code(P[0], 52, 280, ['lem :: Either a (a -> Void)     -- A ∨ ¬A', 'lem = lem'], 20, 't-mono t-sm');
+      code(P[0], 52, 340, ['$ ghc -O0 -Wall Cheat.hs        -- 警告なし', '$ ./cheat', 'cheat: <<loop>>'], 20, 't-mono t-sm');
+      code(P[0], 500, 280, ['lem :: Either a (a -> Void)', 'lem = undefined'], 20, 't-mono t-sm');
+      code(P[0], 500, 340, ['$ ./cheat2', 'cheat2: Prelude.undefined'], 20, 't-mono t-sm');
+      S.text(52, 430, 'どちらも型検査を通る（GHC 9.6.7）。main で lem を場合分けすると、止まらないか例外で落ちる', { cls: 't-sm t-x' }, P[0]);
+      S.text(52, 456, 'プログラムとしては困らない：止まらない計算も書けることは、言語の力（第37章 場面6 の再帰）', { cls: 't-sm t-mid' }, P[0]);
+      // 段階2: 全域性
+      table(P[1], 40, 282, 880, [52, 300, 600], ['検査すること', 'Haskell（GHC 9.6.7）', '証明支援系'], [
+        ['どの入力でも止まる', '検査しない（lem = lem が通る）', '構造的な再帰などで確かめ、拒む'],
+        ['場合分けに漏れが無い', '-Wall で警告（誤りにはしない）', '漏れは誤り'],
+        ['止まるか分からない計算', 'そのまま書ける', '直接は書けない']
+      ], 30, ['t-sm t-b', 't-sm', 't-sm']);
+      S.text(52, 412, 'Lean は partial で書けるが、その定義は証明の中で展開されない定数になる（Lean の手引き）', { cls: 't-sm t-mid' }, P[1]);
+      S.text(52, 436, '漏れの警告：f (Just x) = x だけの f に [GHC-62161] [-Wincomplete-patterns]', { cls: 't-sm t-mid' }, P[1]);
+      // 段階3: 型に書いたことだけ
+      code(P[2], 52, 280, ['mySort :: Ord a => [a] -> [a]', 'mySort = reverse                -- 型検査を通る（-Wall で警告なし）'], 20, 't-mono t-sm');
+      code(P[2], 52, 336, ['ghci> sort [3,1,2]', '[1,2,3]', 'ghci> mySort [3,1,2]', '[2,1,3]'], 20, 't-mono t-sm');
+      S.text(52, 440, '型が言うのは「Ord の a のリストを受け取り、同じ型のリストを返す」ことだけ', { cls: 't-sm t-x' }, P[2]);
+      S.text(52, 464, '並んでいること・要素が同じであることは型の外。テストか、依存型での証明に回す', { cls: 't-sm t-mid' }, P[2]);
+      // 段階4: この章の答え
+      table(P[3], 40, 282, 880, [52, 330], ['論理', 'プログラム'], [
+        ['命題', '型'],
+        ['証明', 'プログラム（項）'],
+        ['証明の検査', '型検査'],
+        ['証明の正規化', '評価']
+      ], 28, ['t-sm t-b', 't-sm t-b t-d']);
+      S.text(52, 430, '穴：止まらない項（Haskell）。範囲：型に書いた命題だけ', { cls: 't-sm t-x' }, P[3]);
+      // 段階5・6: 第X部の答え
+      S.text(52, 284, '関数型が立ち向かう相手', { cls: 't-xs t-dim' }, P[4]);
+      S.text(52, 316, '書き換えできる状態と、書き換えの順序（時間）', { cls: 't-lg t-b t-x' }, P[4]);
+      S.text(52, 356, '第6章の CPU：レジスタとメモリを命令ごとに書き換える状態機械。命令型の言語は、それを変数・代入・文の並びにした', { cls: 't-sm' }, P[4]);
+      S.text(52, 382, '関数型：計算のモデルを式の簡約に置き、状態と順序を言語の意味から外す（表の 37〜39）', { cls: 't-sm' }, P[4]);
+      table(P[5], 40, 270, 880, [52, 330], ['言語の側', '機械の上（第6章の CPU とメモリ）'], [
+        ['関数の値（第38章）', 'コードの番地と環境の組。環境はヒープに割り当てる'],
+        ['変えないデータ（第39章）', '更新のたびの割り当てと、ごみ集め'],
+        ['遅延（第40章）', 'サンクを作り、計算したら結果で上書きする'],
+        ['IO の順序（第42章）', '世界の印の受け渡しで固め、命令を順に実行する'],
+        ['型と証明（第41・43章）', '機械語には残らない（第26章 場面3）']
+      ], 30, ['t-sm t-b', 't-sm']);
+      S.text(52, 456, '機械は状態機械のまま。差はコンパイラとランタイムが埋め、その費用を払う', { cls: 't-sm t-b' }, P[5]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      const HL = [[6], [6], [6], [6], [0, 1, 2], [3, 4, 5]];
+      st.rows.forEach((r, k) => {
+        const on = HL[i].includes(k);
+        r.bg.setAttribute('class', on ? 'f-x-soft' : 'f-none');
+        r.ts.forEach((t) => op(t, on || i >= 4 ? '' : 0.5));
+      });
+    }
+  };
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第X部 関数型 ／ 第43章',
+      title: 'カリー＝ハワード対応',
+      home: '../index.html',
+      prev: { href: '42-monad.html', title: 'モナド' },
+      legend: [{ c: 'd', label: '項・値（プログラム）' }, { c: 'x', label: '注目・変化' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>

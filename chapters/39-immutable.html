@@ -1,0 +1,1307 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>不変データ — YouTubeが見えるまで</title>
+<meta name="description" content="値を作った後で書き換えないと決めると、2 つの名前が同じ物を指していても、片方から見た値が知らないうちに変わることは無くなる。">
+<meta property="og:title" content="不変データ — YouTubeが見えるまで">
+<meta property="og:description" content="値を作った後で書き換えないと決めると、2 つの名前が同じ物を指していても、片方から見た値が知らないうちに変わることは無くなる。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第X部 関数型 ／ 第39章 ／ 全43章</p>
+    <h1 id="h-s0">不変データ</h1>
+    <p class="standfirst">値を作った後で書き換えないと決めると、2 つの名前が同じ物を指していても、片方から見た値が知らないうちに変わることは無くなる。更新は新しい版を作ることで表し、古い版はそのまま残る。この章では、リストと木で変わった所だけを作り直して残りを共有するやり方と、その代償の割り当てとごみ集め、得るもの（スレッドの間の共有、古い版、速い比較）を、GHC・Node.js・Rust・Git で動かして確かめる。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>別名と書き換え</a><p>2 つの名前が同じ配列を指すと、片方の sort がもう片方から見える。書き換えを無くすか、同時に許さないか。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>リストは先頭に足す</a><p>先頭に足すのはセル 1 個で、残りは共有する。古い版も使える（永続データ構造）。末尾に足すと全部を写す。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>木は経路だけを写す</a><p>足す場所までの経路の節だけを作り直す。100 万個の Data.Map でも 1 回に約 1 KB。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>幅の広い木</a><p>添字を 5 ビットずつに切る 32 分木。100 万要素で深さ 4、写すのは 4 節。ハッシュ表にしたのが HAMT。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>ごみ集め</a><p>届かなくなった物を処理系が回収する。世代別のごみ集めと、+RTS -s の実測。Rc との違い。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>得るもの</a><p>スレッドの間の共有、古い版（Git）、番地 1 回の比較。代償と、章の答え。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の章（遅延評価）へ。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードと出力は GHC 9.6.7（containers 0.6.7）・rustc 1.95.0・Node.js 24.22.1・git 2.53.0（x86-64 の Linux）で 2026 年 11 月に動かして確かめた。出力は版と設定で変わる。文献は原典の年を添えた。図は模式図。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 別名と書き換え ================= -->
+<section class="scene sc-anim" id="s1" data-tab="別名" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>別名と書き換え — 同じ物を指す 2 つの名前</h2>
+    <p class="sh-meta"><span class="chip">JavaScript の sort</span><span class="chip">Haskell の sort</span><span class="chip">E0502</span><span class="chip">SSA</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">第38章では関数を値にした。この章ではデータを、作った後で書き換えない値にする。先に、書き換えのある言語で 2 つの名前が同じ物を指すと何が起きるかを見る。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">JavaScript の <code>const</code> が止めるのは名前の付け替えで、配列の中身の書き換えは止めない（例の a も const）。中身を止める <code>Object.freeze</code> も 1 段だけで、中に入れた配列やオブジェクトは凍らない。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="2 つの名前が同じ配列を指す図と、書き換えたときに見える値、書き換えない言語と Rust の借用、SSA"></svg></div>
+    <figcaption>図1　上は名前と、名前が指すヒープの上の物、そのコード（段階ごとに例が変わる）。下は段階ごとの中身。出力は Node.js 24.22.1・GHC 9.6.7・rustc 1.95.0 のもので、段階6 の SSA は模式。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 リストは先頭に足す ================= -->
+<section class="scene sc-anim" id="s2" data-tab="リスト" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>リストは先頭に足す — 1 個作って残りを共有する</h2>
+    <p class="sh-meta"><span class="chip">0 : xs</span><span class="chip">セル 24 バイト</span><span class="chip">永続データ構造</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">書き換えないリストに値を足すには、新しいリストを作る。それでも全部を写す必要は無い。セルは後から変わらないので、新しいリストは古いリストのセルをそのまま指してよい。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">新しい版が古い版の一部をそのまま指すことを<b>構造共有</b>と呼ぶ。共有できるのは古いセルが後から変わらないからで、書き換えのある言語で同じことをすると、片方の書き換えがもう片方に見える（<a class="xref" href="#s1" data-go="1">1「別名と書き換え」</a>）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="リスト [3,2,1] のセルと、先頭に足した版・途中を変えた版・末尾に足した版が、どのセルを新しく作り、どのセルを共有するか"></svg></div>
+    <figcaption>図2　上はリスト xs（[3,2,1]）のセルと、xs から作った 3 つの版（x は新しく作ったセルと番地。xs のセルを指す番地は、そのセルを共有している）。下は版ごとの数えと、セル 1 個の中身。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 木は経路だけを写す ================= -->
+<section class="scene sc-anim" id="s3" data-tab="経路コピー" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>木は経路だけを写す — 経路コピー</h2>
+    <p class="sh-meta"><span class="chip">data Tree</span><span class="chip">insert</span><span class="chip">O(log n)</span><span class="chip">Data.Map</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">リストは先頭から遠い所の更新に弱い。二分探索木なら、どこに足すときも作り直すのは根からその場所までの経路の節だけで、ほかの部分木は古い版と共有できる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">containers の Data.Map は、大きさで釣り合いを保つ二分木（Adams 1993 年など）で、足すと経路の節を作り直しながら、回転で形を整える。回転も経路の上で起きるので、作る節の数は O(log n) のまま。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="7 節の二分探索木 xs に 8 を足した ys。経路の節 4・6・7 だけが新しく作られ、部分木 2 と 5 は共有される"></svg></div>
+    <figcaption>図3　上は 1〜7 の木 xs（4・2・6・1・3・5・7 の順に足した）と、8 を足した ys。x は ys のために新しく作った節と番地で、x の番地が指す xs の節は 2 つの版が共有している。下は Haskell のコードと段階ごとの中身。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 幅の広い木 ================= -->
+<section class="scene sc-anim" id="s4" data-tab="幅の広い木" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>幅の広い木 — HAMT と永続ベクタ</h2>
+    <p class="sh-meta"><span class="chip">32 分木</span><span class="chip">32⁴ ＝ 1,048,576</span><span class="chip">HAMT</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">100 万個の二分木の経路は約 20 節で、たどるたびに別の場所を読む。1 節に 32 本の枝を持たせると、段の数は 4 になる。配列の「i 番目を書き換える」を、書き換えずに行う形である。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Clojure の PersistentVector は、末尾の最大 32 要素を木の外の配列（tail）に置き、末尾に足すのを速くしている。添字の切り方 <code>(i &gt;&gt;&gt; level) &amp; 0x01f</code> と、経路を写す doAssoc はソースで確かめた。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="添字 500,000 を 5 ビットずつに切り、32 分木を 4 段たどる図と、経路の 4 節を写した新しい版"></svg></div>
+    <figcaption>図4　上は添字 500,000 の 20 ビット。中は 100 万要素の 32 分木のうち、たどる経路の節（1 節 32 欄。左がもとの版、右が 500,000 番目を書き換えた新しい版）。下は段階ごとの中身。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 ごみ集め ================= -->
+<section class="scene sc-anim" id="s5" data-tab="ごみ集め" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>ごみ集め — 届かなくなった物を回収する</h2>
+    <p class="sh-meta"><span class="chip">GC</span><span class="chip">世代別</span><span class="chip">+RTS -s</span><span class="chip">Rc との違い</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">共有すると、ある節を最後に使うのが誰かを、書き手が決められなくなる。そこで、どこからも届かなくなった物を処理系が見つけて回収する（ごみ集め）。不変データの言語は、これを前提にしている。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">-s の「最大の常駐量」は、大きいごみ集めのときだけ測る近い値（利用者の手引き）。古い世代を写さずに並行して集める方法もあり、-threaded で作って +RTS -xn を付けると、この例の Gen 1 の最長の止まりは約 0.06 秒から約 0.0006 秒になった。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="場面3 の 2 つの版の木と根。届く節に印を付け、届かない節を回収する図と、世代別のごみ集めと実測の値"></svg></div>
+    <figcaption>図5　上は場面3 の xs と ys の節と、番地を持つ根（スタックとレジスタ）。下は段階ごとの中身（実測は GHC 9.6.7 の -O2 と +RTS -s）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 得るもの ================= -->
+<section class="scene sc-anim" id="s6" data-tab="得るもの" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>得るもの — 共有・古い版・速い比較</h2>
+    <p class="sh-meta"><span class="chip">データ競合</span><span class="chip">Git の物</span><span class="chip">===</span><span class="chip">答え</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">書き換えをやめて得るものは 3 つある。同じ値を複数のスレッドが読めること、古い版が残ること、変わったかを番地の比較 1 回で判定できること。最後に、この章の分の答えを言い切る。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Git の物の名前は、この版の既定では SHA-1 の 40 桁で、blob と tree は中身が同じなら誰が作っても同じ名前になる。commit は作者と時刻も中身に含むので、図の commit の名前は名前と時刻を決めて作った例。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="不変にして得る 3 つのものと代償。スレッドの共有、Git の 2 つの版の物、番地の比較"></svg></div>
+    <figcaption>図6　上は得るもの 3 つと代償（いまの段階に x）。下は段階ごとの中身（Rust・Git・Node.js で動かした結果）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — 不変データ</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>2 つの名前が同じ物を指す（別名）とき、片方からの書き換えがもう片方から見え、値が読む時点で変わる。関数型は書き換えを外し、Rust は別名と書き換えを同時に許さない（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>書き換えないリストは、先頭に足すのにセル 1 個（24 バイト）を作り、残りを共有する。前の版もそのまま使える（永続データ構造）。末尾や途中を変えると、そこまでを写す（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>木は、根から変える所までの経路の節だけを作り直し、ほかの部分木を共有する。100 万個の Data.Map で値を 1 つ替える割り当ては平均 1,069 バイト（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>添字を 5 ビットずつに切る 32 分木なら、100 万要素でも 4 段で、更新は経路の 4 節を写す。鍵のハッシュで切れば HAMT。たどる回数は配列より多い（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>共有した物をいつ解放できるかは書き手に決められないので、届かなくなった物を処理系が回収する。100 万回の更新で割り当て 1.39 GB、常駐 72 MB、若い世代の生き残りは約 11%（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>書き換えをやめると、スレッドの間の共有が安全になり、古い版が残り、変化を番地の比較 1 回で判定でき、「いつ読むか」が意味から消える。代償は割り当てとごみ集め（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th>不変（イミュータブル）</th><td>作った後で中身を書き換えない値。更新は新しい値を作って表す。Haskell のリストと木、JavaScript の文字列。</td></tr>
+        <tr><th>別名</th><td>2 つ以上の名前（変数・参照）が同じ物を指すこと。書き換えがあると、片方からの変更がもう片方から見える。型の別名（第29章の typedef・type）とは別。</td></tr>
+        <tr><th><i class="sw d"></i>永続データ構造</th><td>更新の後も前の版がそのまま使えるデータ構造（Driscoll ら、1989 年）。記憶装置に書いて残す「永続化」とは別の意味。</td></tr>
+        <tr><th>構造共有</th><td>新しい版が、変わらない部分を前の版と共有すること。リストの尾、木の部分木、Git の tree と blob。</td></tr>
+        <tr><th>cons セル</th><td>リストの 1 要素。先頭の値と、残りのリストへの番地を持つ。GHC では 3 語 24 バイト。</td></tr>
+        <tr><th><i class="sw x"></i>経路コピー</th><td>木の更新で、根から変える所までの経路の節だけを作り直す方法。作る節は O(log n)。</td></tr>
+        <tr><th>HAMT</th><td>鍵のハッシュを 5 ビットずつに切ってたどる 32 分木のハッシュ表（Bagwell、2001 年）。節は使う枝だけを詰め、ビットマップで示す。</td></tr>
+        <tr><th>ごみ集め（GC）</th><td>どこからも届かなくなった物を、処理系が見つけて回収すること。最初の例は McCarthy の Lisp（1960 年）。</td></tr>
+        <tr><th>世代別 GC</th><td>新しい物の領域（若い世代）を頻繁に集め、生き残りだけを古い世代へ写すごみ集め。GHC 9.6 の既定は 2 世代、若い世代は 4 MB。</td></tr>
+        <tr><th>データ競合</th><td>2 つのスレッドが同じ場所を同期せずに同時に使い、少なくとも一方が書くこと。誰も書かない値では起きない。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <p class="note">この章では、データを書き換えないことで「いつ読むか」を意味から外した。次の第40章は、式の値がいつ計算しても同じことを使い、「いつ計算するか」を処理系に預ける（遅延評価）。</p>
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+<script>
+(() => {
+  const U = YT.util, S = YT.svg;
+
+  /* ---------- この章で使う部品 ---------- */
+
+  /* 濃さ（fade の付いた要素は 0.35 秒かけて変わる） */
+  const op = (el, v) => { el.style.opacity = v; };
+  /* 動きを止めているときは、段階の動きの終わりの姿を見せる */
+  const playing = () => YT.motion.playing;
+  /* 等幅の行の並び（空白を詰めない） */
+  function code(parent, x, y, lines, lh, cls) {
+    return lines.map((s, k) => S.text(x, y + k * lh, s, { cls: (cls || 't-mono t-sm') + ' pre' }, parent));
+  }
+  /* コードの板。行ごとの下地（いまの行に x の薄い塗り）と文字を持ち、段階ごとに中身を入れ替える */
+  function board(parent, x, y, w, rows, lh) {
+    const g = S.g({}, parent);
+    S.rect(x, y, w, 34 + rows * lh, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+    const title = S.text(x + 12, y + 19, '', { cls: 't-xs t-dim' }, g);
+    const bg = [], tx = [];
+    for (let k = 0; k < rows; k++) {
+      const yy = y + 28 + k * lh;
+      bg.push(S.rect(x + 6, yy, w - 12, lh - 3, { rx: 3, cls: 'f-x-soft', style: { opacity: 0 } }, g));
+      tx.push(S.text(x + 14, yy + lh - 9, '', { cls: 't-mono t-sm pre' }, g));
+    }
+    return {
+      g,
+      set(ttl, lines) { title.textContent = ttl; tx.forEach((t, k) => { t.textContent = lines[k] || ''; }); },
+      hot(list) { bg.forEach((r, k) => { r.style.opacity = list.includes(k) ? 1 : 0; }); }
+    };
+  }
+
+  /* ================================================================
+     場面1 別名と書き換え
+     出力は Node.js 24.22.1（const b = a; b.sort() の後 a は [ 1, 2, 3 ]、[3,2,1] === [3,2,1] は false、
+     toSorted は写した配列を返す）、ghci 9.6.7（sort・reverse・map (*2)・0 : の後も xs は [3,2,1]）、
+     rustc 1.95.0（E0502 の文）で確かめた（2026-11-22）。段階6 の SSA の形は模式
+     ================================================================ */
+  const NX = 40, NW = 72, OY = [56, 150], OH = 40, OX = 190;   // 名前の箱と、物（上・下）の位置
+  const AW = 56;                                               // 配列の 1 欄
+  const LX = (k) => OX + k * 84;                               // リストのセルの左端（値 36 ＋ 番地 26）
+  const S1 = [   // 段階ごとの名前・物の札・板の中身
+    { names: ['a', 'b'], lab: ['Array（3 個の欄）', ''], ttl: 'JavaScript（Node.js 24.22.1）',
+      code: ['const a = [3, 2, 1];', 'const b = a;          // 番地を写す', 'b.sort();             // b から並べ替える', 'console.log(a);       // [ 1, 2, 3 ]'] },
+    { names: ['a', 'b'], lab: ['Array（3 個の欄）', ''], ttl: 'JavaScript（Node.js 24.22.1）',
+      code: ['const a = [3, 2, 1];', 'const b = a;          // 番地を写す', 'b.sort();             // b から並べ替える', 'console.log(a);       // [ 1, 2, 3 ]'] },
+    { names: ['p', 'q'], lab: ['Array（p の物）', 'Array（q の物）'], ttl: 'JavaScript（呼び出す側）',
+      code: ['const p = [3, 2, 1];', 'const q = [3, 2, 1];', 'f(p);                 // 1', 'g(q);                 // 1'] },
+    { names: ['xs', 'ys'], lab: ['リスト（セル 3 個）', 'sort xs が作った新しいリスト'], ttl: 'Haskell（ghci、GHC 9.6.7）',
+      code: ['ghci> import Data.List (sort)', 'ghci> let xs = [3,2,1]', 'ghci> let ys = sort xs', 'ghci> (xs, ys)', '([3,2,1],[1,2,3])'] },
+    { names: ['a', 'b'], lab: ['Vec の中身（ヒープ）', ''], ttl: 'Rust（rustc 1.95.0）',
+      code: ['let mut a = vec![3, 2, 1];', 'let b = &a;           // 共有の借用', 'a.sort();             // 書き換えの借用', 'println!("{:?}", b);'] },
+    { names: ['a', 'b'], lab: ['', ''], ttl: '命令型のコード（第6章 場面4 と同じ計算）',
+      code: ['let mut s = 0;', 's = s + 3;', 's = s + 2;', 's = s + 1;            // s は 6'] }
+  ];
+  const s1 = {
+    steps: [
+      { title: '2 つの名前、1 つの配列', text: 'JavaScript の `const b = a` は配列を写さず、配列を指す番地を写す。a と b は同じヒープの上の 1 つの物を指す（**別名**。[[29-imi.html#s1.5|第29章 場面1]]の型の別名とは別）。数を入れた変数なら値そのものが写るので、別名にはならない。配列どうしの `===` は、中身ではなく同じ物かどうかを比べる。' },
+      { title: '片方から書き換える', text: '`b.sort()` は配列をその場で並べ替える。a の行には何も書いていないのに、`console.log(a)` は `[ 1, 2, 3 ]` を出した。同じ式 a の値が、sort の前に読むか後に読むかで違う。a の値を知るには、そこまでに誰が何を書き換えたかをたどる必要がある。' },
+      { title: '呼び出しからは分からない', text: 'f と g はどちらも `[3, 2, 1]` を受け取って 1 を返すが、f は中で sort して、渡された配列を書き換える。`f(p)` と `g(q)` は同じ形の式で、違いは関数の中を読まないと分からない。ES2023 は、写した配列を並べて返す `toSorted` などを足した。' },
+      { title: '書き換えないと決める', text: 'Haskell の `let xs = [3,2,1]` は、名前 xs を式に結ぶ（`let` の記法）。結んだ名前は後から別の値にならず、`sort xs` は並べた新しいリストを返す。リストを書き換える演算が無いので、2 つの名前が同じ物を指していても違いを観測できず、共有してよい。' },
+      { title: 'Rust は同時に許さない', text: 'Rust は書き換えを残し、別名と書き換えを同時には許さない。`&` の借用はいくつでも、`&mut` は 1 つだけで、両方は重ならない（[[26-kata.html#s6.5|第26章 場面6]]）。b が a を借りている間の `a.sort()` は E0502 で止まる。別名が無いという事実は最適化にも使う（[[28-compiler.html#s4.4|第28章 場面4]]）。' },
+      { title: 'コンパイラの中も 1 回だけ決める', text: '[[06-cpu.html#s4|第6章 場面4]]の sum は、10 番地を 3 回書き換えた。LLVM などのコンパイラは命令型のプログラムも、代入のたびに新しい名前を付けた形（SSA。[[28-compiler.html#s3.4|第28章 場面3]]）に直してから調べる。名前ごとに値が 1 つなので、どの値を読むかが名前だけで決まる。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // ---- 上: 名前と物
+      const top = st.top = S.g({}, svg);
+      S.text(NX, 26, '名前', { cls: 't-xs t-dim' }, top);
+      S.text(OX, 26, 'ヒープの上の物', { cls: 't-xs t-dim' }, top);
+      st.name = OY.map((y) => {
+        const r = S.rect(NX, y, NW, OH, { rx: 5, cls: 'f-sf s-fg w15' }, top);
+        const t = S.text(NX + NW / 2, y + 26, '', { cls: 't-c t-md t-mono t-b' }, top);
+        return { r, t };
+      });
+      st.obj = OY.map((y) => {
+        const g = S.g({}, top);
+        const lab = S.text(OX, y - 8, '', { cls: 't-xs t-dim' }, g);
+        const arr = S.g({}, g), lst = S.g({}, g);
+        const ac = [0, 1, 2].map((k) => ({
+          r: S.rect(OX + k * AW, y, AW, OH, { cls: 'f-d-soft s-d w15' }, arr),
+          t: S.text(OX + k * AW + AW / 2, y + 26, '', { cls: 't-c t-md t-mono t-b' }, arr)
+        }));
+        const lc = [0, 1, 2].map((k) => {
+          const x = LX(k), r = S.rect(x, y, 62, OH, { rx: 3, cls: 'f-d-soft s-d w15' }, lst);
+          S.line(x + 36, y + 5, x + 36, y + OH - 5, { cls: 's-d w1' }, lst);
+          const t = S.text(x + 18, y + 26, '', { cls: 't-c t-md t-mono t-b' }, lst);
+          S.circle(x + 49, y + OH / 2, 3.5, { cls: 'f-d' }, lst);
+          S.path(`M${x + 52},${y + OH / 2} H${LX(k + 1) - 3}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, lst);
+          return { r, t };
+        });
+        S.rect(LX(3), y + 6, 30, OH - 12, { rx: 3, cls: 'f-none s-mid w1' }, lst);
+        S.text(LX(3) + 15, y + 25, '[]', { cls: 't-c t-xs t-mono' }, lst);
+        return { g, lab, arr, lst, ac, lc };
+      });
+      // 名前から物への番地（矢印）
+      st.aTo1 = S.path(`M${NX + NW},${OY[0] + 20} H${OX - 4}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, top);
+      st.bTo1 = S.path(`M${NX + NW},${OY[1] + 20} L${OX - 4},${OY[0] + 34}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, top);
+      st.bTo2 = S.path(`M${NX + NW},${OY[1] + 20} H${OX - 4}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, top);
+      st.bToA = S.path(`M${NX + NW / 2},${OY[1]} V${OY[0] + OH + 4}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, top);
+      st.bToAt = S.text(NX + NW / 2 + 8, OY[0] + OH + 34, '&a', { cls: 't-xs t-mono t-b' }, top);
+      st.ng = S.text(OX, OY[0] + OH + 26, '× a.sort() は E0502 で止まる', { cls: 't-xs t-b t-x' }, top);
+      // コードの板
+      st.bd = board(svg, 520, 36, 400, 5, 26);
+      S.line(30, 232, 930, 232, { cls: 's-rule w1' }, svg);
+
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+      // ---- 段階1: 値が写るか、番地が写るか
+      S.text(52, 266, '式', { cls: 't-xs t-dim' }, P[0]);
+      S.text(400, 266, '結果', { cls: 't-xs t-dim' }, P[0]);
+      S.text(480, 266, '比べたもの', { cls: 't-xs t-dim' }, P[0]);
+      S.line(40, 274, 920, 274, { cls: 's-rule w1' }, P[0]);
+      [
+        ['m === n　（const n = 3, m = n;）', 'true', '数は値そのものが写り、値で比べる', 0],
+        ['[3, 2, 1] === [3, 2, 1]', 'false', '中身が同じでも、別々に作った 2 つの物', 0],
+        ['a === b', 'true', '同じ 1 つの物を指している（別名）', 1]
+      ].forEach(([a, b, c, hot], k) => {
+        const y = 302 + k * 34;
+        if (hot) S.rect(40, y - 21, 880, 30, { rx: 4, cls: 'f-x-soft' }, P[0]);
+        S.text(52, y, a, { cls: 't-sm t-mono pre' }, P[0]);
+        S.text(400, y, b, { cls: 't-sm t-mono t-b' + (hot ? ' t-x' : '') }, P[0]);
+        S.text(480, y, c, { cls: 't-sm' + (hot ? ' t-b t-x' : '') }, P[0]);
+      });
+      S.text(52, 426, '配列やオブジェクトの変数が持つのは、物を指す番地（JavaScript は番地の値を見せないので、図の矢印は模式）', { cls: 't-xs t-dim' }, P[0]);
+
+      // ---- 段階2: 読む時点で値が違う
+      const TX = [150, 350, 560, 770];
+      st.TX = TX;
+      S.text(52, 266, 'a を読む時点と、そのときの a', { cls: 't-xs t-dim' }, P[1]);
+      S.path('M70,356 H900', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, P[1]);
+      S.text(900, 382, '実行の順', { cls: 't-xs t-dim t-end' }, P[1]);
+      const LINES2 = ['const a = [3, 2, 1]', 'const b = a', 'b.sort()', 'console.log(a)'];
+      const VAL2 = ['a は [3, 2, 1]', 'a は [3, 2, 1]', 'a は [1, 2, 3]', '出力 [ 1, 2, 3 ]'];
+      st.tv = TX.map((x, k) => {
+        S.circle(x, 356, 6, { cls: k === 2 ? 'f-x' : 'f-fg' }, P[1]);
+        S.text(x, 334, LINES2[k], { cls: 't-c t-sm t-mono' + (k === 2 ? ' t-b t-x' : '') }, P[1]);
+        const g = S.g({}, P[1]);
+        S.rect(x - 74, 378, 148, 30, { rx: 5, cls: k >= 2 ? 'f-x-soft s-x w15' : 'f-d-soft s-d w1' }, g);
+        S.text(x, 398, VAL2[k], { cls: 't-c t-sm t-mono t-b' + (k >= 2 ? ' t-x' : '') }, g);
+        return g;
+      });
+      st.cur = S.circle(TX[0], 356, 9, { cls: 'f-none s-x w3' }, P[1]);
+
+      // ---- 段階3: 中を読まないと分からない
+      [[40, 'f', ['function f(xs) {', '  xs.sort();            // 受け取った配列を書き換える', '  return xs[0];', '}'], 'f(p) は 1、p は [ 1, 2, 3 ] になる', 1],
+       [490, 'g', ['function g(xs) {', '  return Math.min(...xs); // 書き換えない', '}'], 'g(q) は 1、q は [ 3, 2, 1 ] のまま', 0]
+      ].forEach(([x, n, src, res, hot]) => {
+        S.rect(x, 250, 430, 158, { rx: 6, cls: 'f-sf s-rule w1' }, P[2]);
+        S.text(x + 14, 270, '関数 ' + n + ' の中', { cls: 't-xs t-dim' }, P[2]);
+        code(P[2], x + 14, 294, src, 22);
+        S.text(x + 14, 394, res, { cls: 't-sm t-b' + (hot ? ' t-x' : '') }, P[2]);
+      });
+      S.text(52, 440, 'ES2023 の書き換えない版（Node.js 24 で確かめた）', { cls: 't-xs t-dim' }, P[2]);
+      code(P[2], 52, 466, ['const d = c.toSorted();   // d は [ 1, 2, 3 ]、c は [ 3, 2, 1 ] のまま'], 22);
+      S.text(52, 494, 'toReversed・toSpliced・with も、写した配列を変えて返す', { cls: 't-xs t-mid' }, P[2]);
+
+      // ---- 段階4: 書き換えない言語
+      S.text(52, 266, 'ほかの演算も新しいリストを返す（ghci、GHC 9.6.7）', { cls: 't-xs t-dim' }, P[3]);
+      S.text(52, 292, '式', { cls: 't-xs t-dim' }, P[3]);
+      S.text(330, 292, '値', { cls: 't-xs t-dim' }, P[3]);
+      S.text(520, 292, '後で読んだ xs', { cls: 't-xs t-dim' }, P[3]);
+      S.line(40, 300, 700, 300, { cls: 's-rule w1' }, P[3]);
+      [['sort xs', '[1,2,3]'], ['reverse xs', '[1,2,3]'], ['map (*2) xs', '[6,4,2]'], ['0 : xs', '[0,3,2,1]']].forEach(([e, v], k) => {
+        const y = 326 + k * 30;
+        S.text(52, y, e, { cls: 't-sm t-mono' }, P[3]);
+        S.text(330, y, v, { cls: 't-sm t-mono t-b t-d' }, P[3]);
+        S.text(520, y, '[3,2,1]', { cls: 't-sm t-mono' }, P[3]);
+      });
+      S.text(52, 466, 'xs が指すセルを書き換える演算は、言語に無い', { cls: 't-sm t-b' }, P[3]);
+
+      // ---- 段階5: Rust の借用の規則
+      const eb = S.g({}, P[4]);
+      S.rect(40, 248, 600, 130, { rx: 5, cls: 'f-x-soft s-x w15' }, eb);
+      code(eb, 52, 268, [
+        'error[E0502]: cannot borrow `a` as mutable because it is also borrowed as immutable',
+        '3 |     let b = &a;',
+        '  |             -- immutable borrow occurs here',
+        '4 |     a.sort();',
+        '  |     ^ mutable borrow occurs here',
+        '5 |     println!("{:?}", b);',
+        '  |                      - immutable borrow later used here'
+      ], 15, 't-mono t-xs');
+      S.lines(664, 280, ['& の借用：いくつでも', '&mut の借用：1 つだけ', '両方を同時には持てない'], { cls: 't-sm' }, P[4], 24);
+      S.text(52, 410, '別名と書き換えの組み合わせ', { cls: 't-xs t-dim' }, P[4]);
+      S.text(400, 410, '別名あり（共有する）', { cls: 't-c t-xs t-b' }, P[4]);
+      S.text(745, 410, '別名なし', { cls: 't-c t-xs t-b' }, P[4]);
+      [['書き換える', 'JavaScript の配列（段階1〜3）', 'Rust の &mut', 1], ['書き換えない', 'Haskell の値、Rust の &', '問題なし', 0]].forEach(([r, a, b, hot], k) => {
+        const y = 420 + k * 62;
+        S.text(52, y + 34, r, { cls: 't-sm t-b' }, P[4]);
+        S.rect(230, y, 340, 54, { rx: 5, cls: hot ? 'f-x-soft s-x w15' : 'f-sf s-rule w1' }, P[4]);
+        S.text(400, y + 32, a, { cls: 't-c t-sm' + (hot ? ' t-b t-x' : '') }, P[4]);
+        S.rect(580, y, 330, 54, { rx: 5, cls: 'f-sf s-rule w1' }, P[4]);
+        S.text(745, y + 32, b, { cls: 't-c t-sm' }, P[4]);
+      });
+
+      // ---- 段階6: SSA（模式）
+      S.text(52, 266, '第6章 場面4：10 番地（sum）を書き換える', { cls: 't-xs t-dim' }, P[5]);
+      S.rect(70, 290, 130, 64, { rx: 6, cls: 'f-d-soft s-d w15' }, P[5]);
+      st.sumV = S.text(135, 333, '', { cls: 't-c t-xl t-mono t-b' }, P[5]);
+      S.text(70, 380, '1 つの場所の値が 0 → 3 → 5 → 6 と変わる', { cls: 't-xs t-mid' }, P[5]);
+      S.text(430, 266, 'SSA：名前ごとに 1 回だけ決める（模式）', { cls: 't-xs t-dim' }, P[5]);
+      st.ssa = [['s0 = 0', '0'], ['s1 = s0 + 3', '3'], ['s2 = s1 + 2', '5'], ['s3 = s2 + 1', '6']].map(([d, v], k) => {
+        const y = 290 + k * 46, g = S.g({}, P[5]);
+        S.text(440, y + 25, d, { cls: 't-md t-mono' }, g);
+        const r = S.rect(640, y, 64, 36, { rx: 5, cls: 'f-d-soft s-d w1' }, g);
+        S.text(672, y + 24, v, { cls: 't-c t-md t-mono t-b' }, g);
+        return { g, r };
+      });
+      S.text(440, 488, '前の名前の値は残り、どの名前も 1 回しか決まらない', { cls: 't-xs t-mid' }, P[5]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state, d = S1[i];
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      op(st.top, i === 5 ? 0.3 : '');
+      st.name.forEach((n, k) => { n.t.textContent = d.names[k]; });
+      const lst = i === 3;
+      st.obj.forEach((o, k) => {
+        o.lab.textContent = d.lab[k];
+        S.show(o.arr, !lst);
+        S.show(o.lst, lst);
+        S.show(o.g, k === 0 || i === 2 || i === 3);
+      });
+      S.show(st.bTo1, i <= 1);
+      S.show(st.bTo2, i === 2 || i === 3);
+      st.bTo2.setAttribute('class', 'f-none w15 ' + (i === 3 ? 's-x' : 's-mid'));
+      S.show(st.bToA, i === 4);
+      S.show(st.bToAt, i === 4);
+      S.show(st.ng, i === 4);
+      st.bd.set(d.ttl, d.code);
+      st.bd.hot(i === 0 ? [0, 1] : i === 3 ? [2, 3, 4] : i === 4 ? [1, 2] : []);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // 上の物の中身（段階2・3 は時刻で並べ替わる。段階4 の下の物は新しいリスト）
+      let v0 = [3, 2, 1], hot0 = false;
+      const v1 = i === 3 ? [1, 2, 3] : [3, 2, 1];
+      if (i === 1) {
+        // 4 行を順に実行する（9 秒ごと）。3 行目の sort で上の配列が並べ替わる
+        const c = run ? U.mod(ctx.ts, 9) : 99;
+        const at = [0.6, 2.2, 3.8, 5.4];
+        const n = at.filter((a) => c >= a).length;   // 実行した行の数
+        if (n >= 3) { v0 = [1, 2, 3]; hot0 = true; }
+        st.bd.hot(n ? [n - 1] : []);
+        // 印は、いま実行した行の点へ 0.4 秒で移る
+        const f = n === 0 ? 0 : U.ease.inOut(U.prog(c, at[n - 1], 0.4));
+        const x = n <= 1 ? st.TX[0] : U.lerp(st.TX[n - 2], st.TX[n - 1], f);
+        st.cur.setAttribute('cx', x.toFixed(1));
+        S.show(st.cur, n > 0);
+        st.tv.forEach((g, k) => op(g, k < n ? '' : 0.15));
+      } else if (i === 2) {
+        const c = run ? U.mod(ctx.ts, 8) : 99;
+        const at = [0.6, 2.1, 3.6, 5.1];
+        const n = at.filter((a) => c >= a).length;
+        if (n >= 3) { v0 = [1, 2, 3]; hot0 = true; }
+        st.bd.hot(n ? [n - 1] : []);
+      }
+      st.obj[0].ac.forEach((c, k) => {
+        c.t.textContent = String(v0[k]);
+        c.r.setAttribute('class', hot0 ? 'f-x-soft s-x w15' : 'f-d-soft s-d w15');
+        c.t.setAttribute('class', 't-c t-md t-mono t-b' + (hot0 ? ' t-x' : ''));
+      });
+      st.obj[0].lc.forEach((c, k) => { c.t.textContent = String([3, 2, 1][k]); });
+      st.obj[1].ac.forEach((c, k) => { c.t.textContent = String(v1[k]); });
+      st.obj[1].lc.forEach((c, k) => {
+        c.t.textContent = String(v1[k]);
+        c.r.setAttribute('class', i === 3 ? 'f-x-soft s-x w15' : 'f-d-soft s-d w15');
+      });
+      // 段階6: 1 つの場所の書き換えと、SSA の 4 つの名前
+      if (i === 5) {
+        const c = run ? U.mod(ctx.ts, 8) : 99;
+        const n = [0.4, 2.0, 3.6, 5.2].filter((a) => c >= a).length;   // 実行した代入の数
+        const k = Math.max(0, n - 1);
+        st.sumV.textContent = String([0, 3, 5, 6][k]);
+        st.sumV.setAttribute('class', 't-c t-xl t-mono t-b' + (n >= 2 && c - [0.4, 2.0, 3.6, 5.2][k] < 0.8 ? ' t-x' : ''));
+        st.ssa.forEach((s, j) => {
+          op(s.g, j < n ? '' : 0.2);
+          s.r.setAttribute('class', j === k && n > 0 && run && c < 6.8 ? 'f-x-soft s-x w15' : 'f-d-soft s-d w1');
+        });
+        st.bd.hot(n ? [k] : []);
+      }
+    }
+  };
+
+  /* ================================================================
+     場面2 リストは先頭に足す
+     GHC 9.6.7 で確かめた（2026-11-22）: ghc-heap の closureSize は (:) のセルが 3 語。
+     -O0 で getAllocationCounter を 0 : xs の前後で読むと、空の計測（184 バイト）との差は 24 バイト。
+     StableName で比べると、tail ys と xs は同じ物、drop 2 zs と drop 2 xs も同じ物、tail ws と tail xs は別の物
+     ================================================================ */
+  const RY2 = { ys: 50, xs: 140, zs: 230, ws: 320 };   // 行（セルの上端）
+  const CX2 = (k) => 220 + k * 100;                    // xs の k 番目のセルの左端
+  const CH2 = 40;
+  /* セル（値 40 ＋ 番地 30）。返すのは枠と値の文字と、番地の欄の点の位置 */
+  function cell2(parent, x, y, v, cls) {
+    const g = S.g({}, parent);
+    const r = S.rect(x, y, 70, CH2, { rx: 3, cls }, g);
+    S.line(x + 40, y + 5, x + 40, y + CH2 - 5, { cls: 's-mid w1' }, g);
+    S.text(x + 20, y + 26, String(v), { cls: 't-c t-md t-mono t-b' }, g);
+    S.circle(x + 55, y + CH2 / 2, 3.5, { cls: 'f-fg' }, g);
+    return { g, r };
+  }
+  function nil2(parent, x, y) {
+    S.rect(x, y + 6, 30, CH2 - 12, { rx: 3, cls: 'f-none s-mid w1' }, parent);
+    S.text(x + 15, y + 25, '[]', { cls: 't-c t-xs t-mono' }, parent);
+  }
+  const s2 = {
+    steps: [
+      { title: 'リストはセルの連なり', text: '`xs = [3,2,1]` は `3 : 2 : 1 : []` の略で、セル（**cons セル**）3 個の連なり。セルは先頭の値と、残りのリストへの番地を持つ。[[27-algorithm.html#s1.3|第27章 場面1]]の連結リストのノードと同じ形で、GHC ではセル 1 個が 3 語（ghc-heap の closureSize で 3）、24 バイトになる。' },
+      { title: '先頭に足す：1 個作る', text: '`ys = 0 : xs` はセルを 1 個作り、残りの欄に xs の先頭のセルの番地を入れる。xs のセルは 1 つも写さない。GHC の getAllocationCounter で測った割り当ては 24 バイトで、StableName で比べると `tail ys` と xs は同じ物だった。' },
+      { title: '古い版も使える', text: 'ys を作った後も、xs は `[3,2,1]` のまま読める。更新の前の版と後の版をどちらも使えるデータ構造を**永続データ構造**と呼ぶ（Driscoll・Sarnak・Sleator・Tarjan、1989 年）。記憶装置に書いて残す「永続化」とは別の意味である。2 つの版は 3 個のセルを共有している。' },
+      { title: '末尾に足すと全部を写す', text: '`ws = xs ++ [4]` は xs の 3 個のセルを全部写す。xs の最後のセルの残りの欄は `[]` を指したまま変えられないので、そこへ至るセルを全部新しく作るしかない。末尾に足すのは O(n) で、StableName で比べると `tail ws` と `tail xs` は別の物だった。' },
+      { title: '途中を変えると、そこまでを写す', text: '2 番目を 9 にした `zs = 3 : 9 : drop 2 xs` は、前の 2 個を新しく作り、`[1]` のセルを xs と共有する。変える所より前は作り直し、後ろは共有する。リストは先頭の近くを扱う処理に向き、i 番目を読むのも変えた版を作るのも O(i) かかる。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      const name = (n, y, parent) => {
+        S.rect(30, y, 50, CH2, { rx: 5, cls: 'f-sf s-fg w15' }, parent);
+        S.text(55, y + 26, n, { cls: 't-c t-md t-mono t-b' }, parent);
+      };
+      // ---- xs（いつも見せる）
+      name('xs', RY2.xs, svg);
+      S.path(`M80,${RY2.xs + 20} H${CX2(0) - 4}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, svg);
+      st.xsCell = [3, 2, 1].map((v, k) => cell2(svg, CX2(k), RY2.xs, v, 'f-d-soft s-d w15'));
+      [0, 1, 2].forEach((k) => S.path(`M${CX2(k) + 58},${RY2.xs + 20} H${CX2(k + 1) - 4}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, svg));
+      nil2(svg, CX2(3), RY2.xs);
+      st.shareT = S.text(CX2(2) + 70, RY2.xs - 12, 'ys と xs が共有するセル', { cls: 't-end t-xs t-b t-d' }, svg);
+      // ---- ys = 0 : xs
+      const gy = st.gy = S.g({ cls: 'fade hide' }, svg);
+      name('ys', RY2.ys, gy);
+      S.path(`M80,${RY2.ys + 20} H106`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, gy);
+      st.ysCell = cell2(gy, 110, RY2.ys, 0, 'f-x-soft s-x w15');
+      st.ysPtr = S.path('', { cls: 'f-none s-x w2', 'marker-end': mk('x') }, gy);
+      st.ysPtrE = [[167, RY2.ys + 20], [CX2(0) + 14, RY2.xs - 3]];
+      // ---- zs = 3 : 9 : drop 2 xs
+      const gz = st.gz = S.g({ cls: 'fade hide' }, svg);
+      name('zs', RY2.zs, gz);
+      S.path(`M80,${RY2.zs + 20} H${CX2(0) - 4}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, gz);
+      st.zsCell = [3, 9].map((v, k) => cell2(gz, CX2(k), RY2.zs, v, 'f-x-soft s-x w15'));
+      st.zsLink = S.path(`M${CX2(0) + 58},${RY2.zs + 20} H${CX2(1) - 4}`, { cls: 'f-none s-x w2', 'marker-end': mk('x') }, gz);
+      st.zsPtr = S.path('', { cls: 'f-none s-x w2', 'marker-end': mk('x') }, gz);
+      st.zsPtrE = [[CX2(1) + 58, RY2.zs + 17], [CX2(2) + 20, RY2.xs + CH2 + 3]];
+      // ---- ws = xs ++ [4]
+      const gw = st.gw = S.g({ cls: 'fade hide' }, svg);
+      name('ws', RY2.ws, gw);
+      S.path(`M80,${RY2.ws + 20} H${CX2(0) - 4}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, gw);
+      st.wsCell = [3, 2, 1, 4].map((v, k) => {
+        const c = cell2(gw, CX2(k), RY2.ws, v, 'f-x-soft s-x w15');
+        c.link = S.path(`M${CX2(k) + 58},${RY2.ws + 20} H${CX2(k + 1) - 4}`, { cls: 'f-none s-x w2', 'marker-end': mk('x') }, c.g);
+        return c;
+      });
+      nil2(st.wsCell[3].g, CX2(4), RY2.ws);
+      // ---- 右: 版ごとの値
+      st.read = {};
+      [['ys', '[0,3,2,1]'], ['xs', '[3,2,1]'], ['zs', '[3,9,1]'], ['ws', '[3,2,1,4]']].forEach(([n, v]) => {
+        st.read[n] = S.text(940, RY2[n] + 26, n + ' ＝ ' + v, { cls: 't-end t-sm t-mono' }, svg);
+      });
+      S.line(30, 384, 930, 384, { cls: 's-rule w1' }, svg);
+      // ---- 下左: 版ごとの数え（段階ごとに 1 行ずつ足す）
+      S.text(52, 410, '式', { cls: 't-xs t-dim' }, svg);
+      S.text(300, 410, '新しいセル', { cls: 't-xs t-dim' }, svg);
+      S.text(390, 410, 'xs と共有', { cls: 't-xs t-dim' }, svg);
+      S.text(480, 410, '手間', { cls: 't-xs t-dim' }, svg);
+      S.line(40, 418, 600, 418, { cls: 's-rule w1' }, svg);
+      st.rows = [['ys = 0 : xs', '1', '3', 'O(1)', 1], ['ws = xs ++ [4]', '4', '0', 'O(n)', 3], ['zs = 3 : 9 : drop 2 xs', '2', '1', 'O(i)', 4]].map(([e, a, b, o, at], k) => {
+        const y = 444 + k * 30, g = S.g({ cls: 'fade hide' }, svg);
+        const bg = S.rect(40, y - 20, 560, 28, { rx: 4, cls: 'f-x-soft' }, g);
+        S.text(52, y, e, { cls: 't-sm t-mono' }, g);
+        S.text(300, y, a, { cls: 't-sm t-mono t-b t-x' }, g);
+        S.text(390, y, b, { cls: 't-sm t-mono t-b t-d' }, g);
+        S.text(480, y, o, { cls: 't-sm t-mono' }, g);
+        return { g, bg, at };
+      });
+      S.text(52, 540, 'n は xs の長さ、i は変える位置。どの行も、xs は [3,2,1] のまま', { cls: 't-xs t-dim' }, svg);
+      // ---- 下右: セル 1 個の中身
+      S.text(650, 410, 'セル 1 個の中身（GHC、64 ビット）', { cls: 't-xs t-dim' }, svg);
+      [['(:) の情報表を指す番地', '8 バイト'], ['先頭の値への番地', '8 バイト'], ['残りのリストへの番地', '8 バイト']].forEach(([a, b], k) => {
+        const y = 420 + k * 32;
+        S.rect(650, y, 200, 28, { rx: 3, cls: k ? 'f-d-soft s-d w1' : 'f-in s-rule w1' }, svg);
+        S.text(662, y + 19, a, { cls: 't-xs' }, svg);
+        S.text(920, y + 19, b, { cls: 't-end t-xs t-mono' }, svg);
+      });
+      S.text(650, 540, '3 語 ＝ 24 バイト（ghc-heap の closureSize）', { cls: 't-xs t-b' }, svg);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      S.fade(st.gy, i >= 1);
+      S.fade(st.gw, i >= 3);
+      S.fade(st.gz, i >= 4);
+      S.fade(st.shareT, i === 2);
+      st.rows.forEach((r) => { S.fade(r.g, i >= r.at); op(r.bg, i === r.at ? 1 : 0); });
+      st.xsCell.forEach((c) => c.r.setAttribute('class', i === 2 ? 'f-d-soft s-d w3' : 'f-d-soft s-d w15'));
+      const show = { ys: i >= 1, xs: true, zs: i >= 4, ws: i >= 3 };
+      Object.keys(st.read).forEach((n) => {
+        S.fade(st.read[n], show[n]);
+        st.read[n].setAttribute('class', 'fade t-end t-sm t-mono' + (show[n] ? '' : ' hide') + (i === 2 && (n === 'xs' || n === 'ys') ? ' t-b' : ''));
+      });
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      const T = run ? ctx.ts : 99;
+      // 番地の線を始点から伸ばす（f は 0..1）
+      const grow = (p, e, f) => {
+        const [a, b] = e, x = U.lerp(a[0], b[0], f), y = U.lerp(a[1], b[1], f);
+        p.setAttribute('d', f > 0.02 ? `M${a[0]},${a[1]} L${x.toFixed(1)},${y.toFixed(1)}` : '');
+      };
+      // 段階2: セル 0 を作り、その番地の欄に xs の先頭を書く
+      const fy = i === 1 ? U.prog(T, 0.8, 0.8) : 1;
+      op(st.ysCell.g, i === 1 && T < 0.4 ? 0 : '');
+      grow(st.ysPtr, st.ysPtrE, fy);
+      // 段階4: ws のセルを先頭から 1 個ずつ作る
+      st.wsCell.forEach((c, k) => op(c.g, i === 3 && T < 0.4 + 0.6 * k ? 0 : ''));
+      // 段階5: zs のセル 2 個を作り、2 個目の番地の欄に xs の 3 個目のセルを書く
+      st.zsCell.forEach((c, k) => op(c.g, i === 4 && T < 0.4 + 0.6 * k ? 0 : ''));
+      op(st.zsLink, i === 4 && T < 1.0 ? 0 : '');
+      grow(st.zsPtr, st.zsPtrE, i === 4 ? U.prog(T, 1.6, 0.8) : 1);
+    }
+  };
+
+  /* ================================================================
+     場面3 木は経路だけを写す
+     GHC 9.6.7 で確かめた（2026-11-22）: 図のコードで xs（4・2・6・1・3・5・7 の順に足した）に 8 を足すと、
+     ys の左の部分木（2）と 6' の左の部分木（5）は xs のものと同じ物（StableName）、ys の右の部分木（6'）は別の物。
+     Node は 4 語（closureSize）。Data.Map（containers 0.6.7、-O2）: 1〜1,000,000 を順に足した木（高さ 26）で、
+     鍵 1, 1001, …, 999001 の値を替える 1,000 回の割り当ては平均 1,069 バイト、たどった節は平均 20.3 個、Bin は 6 語
+     ================================================================ */
+  const R3 = 19;
+  const N3 = {   // 節の中心。o は xs の節、n は ys のために作った節
+    o4: [250, 76], o2: [140, 156], o6: [360, 156], o1: [85, 236], o3: [195, 236], o5: [305, 236], o7: [415, 236],
+    n4: [520, 76], n6: [630, 156], n7: [740, 236], n8: [850, 316]
+  };
+  const E3O = [['o4', 'o2'], ['o4', 'o6'], ['o2', 'o1'], ['o2', 'o3'], ['o6', 'o5'], ['o6', 'o7']];
+  const E3N = [['n4', 'o2', 1], ['n4', 'n6', 0], ['n6', 'o5', 1], ['n6', 'n7', 0], ['n7', 'n8', 0]];   // 1 は共有する部分木への番地
+  const PATH3 = ['o4', 'o6', 'o7'];
+  const CMP3 = ['8 ＞ 4 → 右へ', '8 ＞ 6 → 右へ', '8 ＞ 7 → 右へ', '葉 → Node Leaf 8 Leaf'];
+  /* 円の縁から縁への線（親 a から子 b） */
+  const edge3 = (a, b) => {
+    const [x1, y1] = N3[a], [x2, y2] = N3[b], d = Math.hypot(x2 - x1, y2 - y1);
+    const ux = (x2 - x1) / d, uy = (y2 - y1) / d;
+    return [[x1 + ux * R3, y1 + uy * R3], [x2 - ux * (R3 + 3), y2 - uy * (R3 + 3)]];
+  };
+  const s3 = {
+    steps: [
+      { title: '木を data で書く', text: '`data Tree = Leaf | Node Tree Int Tree` は、新しい型 Tree と、その値の作り方 Leaf・Node（構築子）を宣言する（`data` の記法）。値は葉か、左の木・数・右の木を持つ節。xs は 1〜7 の二分探索木で、左の部分木には小さい数、右には大きい数がある（[[27-algorithm.html#s4.1|第27章 場面4]]）。' },
+      { title: '足す場所をたどる', text: '`insert 8 xs` は根から比べて進む。8 は 4 より大きいので右、6 より大きいので右、7 より大きいので右へ進み、葉に着く。葉の所で `Node Leaf 8 Leaf` を作る。比べる回数は木の深さで、釣り合った木なら O(log n) になる。' },
+      { title: '経路の節だけを作り直す', text: '通った節ごとに `Node l v (insert x r)` で新しい節を作る。l は元の左の部分木の番地をそのまま使うので、作るのは 4・6・7 の写しと 8 の 4 節だけ。部分木 2（1 と 3 を含む）と 5 は xs と共有し、StableName で同じ物だと確かめた。根が 2 つ残る。' },
+      { title: '100 万個でも約 20 節', text: 'GHC 9.6.7（-O2）で、1〜1,000,000 を足した Data.Map の値を 1 つ替えると、割り当ては 1,000 回の平均で 1,069 バイトだった。たどった節は平均 20.3 個、節 1 個は 48 バイト。全部を写せば節だけで 48 MB になる所を、約 1 KB で新しい版を作る。' },
+      { title: '書き換える木との比べ', text: '書き換える木なら、8 を足すのは番地を 1 つ書くだけだが、前の版は消える。経路コピーは O(log n) の節を作る代わりに前の版を残す。Driscoll らの 1989 年の論文は、前の版を残す方法を連結した構造一般に広げ、Okasaki の本（1998 年）は純粋な関数型での作り方をまとめた。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // ---- 名前（根を指す）
+      [['xs', 'o4', 0], ['ys', 'n4', 1]].forEach(([n, k, isNew]) => {
+        const [x, y] = N3[k], g = S.g({}, svg);
+        S.rect(x - 25, 12, 50, 28, { rx: 5, cls: 'f-sf s-fg w15' }, g);
+        S.text(x, 31, n, { cls: 't-c t-md t-mono t-b' }, g);
+        const p = S.path(`M${x},40 V${y - R3 - 3}`, { cls: 'f-none w15 ' + (isNew ? 's-x' : 's-mid'), 'marker-end': mk(isNew ? 'x' : 'mid') }, g);
+        if (isNew) { st.ysName = g; st.ysNameP = p; }
+      });
+      // ---- 枝（番地）
+      E3O.forEach(([a, b]) => {
+        const [p, q] = edge3(a, b);
+        S.path(`M${p[0].toFixed(1)},${p[1].toFixed(1)} L${q[0].toFixed(1)},${q[1].toFixed(1)}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, svg);
+      });
+      st.newE = E3N.map(([a, b, share]) => ({ e: edge3(a, b), share, p: S.path('', { cls: 'f-none s-x w2', 'marker-end': mk('x') }, svg) }));
+      // ---- 節
+      st.node = {};
+      Object.keys(N3).forEach((k) => {
+        const [x, y] = N3[k], isNew = k[0] === 'n', g = S.g({}, svg);
+        const c = S.circle(x, y, R3, { cls: isNew ? 'f-x-soft s-x w15' : 'f-d-soft s-d w15' }, g);
+        S.text(x, y + 5, k.slice(1), { cls: 't-c t-md t-mono t-b' + (isNew ? ' t-x' : '') }, g);
+        st.node[k] = { g, c };
+      });
+      st.dot = S.circle(0, 0, 7, { cls: 'f-x', style: { display: 'none' } }, svg);
+      // 7 の右の葉（8 を置く所）
+      const LF = st.LF = [N3.o7[0] + 55, N3.o7[1] + 80];
+      st.leafAt = S.circle(LF[0], LF[1], 9, { cls: 'f-none s-x w15 dash', style: { display: 'none' } }, svg);
+      st.leafT = S.text(LF[0] + 16, LF[1] + 4, '葉（Leaf）', { cls: 't-xs t-x', style: { display: 'none' } }, svg);
+      st.leafE = S.path(`M${N3.o7[0] + 11},${N3.o7[1] + 16} L${LF[0] - 5},${LF[1] - 8}`, { cls: 'f-none s-x w1 dash', style: { display: 'none' } }, svg);
+      S.text(250, 290, 'xs：7 節', { cls: 't-c t-xs t-dim' }, svg);
+      st.ysCount = S.text(700, 330, 'ys：新しい 4 節 ＋ 共有 4 節', { cls: 't-end t-xs t-b t-x' }, svg);
+      S.line(30, 352, 930, 352, { cls: 's-rule w1' }, svg);
+      // ---- 下左: コード
+      st.bd = board(svg, 40, 364, 470, 7, 21);
+      st.bd.set('Haskell（GHC 9.6.7 で動かした）', [
+        'data Tree = Leaf | Node Tree Int Tree', 'insert :: Int -> Tree -> Tree', 'insert x Leaf = Node Leaf x Leaf',
+        'insert x (Node l v r) =', '  if x < v then Node (insert x l) v r', '  else if x > v then Node l v (insert x r)', '  else Node l v r'
+      ]);
+      // ---- 下右: 段階ごとの中身
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      S.text(540, 382, '節 1 個（Node）の中身', { cls: 't-xs t-dim' }, P[0]);
+      [['Node の情報表を指す番地', 'f-in s-rule w1'], ['左の木への番地', 'f-d-soft s-d w1'], ['数への番地', 'f-d-soft s-d w1'], ['右の木への番地', 'f-d-soft s-d w1']].forEach(([a, c], k) => {
+        S.rect(540, 392 + k * 30, 220, 26, { rx: 3, cls: c }, P[0]);
+        S.text(552, 410 + k * 30, a, { cls: 't-xs' }, P[0]);
+        S.text(920, 410 + k * 30, '8 バイト', { cls: 't-end t-xs t-mono' }, P[0]);
+      });
+      S.text(540, 534, '4 語 ＝ 32 バイト（closureSize）。Leaf は全部で 1 つを共有する', { cls: 't-xs t-b' }, P[0]);
+      S.text(540, 382, '比べた結果（insert 8 xs）', { cls: 't-xs t-dim' }, P[1]);
+      st.cmp = CMP3.map((s, k) => S.text(552, 412 + k * 28, s, { cls: 't-sm t-mono' }, P[1]));
+      S.text(540, 534, '比べた回数 3 ＝ xs の深さ', { cls: 't-xs t-b' }, P[1]);
+      S.text(540, 382, 'ys を作るのに使った節', { cls: 't-xs t-dim' }, P[2]);
+      [['新しく作った節', '4・6・7 の写しと 8', '4 個', 1], ['xs と共有した節', '2・1・3・5', '4 個', 0], ['xs の節（残る）', '1〜7', '7 個', 0]].forEach(([a, b, c, hot], k) => {
+        const y = 412 + k * 34;
+        S.text(552, y, a, { cls: 't-sm' + (hot ? ' t-b t-x' : '') }, P[2]);
+        S.text(700, y, b, { cls: 't-sm t-mono' }, P[2]);
+        S.text(920, y, c, { cls: 't-end t-sm t-mono t-b' + (hot ? ' t-x' : '') }, P[2]);
+      });
+      S.text(540, 534, '新しい節の数 ＝ 通った節の数 ＋ 1（足した 8）', { cls: 't-xs t-b' }, P[2]);
+      S.text(540, 382, 'Data.Map（containers 0.6.7、GHC 9.6.7 の -O2）', { cls: 't-xs t-dim' }, P[3]);
+      [['鍵の数', '1,000,000'], ['木の高さ', '26'], ['値を 1 つ替える割り当て', '平均 1,069 バイト'], ['たどった節', '平均 20.3 個'], ['節 1 個（Bin、6 語）', '48 バイト'], ['全部を写すなら', '節だけで 48,000,000 バイト']].forEach(([a, b], k) => {
+        const y = 408 + k * 24;
+        S.text(552, y, a, { cls: 't-sm' }, P[3]);
+        S.text(920, y, b, { cls: 't-end t-sm t-mono' + (k === 2 ? ' t-b t-x' : '') }, P[3]);
+      });
+      S.text(540, 382, '8 を足すとき', { cls: 't-xs t-dim' }, P[4]);
+      S.text(700, 382, '書き換える木', { cls: 't-xs t-b' }, P[4]);
+      S.text(820, 382, '経路コピー', { cls: 't-xs t-b t-x' }, P[4]);
+      S.line(540, 390, 920, 390, { cls: 's-rule w1' }, P[4]);
+      [['書く・作る', '番地 1 つ', '節 4 個'], ['手間', 'O(log n) の探索', 'O(log n) の節'], ['前の版', '消える', '残る'], ['別名から見ると', '変わる（場面1）', '変わらない']].forEach(([a, b, c], k) => {
+        const y = 414 + k * 26;
+        S.text(552, y, a, { cls: 't-sm' }, P[4]);
+        S.text(700, y, b, { cls: 't-sm' }, P[4]);
+        S.text(820, y, c, { cls: 't-sm t-b t-x' }, P[4]);
+      });
+      S.lines(540, 520, ['Driscoll・Sarnak・Sleator・Tarjan「Making Data Structures Persistent」（1989 年）', 'Okasaki『Purely Functional Data Structures』（1998 年）'], { cls: 't-xs t-dim' }, P[4], 14);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      const built = i >= 2;
+      Object.keys(st.node).forEach((k) => { if (k[0] === 'n') S.show(st.node[k].g, built); });
+      S.show(st.ysName, built);
+      S.show(st.ysCount, built);
+      // 段階2 はたどる経路の節に x の縁。段階3 は共有する節を太い縁にする
+      ['o4', 'o6', 'o7'].forEach((k) => st.node[k].c.setAttribute('class', i === 1 ? 'f-d-soft s-x w2' : 'f-d-soft s-d w15'));
+      ['o2', 'o1', 'o3', 'o5'].forEach((k) => st.node[k].c.setAttribute('class', i === 2 ? 'f-d-soft s-d w3' : 'f-d-soft s-d w15'));
+      st.bd.hot(i === 0 ? [0] : i === 2 ? [2, 5] : []);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // 段階2: 根から 3 回比べて、8 を置く葉まで進む（7 秒ごと）
+      const c = run ? U.mod(ctx.ts, 7) : 99;
+      const n = i === 1 ? [0.5, 1.7, 2.9, 4.1].filter((a) => c >= a).length : 0;   // 済んだ比べの数（4 は葉）
+      if (i === 1) {
+        st.cmp.forEach((t, k) => op(t, k < n ? '' : 0.15));
+        st.bd.hot(n === 0 ? [] : n <= 3 ? [5] : [2]);
+        const pos = n === 0 ? null : n <= 3 ? N3[PATH3[n - 1]] : st.LF;
+        st.dot.style.display = pos ? '' : 'none';
+        if (pos) { st.dot.setAttribute('cx', pos[0]); st.dot.setAttribute('cy', pos[1] - (n <= 3 ? R3 + 12 : 0)); }
+      } else st.dot.style.display = 'none';
+      const leaf = i === 1 && n >= 3;
+      [st.leafAt, st.leafT, st.leafE].forEach((e) => { e.style.display = leaf ? '' : 'none'; });
+      // 段階3 以降: 新しい節の番地。共有する部分木への番地は、段階3 で節ができた後に伸びる
+      const T = run ? ctx.ts : 99;
+      st.newE.forEach((e) => {
+        const f = i < 2 ? 0 : i === 2 ? (e.share ? U.prog(T, 0.6, 0.8) : U.prog(T, 0.2, 0.3)) : 1;
+        const [p, q] = e.e, x = U.lerp(p[0], q[0], f), y = U.lerp(p[1], q[1], f);
+        e.p.setAttribute('d', f > 0.02 ? `M${p[0].toFixed(1)},${p[1].toFixed(1)} L${x.toFixed(1)},${y.toFixed(1)}` : '');
+      });
+      op(st.ysNameP, i === 2 && T < 0.2 ? 0 : '');
+    }
+  };
+
+  /* ================================================================
+     場面4 幅の広い木
+     500,000 ＝ 01111 01000 01001 00000（2 進 20 桁）→ 15・8・9・0。Node.js で (i >>> s) & 31 を計算して確かめた。
+     Clojure の PersistentVector.java（GitHub の master、2026-11-22 に読んだ）: arrayFor は (i >>> level) & 0x01f で節をたどり、
+     doAssoc は経路の節ごとに node.array.clone() して 1 欄だけ替える。末尾の最大 32 要素は tail に置く。
+     HAMT の節の印（ビットマップ）の 1 の位置 2・9・15・27 は例（模式）
+     ================================================================ */
+  const IDX4 = 500000, SL4 = [15, 8, 9, 0];
+  const BITS4 = IDX4.toString(2).padStart(20, '0');
+  const CW4 = 9, LV4 = [146, 212, 278, 344], XO4 = 40, XN4 = 600;   // 欄の幅、段の上端、もとの版と新しい版の左端
+  const sx4 = (x0, s) => x0 + s * CW4 + CW4 / 2;
+  const s4 = {
+    steps: [
+      { title: '添字を 5 ビットずつに切る', text: '100 万要素の列の 500,000 番目を読む。500,000 を 2 進 20 桁にして 5 ビットずつに切ると 15・8・9・0。5 ビットは 0〜31 の数なので、根から 15・8・9 番目の枝をたどり、4 段目の節の 0 番目の欄に着く。[[27-algorithm.html#s4.2|第27章 場面4]]の 1 ビットずつ進む木を、5 ビットずつにした形。' },
+      { title: '32⁴ ＝ 1,048,576', text: '節が 32 本の枝を持つと、1 段ごとに区別できる数が 32 倍になる。4 段で 32⁴ ＝ 1,048,576 なので、100 万要素でも読む節は根から 4 個で済む。釣り合った二分木なら約 20 段になる。節の欄は番地なので、1 節は 32 個の番地を並べた配列である。' },
+      { title: '書き換えは経路の 4 節を写す', text: '500,000 番目を替えた版は、経路の 4 節を写して作る。写した節の 32 欄のうち 31 欄は、もとの節と同じ番地を持ち、同じ子を指す。写すのは 4 節 × 32 欄 ＝ 128 欄で、配列を丸ごと写す 1,000,000 欄の約 8,000 分の 1 になる。' },
+      { title: 'ハッシュ表にする（HAMT）', text: '鍵のハッシュ値（32 ビット）を同じく 5 ビットずつに切れば、ハッシュ表になる（Bagwell の Ideal Hash Trees、2001 年）。枝の少ない節は使う枝だけを詰めて持ち、32 ビットのビットマップでどの枝があるかを示す。詰めた配列の位置は、ビットマップの自分より下にある 1 の数で決まる。' },
+      { title: '配列より遅い理由', text: '配列の i 番目は番地を計算して 1 回読むが、この木は節を 4 回たどり、節は別々の場所にあるので、節ごとにキャッシュのミスが起きうる（[[27-algorithm.html#s1.4|第27章 場面1]]）。書き換えのたびに 4 節を作り、古い節はごみになる（[[5|ごみ集め]]）。それと引き換えに、古い版を残したまま共有できる。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // ---- 上: 添字の 20 ビット
+      S.text(40, 36, '添字 i ＝ 500,000', { cls: 't-md t-b' }, svg);
+      S.text(40, 56, '2 進 20 桁を 5 ビットずつ', { cls: 't-xs t-dim' }, svg);
+      st.grp = [0, 1, 2, 3].map((g) => {
+        const x0 = 300 + g * 124, gg = S.g({}, svg);
+        const box = S.rect(x0 - 4, 16, 108, 34, { rx: 4, cls: 'f-none s-rule w1' }, gg);
+        for (let b = 0; b < 5; b++) {
+          const bit = BITS4[g * 5 + b];
+          S.rect(x0 + b * 20, 20, 20, 26, { cls: bit === '1' ? 'f-d-soft s-d w1' : 'f-sf s-rule w1' }, gg);
+          S.text(x0 + b * 20 + 10, 38, bit, { cls: 't-c t-sm t-mono t-b' }, gg);
+        }
+        const v = S.text(x0 + 50, 72, String(SL4[g]), { cls: 't-c t-md t-mono t-b' }, gg);
+        S.text(x0 + 50, 88, (g + 1) + ' 段目' + (g === 0 ? '（根）' : g === 3 ? '（葉）' : ''), { cls: 't-c t-xs t-dim' }, gg);
+        return { box, v };
+      });
+      S.line(30, 104, 930, 104, { cls: 's-rule w1' }, svg);
+      // ---- 中: 経路の節（もとの版と新しい版）
+      S.text(XO4, 128, 'もとの版（100 万要素）', { cls: 't-xs t-b' }, svg);
+      const strip = (x0, y, isNew, parent) => {
+        const g = S.g({}, parent);
+        S.rect(x0, y, 32 * CW4, 24, { rx: 2, cls: isNew ? 'f-x-soft s-x w15' : 'f-d-soft s-d w15' }, g);
+        for (let s = 1; s < 32; s++) S.line(x0 + s * CW4, y + 4, x0 + s * CW4, y + 20, { cls: 's-soft w1' }, g);
+        return g;
+      };
+      st.slotO = [];
+      LV4.forEach((y, k) => {
+        strip(XO4, y, false, svg);
+        st.slotO.push(S.rect(XO4 + SL4[k] * CW4, y, CW4, 24, { cls: 'f-sf s-x w2' }, svg));
+        if (k < 3) st.slotO.push(S.path(`M${sx4(XO4, SL4[k])},${y + 24} V${LV4[k + 1] - 3}`, { cls: 'f-none s-x w15', 'marker-end': mk('x') }, svg));
+      });
+      S.text(XO4, LV4[3] + 44, '0 番目の欄 ＝ 500,000 番目の値', { cls: 't-xs t-mid' }, svg);
+      [0, 1, 2, 3].forEach((k) => S.text(XO4 + 32 * CW4 + 14, LV4[k] + 16, (k + 1) + ' 段目', { cls: 't-xs t-dim' }, svg));
+      // 新しい版
+      const gn = st.gn = S.g({ cls: 'fade hide' }, svg);
+      S.text(XN4, 128, '500,000 番目を替えた版', { cls: 't-xs t-b t-x' }, gn);
+      st.nl = LV4.map((y, k) => {
+        const g = S.g({}, gn);
+        strip(XN4, y, true, g);
+        S.rect(XN4 + SL4[k] * CW4, y, CW4, 24, { cls: k === 3 ? 'f-x s-x w2' : 'f-sf s-x w2' }, g);
+        if (k < 3) S.path(`M${sx4(XN4, SL4[k])},${y + 24} V${LV4[k + 1] - 3}`, { cls: 'f-none s-x w15', 'marker-end': mk('x') }, g);
+        return g;
+      });
+      S.text(XN4, LV4[3] + 44, '0 番目の欄だけが新しい値', { cls: 't-xs t-b t-x' }, gn);
+      S.text(XN4, 410, '写した節のほかの 31 欄は、もとの節と同じ子を指す（共有）', { cls: 't-xs t-mid' }, gn);
+      S.line(30, 430, 930, 430, { cls: 's-rule w1' }, svg);
+      // ---- 下: 段階ごとの中身
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      ['(i >>> 15) & 31 ＝ 15', '(i >>> 10) & 31 ＝ 8', '(i >>> 5) & 31 ＝ 9', 'i & 31 ＝ 0'].forEach((s, k) => S.text(52 + k * 222, 462, s, { cls: 't-sm t-mono' }, P[0]));
+      S.text(52, 494, '>>> は右へずらす、& 31 は下の 5 ビットを取り出す。Clojure の PersistentVector の arrayFor も同じ式（0x01f ＝ 31）', { cls: 't-xs t-mid' }, P[0]);
+      S.text(52, 456, '段の数', { cls: 't-xs t-dim' }, P[1]);
+      [['1 段', '32'], ['2 段', '1,024'], ['3 段', '32,768'], ['4 段', '1,048,576']].forEach(([a, b], k) => {
+        S.text(150 + k * 150, 456, a, { cls: 't-xs t-dim' }, P[1]);
+        S.text(150 + k * 150, 482, b, { cls: 't-md t-mono t-b' + (k === 3 ? ' t-x' : '') }, P[1]);
+      });
+      S.text(52, 522, '二分木で 100 万要素なら約 20 段（2²⁰ ＝ 1,048,576）', { cls: 't-xs t-mid' }, P[1]);
+      [['写す欄', '4 節 × 32 欄 ＝ 128 欄', 1], ['配列を丸ごと写すと', '1,000,000 欄', 0]].forEach(([a, b, hot], k) => {
+        S.text(52 + k * 440, 462, a, { cls: 't-xs t-dim' }, P[2]);
+        S.text(52 + k * 440, 490, b, { cls: 't-md t-mono t-b' + (hot ? ' t-x' : '') }, P[2]);
+      });
+      S.text(52, 526, 'Clojure の doAssoc：経路の節ごとに node.array.clone() を作り、1 欄だけ替える', { cls: 't-xs t-mid' }, P[2]);
+      // HAMT の節（模式）: 32 ビットの印と、詰めた配列
+      const ONE = [2, 9, 15, 27];
+      S.text(52, 452, 'ビットマップ', { cls: 't-xs t-dim' }, P[3]);
+      for (let b = 0; b < 32; b++) {
+        const on = ONE.includes(b), x = 170 + b * 16;
+        S.rect(x, 440, 15, 20, { cls: b === 9 ? 'f-x-soft s-x w15' : on ? 'f-d-soft s-d w1' : 'f-sf s-rule w1' }, P[3]);
+        S.text(x + 7.5, 455, on ? '1' : '0', { cls: 't-c t-xs t-mono' + (on ? ' t-b' : ' t-dim') + (b === 9 ? ' t-x' : '') }, P[3]);
+      }
+      [0, 31].forEach((b) => S.text(170 + b * 16 + 7.5, 474, String(b), { cls: 't-c t-xs t-mono t-dim' }, P[3]));
+      S.text(52, 512, '詰めた配列', { cls: 't-xs t-dim' }, P[3]);
+      ONE.forEach((b, k) => {
+        const x = 170 + k * 70;
+        S.rect(x, 496, 64, 24, { rx: 3, cls: b === 9 ? 'f-x-soft s-x w15' : 'f-d-soft s-d w1' }, P[3]);
+        S.text(x + 32, 512, '枝 ' + b, { cls: 't-c t-xs t-mono' + (b === 9 ? ' t-b t-x' : '') }, P[3]);
+      });
+      S.path(`M${170 + 9 * 16 + 7.5},462 L${170 + 70 + 32},493`, { cls: 'f-none s-x w15', 'marker-end': mk('x') }, P[3]);
+      S.lines(480, 500, ['5 ビットが 9 → ビットマップの 9 番が 1 なら枝がある。', '9 より下の 1 は 1 個 → 詰めた配列の 1 番（0 から）'], { cls: 't-xs' }, P[3], 15);
+      S.text(920, 452, '1 の位置は例（模式）', { cls: 't-end t-xs t-dim' }, P[3]);
+      [['配列', '番地を計算して 1 回読む'], ['32 分木', '4 つの節を順に読む（節ごとにミスしうる）']].forEach(([a, b], k) => {
+        S.text(52, 462 + k * 28, a, { cls: 't-sm t-b' }, P[4]);
+        S.text(150, 462 + k * 28, b, { cls: 't-sm' + (k ? ' t-x' : '') }, P[4]);
+      });
+      S.text(52, 530, '使う所：Clojure の PersistentVector・PersistentHashMap、Scala の Vector、Immutable.js の List・Map', { cls: 't-xs t-mid' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      S.fade(st.gn, i >= 2);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // 段階1: 上の 5 ビットから順に、その段の欄をたどる（6 秒ごと）。ほかの段階は全部たどった姿
+      const c = run ? U.mod(ctx.ts, 6) : 99;
+      const n = i === 0 ? [0.5, 1.3, 2.1, 2.9].filter((a) => c >= a).length : 4;
+      st.grp.forEach((g, k) => {
+        const on = k < n;
+        g.box.setAttribute('class', 'f-none ' + (on && (i === 0 || i === 1) ? 's-x w2' : 's-rule w1'));
+        g.v.setAttribute('class', 't-c t-md t-mono t-b' + (on && i === 0 ? ' t-x' : ''));
+      });
+      // もとの版の経路（欄の枠と下の段への番地）は、たどった所まで出す
+      st.slotO.forEach((e, k) => {
+        // 偶数番は欄の枠（段 k/2）、奇数番はその段から下の段への番地（下の段に着いたら出す）
+        const lv = k % 2 ? (k - 1) / 2 + 1 : k / 2;
+        op(e, lv < n ? '' : 0);
+      });
+      // 段階3: 写した節を根から順に作る（Clojure の doAssoc と同じく、上の節を写してから下へ進む）
+      const T = run ? ctx.ts : 99;
+      st.nl.forEach((g, k) => op(g, i === 2 && T < 0.4 + 0.6 * k ? 0 : ''));
+    }
+  };
+
+  /* ================================================================
+     場面5 ごみ集め
+     GHC 9.6.7、ghc -O2 -rtsopts、./grow +RTS -s（2026-11-22、3 回とも同じバイト数）:
+       1,392,232,384 bytes allocated in the heap / 300,348,960 bytes copied during GC /
+       72,431,672 bytes maximum residency (8 sample(s)) / 146 MiB total memory in use /
+       Gen 0: 326 colls、Gen 1: 8 colls（Max pause 0.055〜0.059 秒）/ MUT 約 0.17 秒、GC 約 0.17 秒
+     +RTS -S の行を足すと、Gen 0 の 326 回で割り当て 1,361,840,480 バイト、写した 156,139,136 バイト（11.5%、1 回平均 478,954）。
+     既定値は getGCFlags で minAllocAreaSize 1024 ブロック（4 MB）、generations 2。利用者の手引き（9.6.7）の -A の既定も 4MB。
+     機械語は Cons.hs（cons0 xs = 0 : xs）を ghc -O2 -ddump-asm した出力
+     ================================================================ */
+  const N5 = {
+    o4: [300, 84], o2: [230, 140], o6: [370, 140], o1: [195, 196], o3: [265, 196], o5: [335, 196], o7: [405, 196],
+    n4: [520, 84], n6: [590, 140], n7: [660, 196], n8: [730, 250]
+  };
+  const E5 = [['o4', 'o2'], ['o4', 'o6'], ['o2', 'o1'], ['o2', 'o3'], ['o6', 'o5'], ['o6', 'o7'], ['n4', 'o2'], ['n4', 'n6'], ['n6', 'o5'], ['n6', 'n7'], ['n7', 'n8']];
+  const MARK5 = ['n4', 'o2', 'o1', 'o3', 'n6', 'o5', 'n7', 'n8'];   // ys から番地をたどって印を付ける順（深さ優先）
+  const R5 = 14;
+  const BLK5 = [[0, 30, 0], [30, 50, 0], [80, 26, 1], [106, 44, 0], [150, 36, 0], [186, 30, 0], [216, 52, 0], [268, 28, 1], [296, 40, 0], [336, 34, 0], [370, 46, 0], [416, 30, 1], [446, 58, 0], [504, 46, 0]];   // 若い世代の物 [左, 幅, 生き残るか]（模式）
+  const NX5 = 60, NW5 = 550;
+  const s5 = {
+    steps: [
+      { title: '誰が最後に使うか', text: '場面3 の xs と ys は、節 2・1・3・5 を共有する。xs を使い終えても、この 4 節は ys から届くので解放できない。解放してよいのは xs だけから届く 4・6・7 で、どれがそうかは実行中に変わる。書き手が解放を書く言語でこれを誤ると、解放した後に使う誤りになる（[[26-kata.html#s6.3|第26章 場面6]]）。' },
+      { title: '届く物をたどる', text: 'ごみ集めは、根（木の根とは別。スタックとレジスタにある番地）から番地をたどって届いた物に印を付け、印の無い物の場所を回収する。ys だけが根に残ると、印が付くのは 8 節で、4・6・7 が回収される。最初の例は McCarthy の 1960 年の Lisp の論文で、論文では reclamation と呼んだ。' },
+      { title: '世代別のごみ集め', text: '多くの物は作ってすぐ使われなくなる。そこで、新しい物を置く若い世代を頻繁に集め、生き残った物だけを古い世代へ写す（Lieberman と Hewitt の 1983 年、Ungar の 1984 年の論文）。死んだ物には触れないので、手間は生き残りの量で決まる。割り当ては、ヒープの先端の番地を進めるだけで済む。' },
+      { title: '測る（+RTS -s）', text: '`where` は、上の式で使う名前を後ろで定義する記法。100 万個の鍵を Data.Map に 1 つずつ足す図のプログラムは、割り当ての総計が 1,392,232,384 バイト、最大の常駐量が 72,431,672 バイトだった。足すたびに前の版の経路がごみになり、若い世代の GC で生き残ったのは約 11%。' },
+      { title: '参照を数える方法との違い', text: 'Rust の Rc（[[33-saba-dom.html#s2.1|第33章 場面2]]）は物ごとに参照の数を持ち、0 になった時点で解放する（参照を数える方法は Collins が 1960 年に示した）。番地を写すたびに数を増減し、輪になった物は数が 0 にならない。GHC の既定の方法は輪も回収するが、集める間はプログラムを止め、写す先の場所も要る。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // ---- 上: 根と、場面3 の 2 つの版
+      const top = st.top = S.g({}, svg);
+      S.text(250, 31, '根（スタックとレジスタ）', { cls: 't-end t-xs t-dim' }, top);
+      S.rect(262, 12, 300, 30, { rx: 5, cls: 'f-in s-rule w1' }, top);
+      st.slot = {};
+      [['xs', 'o4'], ['ys', 'n4']].forEach(([n, k]) => {
+        const [x, y] = N5[k], g = S.g({}, top);
+        S.rect(x - 22, 16, 44, 22, { rx: 3, cls: 'f-sf s-fg w1' }, g);
+        const t = S.text(x, 31, n, { cls: 't-c t-sm t-mono t-b' }, g);
+        const p = S.path(`M${x},38 V${y - R5 - 3}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g);
+        st.slot[n] = { g, t, p };
+      });
+      st.dropT = S.text(300, 58, 'xs を使い終えた', { cls: 't-c t-xs t-x', style: { display: 'none' } }, top);
+      E5.forEach(([a, b]) => {
+        const [x1, y1] = N5[a], [x2, y2] = N5[b], d = Math.hypot(x2 - x1, y2 - y1), ux = (x2 - x1) / d, uy = (y2 - y1) / d;
+        S.path(`M${(x1 + ux * R5).toFixed(1)},${(y1 + uy * R5).toFixed(1)} L${(x2 - ux * (R5 + 3)).toFixed(1)},${(y2 - uy * (R5 + 3)).toFixed(1)}`, { cls: 'f-none s-mid w1', 'marker-end': mk('mid') }, top);
+      });
+      st.nd = {};
+      Object.keys(N5).forEach((k) => {
+        const [x, y] = N5[k];
+        const c = S.circle(x, y, R5, {}, top);
+        const t = S.text(x, y + 4, k.slice(1), { cls: 't-c t-sm t-mono t-b' }, top);
+        st.nd[k] = { c, t };
+      });
+      st.cnt = S.text(930, 120, '', { cls: 't-end t-sm t-b' }, top);
+      st.cnt2 = S.text(930, 144, '', { cls: 't-end t-sm t-b t-x' }, top);
+      S.text(930, 252, 'x の縁は ys のために作った節', { cls: 't-end t-xs t-dim' }, top);
+      S.line(30, 272, 930, 272, { cls: 's-rule w1' }, svg);
+
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      // ---- 段階1: どの節を解放してよいか
+      S.text(52, 300, '節', { cls: 't-xs t-dim' }, P[0]);
+      S.text(330, 300, 'xs から届く', { cls: 't-xs t-dim' }, P[0]);
+      S.text(450, 300, 'ys から届く', { cls: 't-xs t-dim' }, P[0]);
+      S.text(570, 300, '解放してよいのは', { cls: 't-xs t-dim' }, P[0]);
+      S.line(40, 308, 920, 308, { cls: 's-rule w1' }, P[0]);
+      [['4・6・7（xs の経路）', '○', '×', 'xs を使い終えた後', 0], ['2・1・3・5（共有）', '○', '○', 'xs と ys の両方を使い終えた後', 1], ['4・6・7・8 の新しい節（ys の経路）', '×', '○', 'ys を使い終えた後', 0]].forEach(([a, b, c, d, hot], k) => {
+        const y = 336 + k * 34;
+        if (hot) S.rect(40, y - 21, 880, 30, { rx: 4, cls: 'f-x-soft' }, P[0]);
+        S.text(52, y, a, { cls: 't-sm' + (hot ? ' t-b' : '') }, P[0]);
+        S.text(360, y, b, { cls: 't-c t-sm' }, P[0]);
+        S.text(480, y, c, { cls: 't-c t-sm' }, P[0]);
+        S.text(570, y, d, { cls: 't-sm' + (hot ? ' t-b t-x' : '') }, P[0]);
+      });
+      S.text(52, 470, '版を使い終える時刻は実行の流れで決まるので、どの節がいつ解放できるかも実行の流れしだいで変わる', { cls: 't-xs t-mid' }, P[0]);
+      // ---- 段階2: 印を付ける
+      S.text(52, 300, '印を付けた順（ys から深さ優先でたどる）', { cls: 't-xs t-dim' }, P[1]);
+      st.mk = MARK5.map((k, j) => {
+        const x = 60 + j * 74;
+        const g = S.g({}, P[1]);
+        S.circle(x, 330, 14, { cls: 'f-d s-d w15' }, g);
+        S.text(x, 334, k.slice(1), { cls: 't-c t-sm t-mono t-b t-sf' }, g);
+        if (j < MARK5.length - 1) S.text(x + 37, 334, '→', { cls: 't-c t-xs t-dim' }, g);
+        return g;
+      });
+      st.sweep = S.g({}, P[1]);
+      S.text(52, 392, '印の無い節', { cls: 't-xs t-dim' }, st.sweep);
+      ['4', '6', '7'].forEach((s, j) => {
+        S.circle(150 + j * 40, 388, 14, { cls: 'f-none s-dim w15 dash' }, st.sweep);
+        S.text(150 + j * 40, 392, s, { cls: 't-c t-sm t-mono t-dim' }, st.sweep);
+      });
+      S.text(258, 392, '→ 場所を空きに戻す（回収）', { cls: 't-sm t-b t-x' }, st.sweep);
+      S.text(52, 470, 'McCarthy（1960 年）の Lisp は、届く物の印のビットを立ててから全部をなめ、印の無い所を空きの列に戻した', { cls: 't-xs t-mid' }, P[1]);
+      // ---- 段階3: 若い世代と古い世代
+      S.text(NX5, 300, '若い世代（GHC の既定の -A は 4 MB）', { cls: 't-xs t-dim' }, P[2]);
+      S.rect(NX5, 310, NW5, 34, { rx: 3, cls: 'f-sf s-fg w15' }, P[2]);
+      S.text(NX5, 396, '古い世代', { cls: 't-xs t-dim' }, P[2]);
+      S.rect(NX5, 406, NW5, 34, { rx: 3, cls: 'f-in s-rule w1' }, P[2]);
+      st.blk = BLK5.map(([x, w, live]) => {
+        const g = S.g({}, P[2]);
+        const r = S.rect(NX5 + x + 1, 314, w - 2, 26, { rx: 2, cls: live ? 'f-d-soft s-d w1' : 'f-soft s-rule w1' }, g);
+        return { g, r, x, w, live };
+      });
+      st.hp = S.g({}, P[2]);
+      S.line(0, 304, 0, 350, { cls: 's-x w2' }, st.hp);
+      S.text(0, 364, '先端', { cls: 't-c t-xs t-b t-x' }, st.hp);
+      st.gcT = S.text(NX5 + NW5, 300, '', { cls: 't-end t-xs t-b t-x' }, P[2]);
+      st.oldBlk = S.g({}, P[2]);
+      S.text(NX5, 470, '濃い物は GC の時に生き残っている物（模式）。生き残りだけを古い世代へ写し、若い世代は先頭から使い直す', { cls: 't-xs t-mid' }, P[2]);
+      const ab = S.g({}, P[2]);
+      S.rect(640, 290, 290, 162, { rx: 6, cls: 'f-sf s-rule w1' }, ab);
+      S.text(652, 308, 'GHC 9.6.7 -O2 が 0 : xs に出した機械語', { cls: 't-xs t-dim' }, ab);
+      [['addq $24,%r12', '先端を 24 進める', 1], ['cmpq 856(%r13),%r12', '上限と比べる', 1], ['ja …', '越えたら GC へ', 1], ['movq $:_con_info,-16(%r12)', '', 0], ['movq $stg_INTLIKE_closure+257,-8(%r12)', '', 0], ['movq %r14,(%r12)', '', 0]].forEach(([a, b, hot], k) => {
+        const y = 330 + k * 18;
+        S.text(652, y, a, { cls: 't-xs t-mono pre' + (hot ? ' t-b t-x' : '') }, ab);
+        if (b) S.text(918, y, b, { cls: 't-end t-xs' }, ab);
+      });
+      S.text(652, 442, 'r12 がヒープの先端。後の 3 命令でセルの 3 語を書く', { cls: 't-xs t-dim' }, ab);
+      // ---- 段階4: +RTS -s の実測
+      const bd = board(P[3], 40, 284, 430, 5, 22);
+      bd.set('ghc -O2 -rtsopts、./grow +RTS -s（M は Data.Map.Strict）', ['main = print (M.size m)', '  where', '    m = foldl\' step M.empty [1 .. 1000000 :: Int]', '    step acc k = M.insert k k acc', '    -- 前の版 acc に k を足した新しい版']);
+      bd.hot([1]);
+      [['若い世代（Gen 0）', '326 回'], ['古い世代（Gen 1）', '8 回'], ['1 回の Gen 0 で写した量', '平均 478,954 バイト（約 11%）'], ['計算 ／ GC の時間', '約 0.17 秒 ／ 約 0.17 秒'], ['使ったメモリ', '146 MiB']].forEach(([a, b], k) => {
+        const y = 304 + k * 24;
+        S.text(490, y, a, { cls: 't-sm' }, P[3]);
+        S.text(920, y, b, { cls: 't-end t-sm t-mono' }, P[3]);
+      });
+      const MAXB = 1392232384;
+      [['割り当ての総計', 1392232384, 'f-x-soft s-x w1', '1,392,232,384 バイト'], ['GC で写した量', 300348960, 'f-d-soft s-d w1', '300,348,960 バイト'], ['最大の常駐量', 72431672, 'f-d s-d w1', '72,431,672 バイト']].forEach(([a, v, c, s], k) => {
+        const y = 440 + k * 34;
+        S.text(52, y + 15, a, { cls: 't-sm' }, P[3]);
+        S.rect(200, y, Math.max(3, 560 * v / MAXB), 22, { rx: 2, cls: c }, P[3]);
+        S.text(200 + 560 * v / MAXB + 10, y + 15, s, { cls: 't-sm t-mono t-b' + (k === 0 ? ' t-x' : '') }, P[3]);
+      });
+      // ---- 段階5: 参照を数える方法との比べ
+      S.text(230, 300, '参照を数える（Rust の Rc）', { cls: 't-sm t-b' }, P[4]);
+      S.text(590, 300, 'たどる（GHC のごみ集め）', { cls: 't-sm t-b' }, P[4]);
+      S.line(40, 310, 920, 310, { cls: 's-rule w1' }, P[4]);
+      [['解放する時', '数が 0 になったとき、すぐ', 'ごみ集めのときに、まとめて'],
+       ['手間がかかる所', '番地を写す・捨てるたびの数の増減', '生き残った物をたどって写す量'],
+       ['輪になった物', '数が 0 にならない（Weak で断つ）', '回収できる'],
+       ['止まる時間', '大きな物を捨てると解放が続く', 'この例の最長は約 0.06 秒（Gen 1）'],
+       ['使う場所', '使っている量 ＋ 数の欄', '常駐量の約 2 倍（この例 146 MiB）']
+      ].forEach(([a, b, c], k) => {
+        const y = 338 + k * 32;
+        S.text(52, y, a, { cls: 't-sm t-b' }, P[4]);
+        S.text(230, y, b, { cls: 't-sm' }, P[4]);
+        S.text(590, y, c, { cls: 't-sm' }, P[4]);
+      });
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      op(st.top, i >= 2 ? 0.3 : '');
+      // 段階1 は共有する節を太い縁に。段階2 は frame が印を付ける
+      Object.keys(st.nd).forEach((k) => {
+        const shared = ['o2', 'o1', 'o3', 'o5'].includes(k);
+        st.nd[k].c.setAttribute('class', k[0] === 'n' ? 'f-x-soft s-x w15' : 'f-d-soft s-d ' + (shared && i === 0 ? 'w3' : 'w15'));
+        st.nd[k].t.setAttribute('class', 't-c t-sm t-mono t-b');
+      });
+      const drop = i === 1;
+      st.slot.xs.t.textContent = drop ? '—' : 'xs';
+      S.show(st.slot.xs.p, !drop);
+      S.show(st.dropT, drop);
+      st.cnt.textContent = '';
+      st.cnt2.textContent = '';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      if (i === 1) {
+        // ys から印を付け（0.6 秒ごと）、終わったら印の無い節を回収する。9 秒ごとに繰り返す
+        const c = run ? U.mod(ctx.ts, 9) : 99;
+        const n = MARK5.filter((k, j) => c >= 0.6 + 0.6 * j).length;
+        const swept = c >= 0.6 + 0.6 * MARK5.length + 0.4;
+        Object.keys(st.nd).forEach((k) => {
+          const j = MARK5.indexOf(k), marked = j >= 0 && j < n;
+          const cls = marked ? 'f-d s-d w15' : swept ? 'f-none s-dim w1 dash' : k[0] === 'n' ? 'f-x-soft s-x w15' : 'f-d-soft s-d w15';
+          st.nd[k].c.setAttribute('class', cls);
+          st.nd[k].t.setAttribute('class', 't-c t-sm t-mono t-b' + (marked ? ' t-sf' : swept ? ' t-dim' : ''));
+        });
+        st.mk.forEach((g, j) => op(g, j < n ? '' : 0.15));
+        op(st.sweep, swept ? '' : 0);
+        st.cnt.textContent = '印を付けた節 ' + n;
+        st.cnt2.textContent = swept ? '回収した節 3' : '';
+      }
+      if (i === 2) {
+        // 若い世代に物を順に置き（先端が右へ進む）、満杯で GC。生き残りを古い世代へ写し、先頭から使い直す（7 秒ごと）
+        // 止めているときは、GC で生き残りを写し終えた直後の姿（4.9 秒）
+        const c = run ? U.mod(ctx.ts, 7) : 4.9;
+        const end = BLK5[BLK5.length - 1][0] + BLK5[BLK5.length - 1][1];
+        const fill = U.clamp((c - 0.3) / 3.5, 0, 1) * end;
+        const gc = c >= 4.0, after = c >= 5.0;
+        let ox = 0;
+        st.blk.forEach((b) => {
+          const shown = b.x < fill;
+          if (b.live) {
+            const f = gc ? U.ease.inOut(U.prog(c, 4.0, 0.8)) : 0;
+            const dx = U.lerp(0, ox - b.x, f), dy = U.lerp(0, 92, f);
+            b.g.setAttribute('transform', `translate(${dx.toFixed(1)},${dy.toFixed(1)})`);
+            ox += b.w;
+            op(b.g, shown ? '' : 0);
+          } else {
+            // 死んだ物は GC の時に破線（ごみ）になり、使い直すと消える
+            b.r.setAttribute('class', gc ? 'f-none s-dim w1 dash' : 'f-soft s-rule w1');
+            op(b.g, shown && !after ? '' : 0);
+          }
+        });
+        const hx = after ? NX5 : NX5 + fill;
+        st.hp.setAttribute('transform', `translate(${hx.toFixed(1)},0)`);
+        st.gcT.textContent = gc && !after ? '満杯 → 生き残りだけを古い世代へ写す' : after ? '若い世代を先頭から使い直す' : '';
+      }
+    }
+  };
+
+  /* ================================================================
+     場面6 得るもの
+     Rust（rustc 1.95.0）: std::thread::scope の中で v を読むだけの 2 つの spawn は通り、出力は 6 Some(3)。
+       片方が v.sort() だと E0502（cannot borrow `v` as immutable because it is also borrowed as mutable）。
+     Git（git 2.53.0）: 一時置き場のリポジトリで、作者 example・時刻を決めて 2 回 commit した。
+       1 回目の後 count 10、src/lib/b.rs の 1 行を変えた 2 回目の後 count 15（git count-objects -v）。名前は git ls-tree と cat-file の出力。
+     Node.js 24.22.1: st2 = { ...st1, volume: 50 } で st2 === st1 は false、st2.queue === st1.queue は true。
+     React の useState の文書（react.dev、2026-11-22 に読んだ）: 新しい値が Object.is で同じなら描き直しを省く
+     ================================================================ */
+  const G6 = {   // [中心 x, 中心 y, 文字, 種類（o 前の版・n 新しい版・s 共有）]
+    c1: [110, 150, 'commit bf41739', 'o'], r1: [110, 200, 'tree 7768979（根）', 'o'], s1: [110, 318, 'tree 4b495a4  src', 'o'], l1: [110, 378, 'tree 067eb47  lib', 'o'], b1: [110, 438, 'blob d5c9cc2  b.rs', 'o'],
+    c2: [650, 150, 'commit cc3f8ea', 'n'], r2: [650, 200, 'tree 54c02f4（根）', 'n'], s2: [650, 318, 'tree c57553c  src', 'n'], l2: [650, 378, 'tree 8ae3e61  lib', 'n'], b2: [650, 438, 'blob 59548e1  b.rs', 'n'],
+    rd: [380, 222, 'blob fc72a5c  README.md', 's'], dc: [380, 256, 'tree 6566a94  docs', 's'], gd: [380, 290, 'blob 7e2b643  guide.md', 's'], mn: [380, 338, 'blob f328e4d  main.rs', 's'], ar: [380, 398, 'blob 82a3da1  a.rs', 's']
+  };
+  const GE6 = [['c1', 'r1'], ['r1', 's1'], ['s1', 'l1'], ['l1', 'b1'], ['r1', 'rd'], ['r1', 'dc'], ['s1', 'mn'], ['l1', 'ar'],
+    ['c2', 'r2'], ['r2', 's2'], ['s2', 'l2'], ['l2', 'b2'], ['r2', 'rd'], ['r2', 'dc'], ['s2', 'mn'], ['l2', 'ar'], ['dc', 'gd']];
+  const s6 = {
+    steps: [
+      { title: 'スレッドで共有する', text: 'データ競合は、2 つのスレッドが同じ場所を同時に使い、少なくとも一方が書くときに起きる。誰も書かない値は、ロックなしでいくつのスレッドからでも読める（スレッドはアドレス空間を共有する。[[09-os.html#s2.2|第9章 場面2]]）。Rust は、2 つのスレッドが v を読むだけなら通し、片方が sort するなら E0502 で止めた。' },
+      { title: '古い版が残る（Git）', text: 'Git は版を、中身のハッシュを名前にした不変の物（blob・tree・commit）で残す。b.rs の 1 行を変えて commit すると、新しい物は blob 1・tree 3・commit 1 の 5 個で、残りの 5 個は前の版と共有した。変えたファイルから根までの経路だけが新しくなり、前の版は消えない。' },
+      { title: '変わったかを 1 回で比べる', text: '書き換えないなら、同じ物は中身も同じ。`{ ...st1, volume: 50 }` は新しい物を作り、変えていない queue は前と同じ物を指したまま。React は新しい state が前と同じ物なら描き直しを省くので、中を書き換えて同じ物を渡すと、変化を見落とす。' },
+      { title: '代償', text: '代償は 3 つあった。更新のたびに割り当てる（[[3|木は経路だけを写す]]で約 1 KB）。古い版はごみになり、ごみ集めが時間とメモリを使う（[[5|ごみ集め]]の例で時間の約半分）。番地をたどる回数が増える（[[4|幅の広い木]]）。Rust は別名が無いと型で確かめてその場で書き換え、この代償を払わない代わりに、借用の規則に従って書く。' },
+      { title: '答え：いつ読むかが消える', text: '書き換えをやめると、共有が安全になり、値をいつ読むかが意味から消える。同じ名前はいつ読んでも同じ値で、古い版も残る。代償は割り当てとごみ集めで、その仕事は処理系が受け持つ。次の章は、式の値がいつ計算しても同じことを使い、「いつ計算するか」を処理系に預ける（遅延評価）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // ---- 上: 得るもの 3 つと代償
+      st.cards = [['スレッドで共有', 'データ競合が起きない'], ['古い版が残る', 'Git の物、元に戻す'], ['変わったかを 1 回で比べる', '同じ物なら中身も同じ'], ['代償', '割り当て・ごみ集め・たどる回数']].map(([a, b], k) => {
+        const x = 40 + k * 224, g = S.g({}, svg);
+        const r = S.rect(x, 14, 210, 62, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+        S.text(x + 14, 40, a, { cls: 't-sm t-b' }, g);
+        S.text(x + 14, 62, b, { cls: 't-xs t-mid' }, g);
+        return { g, r };
+      });
+      S.line(30, 94, 930, 94, { cls: 's-rule w1' }, svg);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+
+      // ---- 段階1: 読むだけのスレッドと、書くスレッド
+      const thr = (g, x, y, s) => { S.rect(x, y, 90, 30, { rx: 5, cls: 'f-sf s-fg w15' }, g); S.text(x + 45, y + 20, s, { cls: 't-c t-sm t-b' }, g); };
+      [[40, '誰も書かない値', 0], [500, '片方が書く値', 1]].forEach(([x0, ttl, bad]) => {
+        const g = S.g({}, P[0]);
+        S.rect(x0, 110, 420, 210, { rx: 8, cls: 'f-none s-rule w1' }, g);
+        S.text(x0 + 14, 132, ttl, { cls: 't-sm t-b' + (bad ? ' t-x' : '') }, g);
+        thr(g, x0 + 20, 152, 'スレッド 1');
+        thr(g, x0 + 20, 262, 'スレッド 2');
+        S.rect(x0 + 250, 196, 140, 40, { rx: 4, cls: bad ? 'f-x-soft s-x w15' : 'f-d-soft s-d w15' }, g);
+        S.text(x0 + 320, 221, 'v ＝ [3, 2, 1]', { cls: 't-c t-sm t-mono t-b' }, g);
+        if (bad) {
+          S.path(`M${x0 + 112},167 L${x0 + 246},206`, { cls: 'f-none s-x w2', 'marker-end': mk('x') }, g);
+          S.text(x0 + 190, 166, '書く（sort）', { cls: 't-c t-xs t-b t-x' }, g);
+        } else {
+          S.path(`M${x0 + 248},208 L${x0 + 114},170`, { cls: 'f-none s-d w15', 'marker-end': mk('d') }, g);
+          S.text(x0 + 190, 166, '読む', { cls: 't-c t-xs t-d' }, g);
+        }
+        S.path(`M${x0 + 248},226 L${x0 + 114},270`, { cls: 'f-none s-d w15', 'marker-end': mk('d') }, g);
+        S.text(x0 + 178, 266, '読む', { cls: 't-c t-xs t-d' }, g);
+        S.text(x0 + 14, 310, bad ? 'スレッド 2 が読む値は、sort との前後しだい（データ競合）' : '同時に読んでも、どちらも同じ値を読む', { cls: 't-xs t-b' + (bad ? ' t-x' : ' t-d') }, g);
+      });
+      const bdA = board(P[0], 40, 334, 420, 4, 22);
+      bdA.set('Rust（rustc 1.95.0）：std::thread::scope の中', ['let v = vec![3, 2, 1];', 's.spawn(|| v.iter().sum::<i32>());  // 読む', 's.spawn(|| v.iter().max().copied()); // 読む', '→ 通る。出力は 6 Some(3)']);
+      bdA.hot([3]);
+      const bdB = board(P[0], 500, 334, 420, 4, 22);
+      bdB.set('Rust（rustc 1.95.0）：std::thread::scope の中', ['let mut v = vec![3, 2, 1];', 's.spawn(|| v.sort());                // 書く', 's.spawn(|| println!("{:?}", v));     // 読む', '→ E0502 で止まる']);
+      bdB.hot([1, 3]);
+      code(P[0], 40, 498, ['error[E0502]: cannot borrow `v` as immutable because it is also borrowed as mutable'], 16, 't-mono t-xs t-x');
+      S.text(40, 522, 'Rust は、スレッドに渡す閉包の借用を型で確かめる。読むだけの & はいくつでも渡せる', { cls: 't-xs t-mid' }, P[0]);
+
+      // ---- 段階2: Git の 2 つの版
+      S.text(110, 118, '前の版（1 回目の commit）', { cls: 't-c t-xs t-b' }, P[1]);
+      S.text(650, 118, 'b.rs の 1 行を変えた版', { cls: 't-c t-xs t-b t-x' }, P[1]);
+      S.text(380, 196, '2 つの版が共有する物', { cls: 't-c t-xs t-dim' }, P[1]);
+      const box6 = (k) => {
+        const [x, y, s, kind] = G6[k], w = kind === 's' ? 200 : 170;
+        S.rect(x - w / 2, y - 12, w, 24, { rx: 3, cls: kind === 'n' ? 'f-x-soft s-x w15' : kind === 's' ? 'f-d-soft s-d w2' : 'f-d-soft s-d w1' }, P[1]);
+        S.text(x, y + 4, s, { cls: 't-c t-xs t-mono pre' + (kind === 'n' ? ' t-b t-x' : '') }, P[1]);
+      };
+      GE6.forEach(([a, b]) => {
+        const [x1, y1, , k1] = G6[a], [x2, y2] = G6[b];
+        const w1 = k1 === 's' ? 100 : 85, isNew = k1 === 'n';
+        let d;
+        if (Math.abs(x1 - x2) < 1) d = `M${x1},${y1 + 12} V${y2 - 15}`;
+        else if (x1 < x2) d = `M${x1 + w1},${y1} L${x2 - 103},${y2}`;
+        else d = `M${x1 - w1},${y1} L${x2 + 103},${y2}`;
+        S.path(d, { cls: 'f-none w1 ' + (isNew ? 's-x' : 's-mid'), 'marker-end': mk(isNew ? 'x' : 'mid') }, P[1]);
+      });
+      S.path(`M${G6.c2[0] - 85},150 H${G6.c1[0] + 88}`, { cls: 'f-none s-x w15', 'marker-end': mk('x') }, P[1]);
+      S.text(380, 144, 'parent（前の commit の名前）', { cls: 't-c t-xs t-x' }, P[1]);
+      Object.keys(G6).forEach(box6);
+      S.text(760, 124, 'git count-objects -v の count', { cls: 't-xs t-dim' }, P[1]);
+      S.text(760, 156, '10 → 15', { cls: 't-xl t-mono t-b' }, P[1]);
+      S.text(760, 190, '新しい物 5', { cls: 't-sm t-b t-x' }, P[1]);
+      S.text(760, 208, 'blob 1・tree 3・commit 1', { cls: 't-xs' }, P[1]);
+      S.text(760, 238, '共有した物 5', { cls: 't-sm t-b t-d' }, P[1]);
+      S.text(760, 256, 'blob 4・tree 1', { cls: 't-xs' }, P[1]);
+      S.text(40, 480, 'git cat-file -p HEAD（新しい commit の中身。先頭の 3 行）', { cls: 't-xs t-dim' }, P[1]);
+      code(P[1], 40, 500, ['tree 54c02f43cfb887549831163955714cf058a04469', 'parent bf417391a0dfc7b01454b4492dfc07a3dc68843b', 'author example <example@example.com> 1795309500 +0900'], 16, 't-mono t-xs');
+
+      // ---- 段階3: 番地の比較
+      const nm = (x, y, s) => { S.rect(x, y, 50, 34, { rx: 5, cls: 'f-sf s-fg w15' }, P[2]); S.text(x + 25, y + 22, s, { cls: 't-c t-md t-mono t-b' }, P[2]); };
+      nm(40, 130, 'st1');
+      nm(40, 230, 'st2');
+      [[130, '80', 0], [230, '50', 1]].forEach(([y, v, isNew]) => {
+        S.path(`M90,${y + 17} H146`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, P[2]);
+        S.rect(150, y - 8, 230, 50, { rx: 4, cls: isNew ? 'f-x-soft s-x w15' : 'f-d-soft s-d w15' }, P[2]);
+        S.text(164, y + 11, 'volume: ' + v, { cls: 't-sm t-mono' + (isNew ? ' t-b t-x' : '') }, P[2]);
+        S.text(164, y + 33, 'queue:', { cls: 't-sm t-mono' }, P[2]);
+        S.circle(240, y + 29, 3.5, { cls: 'f-fg' }, P[2]);
+      });
+      S.path('M244,159 L476,190', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, P[2]);
+      S.path('M244,259 L476,214', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, P[2]);
+      S.rect(480, 184, 190, 36, { rx: 4, cls: 'f-d-soft s-d w2' }, P[2]);
+      S.text(575, 207, "['v1', 'v2', 'v3']", { cls: 't-c t-sm t-mono' }, P[2]);
+      S.text(575, 244, '2 つの版が共有する配列', { cls: 't-c t-xs t-d' }, P[2]);
+      code(P[2], 40, 320, ['const st2 = { ...st1, volume: 50 };'], 20);
+      [['st2 === st1', 'false', '別の物（変わった）'], ['st2.queue === st1.queue', 'true', '同じ物（変わっていない）']].forEach(([a, b, c], k) => {
+        const y = 140 + k * 40;
+        S.text(700, y, a, { cls: 't-sm t-mono' }, P[2]);
+        S.text(700, y + 18, '→ ' + b + '　' + c, { cls: 't-xs t-b' + (k ? ' t-d' : ' t-x') }, P[2]);
+      });
+      S.text(700, 236, 'Node.js 24.22.1', { cls: 't-xs t-dim' }, P[2]);
+      S.line(30, 350, 930, 350, { cls: 's-rule w1' }, P[2]);
+      [['React（useState）', '新しい state が前と同じ物（Object.is）なら、その部品と子の描き直しを省く'], ['', '中を書き換えてから同じ物を渡すと、更新は無視される（react.dev の文書）'], ['Git', 'ハッシュが同じ tree は中身も同じなので、2 つの版を比べるとき、その中は見なくてよい']].forEach(([a, b], k) => {
+        const y = 382 + k * 30;
+        S.text(52, y, a, { cls: 't-sm t-b' }, P[2]);
+        S.text(220, y, b, { cls: 't-sm' }, P[2]);
+      });
+
+      // ---- 段階4: 代償（この章で測った値）
+      S.text(52, 124, '代償', { cls: 't-xs t-dim' }, P[3]);
+      S.text(300, 124, 'この章で確かめた値', { cls: 't-xs t-dim' }, P[3]);
+      S.line(40, 132, 920, 132, { cls: 's-rule w1' }, P[3]);
+      [['更新のたびの割り当て', '100 万個の Data.Map で値を 1 つ替えると平均 1,069 バイト（場面3）'], ['ごみ集め', '100 万回足すと割り当て 1.39 GB、GC の時間は計算と同じくらい（場面5）'], ['使うメモリ', '常駐量 72 MB に対して 146 MiB（写す先の場所。場面5）'], ['たどる回数', '32 分木は節を 4 回、配列は 1 回読む（場面4）']].forEach(([a, b], k) => {
+        const y = 164 + k * 40;
+        S.text(52, y, a, { cls: 't-sm t-b' }, P[3]);
+        S.text(300, y, b, { cls: 't-sm' }, P[3]);
+      });
+      S.line(40, 330, 920, 330, { cls: 's-rule w1' }, P[3]);
+      S.text(52, 360, '別名と書き換えを同時にしない、の 2 つの道', { cls: 't-xs t-dim' }, P[3]);
+      [['関数型（Haskell）', '書き換えを外す', '共有は自由。代償は割り当てとごみ集め', 1], ['Rust', '同時の共有を外す', '&mut で 1 つだけが書く。その場で書き換え、ごみ集めは無い', 0]].forEach(([a, b, c, hot], k) => {
+        const y = 392 + k * 40;
+        S.text(52, y, a, { cls: 't-sm t-b' }, P[3]);
+        S.text(220, y, b, { cls: 't-sm t-b' + (hot ? ' t-x' : '') }, P[3]);
+        S.text(380, y, c, { cls: 't-sm' }, P[3]);
+      });
+
+      // ---- 段階5: 同じ名前を読む時点（場面1 の a と、書き換えない xs）
+      const TX6 = [260, 430, 600, 770];
+      S.path('M200,316 H900', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, P[4]);
+      S.text(900, 340, '実行の順', { cls: 't-end t-xs t-dim' }, P[4]);
+      ['const a = [3, 2, 1]', 'const b = a', 'b.sort()', 'console.log(a)'].forEach((s, k) => S.text(TX6[k], 302, s, { cls: 't-c t-xs t-mono' + (k === 2 ? ' t-b t-x' : '') }, P[4]));
+      [[150, 'a（JavaScript の配列）', ['[3, 2, 1]', '[3, 2, 1]', '[1, 2, 3]', '[1, 2, 3]'], 1], [220, 'xs（Haskell のリスト）', ['[3,2,1]', '[3,2,1]', '[3,2,1]', '[3,2,1]'], 0]].forEach(([y, lab, vals, bad]) => {
+        S.text(52, y + 19, lab, { cls: 't-sm t-b' }, P[4]);
+        vals.forEach((v, k) => {
+          const hot = bad && k >= 2;
+          S.rect(TX6[k] - 62, y, 124, 30, { rx: 5, cls: hot ? 'f-x-soft s-x w15' : 'f-d-soft s-d w1' }, P[4]);
+          S.text(TX6[k], y + 20, v, { cls: 't-c t-sm t-mono t-b' + (hot ? ' t-x' : '') }, P[4]);
+        });
+      });
+      S.text(52, 128, '同じ名前を、いつ読むか', { cls: 't-xs t-dim' }, P[4]);
+      S.line(30, 370, 930, 370, { cls: 's-rule w1' }, P[4]);
+      [['書き換える', '値は読む時刻しだい。共有するなら、誰がいつ書くかを全部たどる'], ['書き換えない', 'いつ読んでも同じ値。共有してよく、古い版も残る。代償は割り当てとごみ集め']].forEach(([a, b], k) => {
+        const y = 404 + k * 34;
+        S.text(52, y, a, { cls: 't-sm t-b' + (k ? ' t-d' : ' t-x') }, P[4]);
+        S.text(200, y, b, { cls: 't-sm' }, P[4]);
+      });
+      S.text(52, 500, '次の章：式の値がいつ計算しても同じなら、「いつ計算するか」も処理系に預けられる（第40章 遅延評価）', { cls: 't-xs t-mid' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      st.cards.forEach((c, k) => {
+        const on = i === 4 ? k < 3 : k === i;
+        c.r.setAttribute('class', on ? 'f-x-soft s-x w15' : 'f-sf s-rule w1');
+        op(c.g, on || i === 4 ? '' : 0.45);
+      });
+    }
+  };
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第X部 関数型 ／ 第39章',
+      title: '不変データ',
+      home: '../index.html',
+      prev: { href: '38-closure.html', title: '高階関数とクロージャ' },
+      next: { href: '40-lazy.html', title: '遅延評価', lead: '純粋な式の値は、いつ計算しても変わらない。' },
+      legend: [{ c: 'd', label: 'データ（値・ヒープの上の物）' }, { c: 'x', label: '注目・変化（新しく作る所、書き換わる所）' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>

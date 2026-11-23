@@ -1,0 +1,1261 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>遅延評価 — YouTubeが見えるまで</title>
+<meta name="description" content="純粋な式の値は、いつ計算しても変わらない。Haskell の処理系はこれを使い、関数の引数を計算せずに式のままヒープに置き（サンク）、値が初めて要るときに 1 回だけ計算する。">
+<meta property="og:title" content="遅延評価 — YouTubeが見えるまで">
+<meta property="og:description" content="純粋な式の値は、いつ計算しても変わらない。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第X部 関数型 ／ 第40章 ／ 全43章</p>
+    <h1 id="h-s0">遅延評価</h1>
+    <p class="standfirst">純粋な式の値は、いつ計算しても変わらない。Haskell の処理系はこれを使い、関数の引数を計算せずに式のままヒープに置き（サンク）、値が初めて要るときに 1 回だけ計算する。この章では、引数をいつ計算するかの規則、サンクの中身と上書き、どこまで計算するか、終わりの無いリスト、代償のスペースリーク、正格な言語の中の遅延を、ghci と GHC 9.6.7 の実測で見る。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>引数はいつ計算するか</a><p>値呼び・名前呼び・必要呼び。f (1 + 2) の 1 + 2 を何回計算し、使わない引数でどうなるか。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>サンク</a><p>計算していない式はヒープの物になり、初めて要るときに計算して上書きされる。ghci の :sprint で見る。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>どこまで計算するか</a><p>値を要る 3 か所と、外側の構築子で止まる弱頭部正規形。seq と foldl' で強制する。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>無限のデータ</a><p>[1..] から要る分だけ作る。作る・変える・止めるを別の部品にし、止める部品が量を決める。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>代償（スペースリーク）</a><p>foldl が積むサンクの鎖を、GHC 9.6.7 の -O0 と -O2 の +RTS -s で測る。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>正格な言語の中の遅延</a><p>Rust の Iterator と JavaScript のジェネレータ。いつ計算するかを処理系に預けられる理由（答え）。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の章（型推論と多相）へ。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>図は模式図。コードと出力は GHC 9.6.7（ghci と、ghc の -O0・-O1・-O2。+RTS -s・-hT、-ddump-simpl、ghc-heap）・rustc 1.95.0・Node.js 24.22.1（V8 13.6）を x86-64 の Linux で 2026 年 11 月に動かして確かめた。出力は版と設定で変わる。文献は原典の年を添えた: Algol 60 の報告（Naur 編、1960 年）、Ingerman「Thunks」（1961 年）、Wadsworth の博士論文（1971 年）、Mycroft（1980 年）、Hughes「Why Functional Programming Matters」（1989 年）、Hudak・Hughes・Peyton Jones・Wadler「A History of Haskell」（2007 年）、Haskell 2010 の報告。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 引数はいつ計算するか ================= -->
+<section class="scene sc-anim" id="s1" data-tab="評価戦略" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>引数はいつ計算するか — 値呼び・名前呼び・必要呼び</h2>
+    <p class="sh-meta"><span class="chip">f (1 + 2)</span><span class="chip">評価戦略</span><span class="chip">Algol 60</span><span class="chip">GHC 9.6.7</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead"><a class="xref" href="39-immutable.html#s6.5">第39章</a>で書き換えをやめると、「いつ読むか」が意味から消えた。純粋な式では「いつ計算するか」も結果を変えない。<a class="xref" href="37-lambda.html#s4">第37章 場面4</a> の 2 つの順序を、引数をいつ計算するかという言語の規則として見る。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">必要呼びは、名前呼びの 2 回め以降の計算を 1 回めの値で済ませる方式である。式が純粋なら何度計算しても同じ値なので、答えは名前呼びと変わらない。Algol 60 のように式の中の変数が途中で書き換わる言語では、この省略はできない。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="f (1 + 2) を値呼び・名前呼び・必要呼びで計算する列と、1 + 2 を計算した回数"></svg></div>
+    <figcaption>図1　上は f (1 + 2) を 3 つの規則で計算する列と、足し算 1 + 2 をした回数。下は段階ごとの中身（コードは Node.js 24.22.1 と GHC 9.6.7 で動かした）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 サンク ================= -->
+<section class="scene sc-anim" id="s2" data-tab="サンク" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>サンク — 計算していない式はヒープの物</h2>
+    <p class="sh-meta"><span class="chip">:sprint</span><span class="chip">ghci 9.6.7</span><span class="chip">間接</span><span class="chip">8 バイト × 4</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">必要呼びの処理系は、計算していない式をどこに置き、計算した値をどう覚えるのか。GHC は式をヒープの上の物（サンク）にし、計算したら結果で上書きする。ghci の <code>:sprint</code> で、その途中の姿が見える。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note"><code>:sprint</code> は型を <code>[Int]</code> と決めた束縛で見る。型を書かないと xs は多相（<code>Num b =&gt; [b]</code>）になって使うたびに作り直され、<code>length xs</code> の後も <code>xs = _</code> のままだった（GHC 9.6.7 の ghci）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="ghci の :sprint の出力と、そのときのヒープのサンク・セル・値"></svg></div>
+    <figcaption>図2　左は ghci（GHC 9.6.7）に打った命令と出力。右はそのときのヒープの模式図（破線の箱はサンク、実線は計算済み。セルの間の間接は省いた）。下は段階ごとの中身。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 どこまで計算するか ================= -->
+<section class="scene sc-anim" id="s3" data-tab="WHNF" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>どこまで計算するか — 弱頭部正規形</h2>
+    <p class="sh-meta"><span class="chip">WHNF</span><span class="chip">seq</span><span class="chip">$!</span><span class="chip">非正格</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">サンクの計算は、誰かが値を要ったときに始まり、要った分で止まる。値を要るのは場合分け・組み込みの演算・入出力の 3 か所で、止まる所はいちばん外の構築子が見えた所（弱頭部正規形）である。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">「A History of Haskell」（Hudak ほか、2007 年）は、Haskell は正確には非正格な意味を持つ言語で、遅延評価はその実装の方法の 1 つにすぎないと書く。そのうえで、印象の強い「遅延」の語を慣用に従って使う、と断っている。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="値を要る 3 か所、弱頭部正規形の例、seq・head・length の後のリストの形"></svg></div>
+    <figcaption>図3　左上は値を要る 3 か所（length は Haskell 2010 の Prelude の定義）、右上は WHNF の例。下は段階ごとの中身（ghci は GHC 9.6.7。破線の箱はサンク）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 無限のデータ ================= -->
+<section class="scene sc-anim" id="s4" data-tab="無限のデータ" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>無限のデータ — 要る分だけ作る</h2>
+    <p class="sh-meta"><span class="chip">[1..]</span><span class="chip">takeWhile</span><span class="chip">Hughes 1989</span><span class="chip">短絡</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">必要呼びでは、要られない所は作られない。だから終わりの無いリストも値として書け、使う側が要る分だけ作る側が動く。作る部品と止める部品を別々に書けることが、遅延評価の大きな利点とされてきた。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Hughes は、合成した 2 つのプログラムの前の方（作る側）を、後の方が入力を読もうとしたときだけ、読む分だけ動かすと説明した。後の方が先に終われば作る側は打ち切られるので、作る側は終わらないプログラムでもよい（1989 年版の 4 節）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="作る・変える・止めるの 3 つの部品と、要求のたびに 1 列ずつ埋まるセルの表"></svg></div>
+    <figcaption>図4　上は 3 つの部品（作る・変える・止める）と表示。中の表は各部品が作ったセルで、列 1 つが要求 1 回に当たる。下は段階ごとの中身（ghci は GHC 9.6.7、JavaScript は Node.js 24.22.1）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 代償（スペースリーク） ================= -->
+<section class="scene sc-anim" id="s5" data-tab="スペースリーク" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>代償（スペースリーク） — 足さずに積むサンク</h2>
+    <p class="sh-meta"><span class="chip">foldl</span><span class="chip">foldl'</span><span class="chip">+RTS -s</span><span class="chip">n ＝ 100 万</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">遅延評価は、計算を後へ回すぶん、まだ計算していない式をメモリに持つ。それが積み重なると、答えに要る量よりはるかに多いメモリを使う（スペースリーク）。1 から 100 万までの和で、foldl と foldl' を測る。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">必ず要る引数を式から見つけ、先に計算してよいと判定する解析を、正格性解析という（Mycroft、1980 年）。GHC では要求解析（demand analysis）と呼ぶ。-O1 で foldl が直ったのはこれによる。判定できない所には、サンクが残る。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="foldl の途中の値がサンクの鎖になり、foldl' は 1 つの数で済むことと、GHC の +RTS -s の測定"></svg></div>
+    <figcaption>図5　上は途中の値の姿（foldl はサンクの鎖、foldl' は 1 つの数）。下は段階ごとの中身（測定は GHC 9.6.7、n ＝ 100 万の +RTS -s）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 正格な言語の中の遅延 ================= -->
+<section class="scene sc-anim" id="s6" data-tab="正格な言語" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>正格な言語の中の遅延 — 引かれて動く列</h2>
+    <p class="sh-meta"><span class="chip">Iterator</span><span class="chip">#[must_use]</span><span class="chip">function*</span><span class="chip">LazyCell</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">値呼びが既定の言語にも、遅延の仕組みはある。Rust の Iterator と JavaScript のジェネレータは、使う側が次を引いたときだけ動く列で、作る・変える・止めるを部品に分けられる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Haskell にも、既定の逆を書く道具がある。seq と $! のほか、データ型の欄に ! を付ける正格なフィールド（Haskell 2010）、束縛やデータの欄を既定で正格にする GHC の言語拡張 Strict・StrictData（GHC 8.0.1 から）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="Rust の Iterator と JavaScript のジェネレータのコードと出力、rustc の警告、LazyCell、章の答え"></svg></div>
+    <figcaption>図6　左上は Rust（rustc 1.95.0）、右上は JavaScript（Node.js 24.22.1）のコードと、実際の出力。下は段階ごとの中身。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — いつ計算するかを処理系に預ける</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>引数をいつ計算するかの規則が評価戦略。値呼びは先に 1 回、名前呼びは使うたび、必要呼びは最初に使うとき 1 回で、止まる限り答えは同じ。違うのは手間と、止まるかどうか（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>計算していない式は、コードの番地と自由変数を持つヒープの物（サンク）になる。計算すると結果への間接に上書きされ、2 回めからは読むだけ。この書き換えは式からは見えない（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>値を要るのは場合分け・組み込みの演算・入出力の 3 か所。計算は外側の構築子か λ が見えた所（WHNF）で止まる。seq・$!・foldl' は値を早めに計算させる（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>要られない所は作られないので、終わりの無いリストを値として書ける。作る・変える・止めるを別の部品にし、止める部品が作る量を決める（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>foldl は足し算のサンクの鎖を積み、GHC 9.6.7 の -O0、n ＝ 100 万で最大の常駐量は 49,563,296 バイト（foldl' は 44,328）。-O1・-O2 では GHC が直したが、直るかどうかは式から読めない（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>Rust の Iterator と JavaScript のジェネレータは、値呼びの言語の中で引かれたときだけ動く列。いつ計算するかを処理系に預けられるのは、式が純粋だから（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th>評価戦略</th><td>関数の引数をいつ、何回計算するかの規則。値呼び・名前呼び・必要呼びなど。</td></tr>
+        <tr><th>値呼び・名前呼び・必要呼び</th><td>先に計算して値を渡す（C・Rust・JavaScript）／式のまま渡し、使うたびに計算する（Algol 60）／式のまま渡し、最初に使うときに 1 回だけ計算して覚える（Haskell の処理系）。</td></tr>
+        <tr><th><i class="sw d"></i>サンク（thunk）</th><td>計算していない式を表す物。計算するコードの番地と自由変数を持つ。GHC 9.6.7 のヒープのサンクは、結果の番地を書く 1 語も持つ。</td></tr>
+        <tr><th>強制</th><td>値を要る前に計算させること。seq a b は、値 b を返すまでに a も WHNF まで計算する（どちらが先かは決めていない）。f $! x は値呼びの適用。</td></tr>
+        <tr><th>弱頭部正規形（WHNF）</th><td>いちばん外側が構築子か λ になった形。中の欄はサンクのままでよい。サンクの計算はここで止まる。</td></tr>
+        <tr><th>非正格・遅延評価</th><td>引数は要るときだけ計算される、という言語の意味（Haskell 2010）と、それを必要呼びで実現する処理系の方法。</td></tr>
+        <tr><th>無限リスト</th><td>終わりの無いリスト。[1..]。使う側が要った分だけセルが作られる。</td></tr>
+        <tr><th>スペースリーク</th><td>答えに要る量よりはるかに多いメモリを持ち続けること。foldl (+) 0 [1..10⁶] は -O0 で最大の常駐量 49,563,296 バイト。</td></tr>
+        <tr><th>正格性解析</th><td>必ず要る引数を式から見つけ、先に計算してよいと判定する解析（Mycroft、1980 年）。GHC では要求解析（-fstrictness）。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg;
+
+  /* ---------- この章で使う部品 ---------- */
+
+  /* 濃さ（fade の付いた要素は 0.35 秒かけて変わる。frame で毎回決める物には fade を付けない） */
+  const op = (el, v) => { el.style.opacity = v; };
+  /* 動きを止めているときは、段階の動きの終わりの姿を見せる */
+  const playing = () => YT.motion.playing;
+  /* 等幅の行の並び（空白を詰めない） */
+  function code(parent, x, y, lines, lh, cls) {
+    return lines.map((s, k) => S.text(x, y + k * lh, s, { cls: (cls || 't-mono t-sm') + ' pre' }, parent));
+  }
+  /* 文字の幅の見積もり（等幅は 0.6 em、全角は 1 em）。札の幅を書体の読み込みに左右されずに決める */
+  const tw = (s, fs, mono) => Array.from(String(s)).reduce((a, c) => a + (c.charCodeAt(0) > 0x2000 ? fs : fs * (mono ? 0.6 : 0.58)), 0);
+  /* 式の札（左端 x、中央 cy）。parts は [文字, 足すクラス] の並びで、部分ごとに色を変える。{ g, r, t, w, x, cy } を返す */
+  function expr(parent, x, cy, parts, o) {
+    o = o || {};
+    const s = parts.map((p) => p[0]).join('');
+    const fs = o.fs || 12.5, w = Math.round(tw(s, fs, true) + (o.pad || 20)), h = o.h || 28;
+    const g = S.g({}, parent);
+    const r = S.rect(x, cy - h / 2, w, h, { rx: 5, cls: o.box || 'f-sf s-d w15' }, g);
+    const t = S.text(x + w / 2, cy + fs * 0.36, '', { cls: 't-c t-mono pre ' + (o.cls || 't-md') }, g);
+    parts.forEach(([str, c]) => S.el('tspan', { text: str, cls: c || null }, t));
+    return { g, r, t, w, x, cy };
+  }
+  /* 部分ごとにクラスを変えた 1 行の文字（parts は [文字, 足すクラス]。コードの部分に t-mono を付ける） */
+  function mix(parent, x, y, parts, cls) {
+    const t = S.text(x, y, '', { cls: (cls || 't-sm') + ' pre' }, parent);
+    parts.forEach(([str, c]) => S.el('tspan', { text: str, cls: c || null }, t));
+    return t;
+  }
+  /* 語（8 バイト）を横に並べた箱。cells は [文字, 幅, 足す箱のクラス, 足す文字のクラス]。各語の { r, t, x, w } を返す */
+  function words(parent, x, y, h, cells) {
+    let cx = x;
+    return cells.map(([s, w, box, cls]) => {
+      const r = S.rect(cx, y, w, h, { cls: box || 'f-sf s-d w15' }, parent);
+      const t = S.text(cx + w / 2, y + h / 2 + 4, s, { cls: 't-c ' + (cls || 't-sm') }, parent);
+      const o = { r, t, x: cx, w };
+      cx += w;
+      return o;
+    });
+  }
+
+  /* ================================================================
+     場面1 引数はいつ計算するか
+     回数は Node.js 24.22.1 で 3 つの規則を真似て数えた（値呼び 1・名前呼び 2・必要呼び 1。名前呼びは引数を関数に包み、
+     必要呼びはそれに 1 回だけ計算して覚える包みを足した）。必要呼びの 1 回は GHC 9.6.7 で Debug.Trace の trace を付けて
+     確かめた（-O0・-O2 とも表示 1 回、答え 6）。ghci の let g x = 3 in g undefined は 3（2026-11-22）。
+     Algol 60 の名前呼びは改訂報告 4.7.3.2「Name replacement (call by name)」
+     ================================================================ */
+  const LANES = [
+    { name: '値呼び', who: 'C・Rust・JavaScript など', rule: '先に計算してから渡す', n: '1 回',
+      seq: [[['f (', ''], ['1 + 2', 't-x t-b'], [')', '']], [['f ', ''], ['3', 't-x t-b']], [['3 + 3', '']], [['6', 't-b']]] },
+    { name: '名前呼び', who: 'Algol 60（既定の渡し方）', rule: '式のまま写し、使うたびに計算', n: '2 回',
+      seq: [[['f (1 + 2)', '']], [['(1 + 2)', 't-x t-b'], [' + ', ''], ['(1 + 2)', 't-x t-b']], [['3', 't-x t-b'], [' + (1 + 2)', '']], [['3 + ', ''], ['3', 't-x t-b']], [['6', 't-b']]] },
+    { name: '必要呼び', who: 'Haskell の処理系（GHC）', rule: '最初に使うとき計算して覚える', n: '1 回',
+      seq: [[['f (1 + 2)', '']], [['x + x', '']], [['3 + 3', '']], [['6', 't-b']]] }
+  ];
+  const T1 = (j) => 0.3 + j * 1.0;   // 列の j 番めの札が出る時刻（段階に入ってからの秒）
+  const s1 = {
+    steps: [
+      { title: 'f (1 + 2) の 1 + 2 をいつ計算するか', text: '関数に式を渡すとき、引数をいつ計算するかを決める規則を**評価戦略**と呼ぶ。主な規則は 3 つで、先に計算して値を渡す**値呼び**、式のまま渡して使うたびに計算する**名前呼び**、式のまま渡して最初に使うときに 1 回だけ計算する**必要呼び**。例は引数を 2 回使う `f x = x + x`。' },
+      { title: '値呼び：先に計算して渡す', text: 'C・Rust・JavaScript など多くの言語は値呼び。`f (1 + 2)` は、f に入る前に `1 + 2` を 3 にし、本体の x の 2 か所に 3 が入る。足し算は 1 回。引数を先に簡約するのは[[37-lambda.html#s4.2|第37章 場面4]]の適用順序と同じだが、値呼びは λ の本体の中までは簡約しない。' },
+      { title: '名前呼び：式のまま写す', text: 'Algol 60 の報告（1960 年）は、value に挙げない仮引数を、本体の中で実引数の式に置き換えると決めた。`f (1 + 2)` は `(1 + 2) + (1 + 2)` になり、足し算は 2 回、使わなければ 0 回。式を計算する小さなルーチン（**サンク**）を渡す実装は、Ingerman が 1961 年に示した。' },
+      { title: '必要呼び：最初に使うとき 1 回', text: '必要呼びも式のまま渡すが、x の 2 か所は同じ 1 つのサンクを指す。最初に x を使ったときに 1 + 2 を計算してサンクを 3 で上書きし、2 か所めは 3 を読むだけ。足し算は 1 回。Wadsworth が 1971 年の博士論文で示した方式で、Haskell の処理系 GHC はこれで動く。' },
+      { title: '使わない引数', text: '引数を使わない `g x = 3` に `undefined`（計算すると例外で止まる値。どの型にも使える）を渡す。値呼びは先に引数を計算するので例外で落ち、止まらない式なら返ってこない。名前呼びと必要呼びは引数に触れずに 3 を返す。ghci で `let g x = 3 in g undefined` は 3。' },
+      { title: '違うのは手間と止まるかどうか', text: '止まる限り、3 つの規則の答えはどれも 6。純粋な式は、どの順に簡約しても止まれば同じ形に着く（合流性。[[37-lambda.html#s4.4|第37章 場面4]]）。違うのは計算の回数と、止まるかどうか。引数に副作用があれば、回数 1・2・1 がそのまま出力や書き込みの回数になり、答えも変わりうる。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      mix(svg, 40, 34, [['f x = x + x', 't-mono'], ['（引数 x を 2 回使う）に、式 ', ''], ['1 + 2', 't-mono'], [' を渡す', '']], 't-md t-b');
+      S.text(46, 80, '規則', { cls: 't-xs t-dim' }, svg);
+      S.text(214, 80, 'f (1 + 2) を計算する列', { cls: 't-xs t-dim' }, svg);
+      S.text(916, 80, '1 + 2 の計算', { cls: 't-xs t-dim t-end' }, svg);
+      st.lanes = LANES.map((L, k) => {
+        const y0 = 92 + k * 96, cy = y0 + 32;
+        const g = S.g({}, svg);
+        const frame = S.rect(30, y0, 900, 86, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+        S.text(46, y0 + 30, L.name, { cls: 't-lg t-b' }, g);
+        S.text(46, y0 + 50, L.who, { cls: 't-xs t-dim' }, g);
+        S.text(46, y0 + 68, L.rule, { cls: 't-xs t-mid' }, g);
+        let x = 214;
+        const items = L.seq.map((parts, j) => {
+          const it = S.g({}, g);
+          if (j > 0) S.line(x - 27, cy, x - 6, cy, { cls: 's-mid w15', 'marker-end': mk('mid') }, it);
+          const b = expr(it, x, cy, parts, j === L.seq.length - 1 ? { box: 'f-d-soft s-d w15' } : {});
+          x += b.w + 32;
+          return { g: it, b };
+        });
+        let share = null;
+        if (k === 2) {
+          // 必要呼び: x の 2 か所が指す 1 つのサンク（最初に使うとき 3 で上書きされる）
+          const b = items[1].b, cx = b.x + b.w / 2, sy = y0 + 65;
+          share = S.g({}, g);
+          S.line(cx - 15, cy + 13, cx - 7, sy - 10, { cls: 's-mid w1' }, share);
+          S.line(cx + 15, cy + 13, cx + 7, sy - 10, { cls: 's-mid w1' }, share);
+          st.shareBox = S.rect(cx - 30, sy - 10, 60, 20, { rx: 4, cls: 'f-sf s-d w1 dash' }, share);
+          st.shareT = S.text(cx, sy + 4, '1 + 2', { cls: 't-c t-mono t-sm' }, share);
+          S.text(cx + 40, sy + 4, '← 2 か所が指す 1 つのサンク', { cls: 't-xs t-mid' }, share);
+        }
+        const n = S.text(880, y0 + 50, L.n, { cls: 't-c t-xl t-b' }, g);
+        return { g, frame, items, share, n };
+      });
+      S.line(30, 384, 930, 384, { cls: 's-rule w1' }, svg);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+
+      // 段階1: 同じ関数を 3 つの言語で
+      S.text(46, 412, '同じ関数を 3 つの言語で書くと', { cls: 't-sm t-b' }, P[0]);
+      [['Haskell', 'f x = x + x'], ['JavaScript', 'const f = (x) => x + x;'], ['Rust', 'fn f(x: i32) -> i32 { x + x }']].forEach(([l, c], k) => {
+        S.text(60, 444 + k * 28, l, { cls: 't-sm t-b' }, P[0]);
+        S.text(180, 444 + k * 28, c, { cls: 't-mono t-md pre' }, P[0]);
+      });
+      S.text(60, 532, 'Haskell では f x = … が関数の定義、f (1 + 2) が適用（括弧は引数をまとめるだけ）', { cls: 't-xs t-mid' }, P[0]);
+
+      // 段階2: 値呼びを JavaScript で数える
+      S.text(46, 412, 'JavaScript（値呼び）で、1 + 2 を計算した回数を数える', { cls: 't-sm t-b' }, P[1]);
+      S.rect(46, 424, 700, 98, { rx: 5, cls: 'f-in s-none' }, P[1]);
+      code(P[1], 60, 446, [
+        'let count = 0;',
+        'const add = () => { count++; return 1 + 2; };   // 計算した回数を数える',
+        'const f = (x) => x + x;',
+        'f(add());'
+      ], 22);
+      S.text(200, 512, '→ 6　count は 1（f を呼ぶ前に add を計算した）', { cls: 't-sm t-b t-x' }, P[1]);
+      S.text(46, 542, 'Node.js 24.22.1 で実行', { cls: 't-xs t-dim' }, P[1]);
+
+      // 段階3: 名前呼びを JavaScript で真似る
+      S.text(46, 412, '名前呼びを JavaScript で真似る：式を関数に包んで渡し、使うたびに呼ぶ', { cls: 't-sm t-b' }, P[2]);
+      S.rect(46, 424, 700, 54, { rx: 5, cls: 'f-in s-none' }, P[2]);
+      code(P[2], 60, 446, [
+        'const f = (x) => x() + x();    // x を使うたびに呼んで計算する',
+        'f(() => add());'
+      ], 22);
+      S.text(200, 468, '→ 6　count は 2', { cls: 't-sm t-b t-x' }, P[2]);
+      S.text(46, 506, '関数に包んだ式（引数の無い関数）は、Ingerman の言うサンクと同じ役をする', { cls: 't-xs t-mid' }, P[2]);
+      S.text(46, 542, 'Node.js 24.22.1 で実行', { cls: 't-xs t-dim' }, P[2]);
+
+      // 段階4: 必要呼びを GHC で数える
+      S.text(46, 412, 'GHC 9.6.7 で数える（trace は、計算されたときに文字を出す関数）', { cls: 't-sm t-b' }, P[3]);
+      S.rect(46, 424, 520, 76, { rx: 5, cls: 'f-in s-none' }, P[3]);
+      code(P[3], 60, 446, [
+        'import Debug.Trace (trace)',
+        'f x = x + x',
+        'main = print (f (trace "1 + 2 を計算" (1 + 2)))'
+      ], 22);
+      S.rect(590, 424, 326, 76, { rx: 5, cls: 'f-sf s-d w1' }, P[3]);
+      S.text(604, 444, '出力（-O0 でも -O2 でも同じ）', { cls: 't-xs t-dim' }, P[3]);
+      code(P[3], 604, 466, ['1 + 2 を計算', '6'], 22, 't-mono t-sm t-b t-x');
+      S.text(46, 528, 'x を 2 回使っても、1 + 2 の計算は 1 回だけ表示された', { cls: 't-xs t-mid' }, P[3]);
+
+      // 段階5・6: 使わない引数
+      S.text(46, 412, '引数を使わない g x = 3 に、undefined を渡す', { cls: 't-sm t-b' }, P[4]);
+      S.text(916, 412, 'undefined：計算すると例外で止まる値', { cls: 't-xs t-dim t-end' }, P[4]);
+      [
+        ['値呼び', '先に undefined を計算する → 例外で落ちる（止まらない式なら返らない）', 1],
+        ['名前呼び', 'x を使わないので、計算しない → 3', 0],
+        ['必要呼び', 'x を使わないので、計算しない → 3', 0]
+      ].forEach(([l, r, bad], k) => {
+        const y = 442 + k * 28;
+        S.text(60, y, l, { cls: 't-sm t-b' }, P[4]);
+        S.text(150, y, r, { cls: 't-sm' + (bad ? ' t-b t-x' : '') }, P[4]);
+      });
+      S.rect(46, 516, 420, 26, { rx: 4, cls: 'f-in s-none' }, P[4]);
+      S.text(58, 534, 'ghci> let g x = 3 in g undefined', { cls: 't-mono t-sm pre' }, P[4]);
+      S.text(330, 534, '3', { cls: 't-mono t-sm t-b t-d' }, P[4]);
+      S.text(480, 534, 'GHC 9.6.7 の ghci（必要呼び）', { cls: 't-xs t-dim' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === 4 ? i >= 4 : k === i));
+      st.lanes.forEach((L, k) => {
+        L.frame.setAttribute('class', i === k + 1 ? 'f-sf s-x w2' : 'f-sf s-rule w1');
+        L.n.setAttribute('class', 't-c t-xl t-b' + (i === k + 1 ? ' t-x' : ''));
+        L.items[L.items.length - 1].b.r.setAttribute('class', i === 5 ? 'f-d-soft s-x w2' : 'f-d-soft s-d w15');
+      });
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      st.lanes.forEach((L, k) => {
+        // いまの段階の規則は札を 1 秒ごとに出す。説明の済んだ規則は全部、まだの規則は何も出さない
+        const t = i === k + 1 ? (run ? ctx.ts : 99) : (i > k + 1 ? 99 : -1);
+        L.items.forEach((it, j) => op(it.g, t >= T1(j) ? 1 : 0));
+        op(L.n, t >= T1(L.items.length - 1) + 0.4 ? 1 : 0);
+        if (L.share) {
+          op(L.share, t >= T1(1) ? 1 : 0);
+          const v = t >= T1(1) + 0.6;   // 最初に x を使ったとき、サンクを 3 で上書きする
+          st.shareT.textContent = v ? '3' : '1 + 2';
+          st.shareT.setAttribute('class', 't-c t-mono t-sm' + (v ? ' t-b t-x' : ''));
+          st.shareBox.setAttribute('class', v ? 'f-d-soft s-d w15' : 'f-sf s-d w1 dash');
+        }
+      });
+    }
+  };
+
+  /* ================================================================
+     場面2 サンク
+     ghci（GHC 9.6.7）の出力: xs = map (*2) [3,2,1] :: [Int] の後 :sprint xs は xs = _、length xs（3）の後は xs = [_,_,_]、
+     sum xs（12）の後は xs = [6,4,2]。要素に trace を付けた ys は、1 回めの sum で「計算 3」「計算 2」「計算 1」と 12、
+     2 回めは 12 だけ。型を書かない ws = map (*2) [3,2,1] は length ws の後も ws = _（多相のまま）。
+     形は GHC 9.6.7 の RTS のヘッダ rts/storage/Closures.h による: ヒープのサンク（StgThunk）は見出しの語 ＋ 更新の値を
+     受ける 1 語 ＋ 自由変数、関数のクロージャ（StgClosure）は見出しの語 ＋ 自由変数。x86-64 では見出しの語が入口のコードの
+     番地を指す（TABLES_NEXT_TO_CODE）。計算を終えると見出しを BLACKHOLE（間接）に替え、空けた語に結果の番地を書く。
+     GC は間接を飛ばす（GHC の Note [Thunks, blackholes, and indirections]、2023 年）。map の定義は Haskell 2010 の Prelude。
+     ghc-heap の getClosureData（-O0 でコンパイルし、n を実行時に読んだ xs = map (* n) [3,2,1]）: xs は束縛直後 THUNK_1_0、
+     length の後 BLACKHOLE。先頭の要素は length の後 THUNK_2_0（ptrs 2）、計算の後 BLACKHOLE
+     ================================================================ */
+  const GHCI2 = [
+    'ghci> xs = map (*2) [3,2,1] :: [Int]', 'ghci> :sprint xs', 'xs = _',
+    'ghci> length xs', '3', 'ghci> :sprint xs', 'xs = [_,_,_]',
+    'ghci> sum xs', '12', 'ghci> :sprint xs', 'xs = [6,4,2]'
+  ];
+  const SHOW2 = [3, 7, 7, 11, 11];   // 段階ごとに見せる行の数
+  const HL2 = [2, 6, -1, 10, -1];    // 段階ごとに x で示す行
+  const CX2 = [450, 610, 770];       // セルの左端
+  const SRC2 = [3, 2, 1], VAL2 = [6, 4, 2];
+  const s2 = {
+    steps: [
+      { title: '束縛しても計算しない', text: '`xs = map (*2) [3,2,1]` と束縛しただけでは、何も計算しない。xs が指すのは、式を計算するコードの番地と式の自由変数を持つヒープの物（**サンク**）で、引数の無いクロージャ（[[38-closure.html#s2.3|第38章 場面2]]）に 1 語を足した形。ghci の `:sprint` は、計算していない所を `_` で出す。' },
+      { title: '要った所だけ計算する', text: '`length xs` はセルを数えるので、`:` のセルの骨組みだけを要る。map の定義では、要素 `f x` と残り `map f xs` がどちらもサンクで置かれ、length は残りの方だけを順に計算した。要素の 3 つはサンクのまま残り、`:sprint` は `[_,_,_]`。' },
+      { title: '計算したら上書きする', text: '計算を終えると、処理系はサンクを結果への**間接**に書き換える。書くのは、先頭の語（間接の印に替える）と、空けておいた語（結果の番地）の 2 語だけ。GHC 9.6.7 では、ヒープに作るサンクにこの 1 語が最初から空けてある。間接は、後で GC が飛ばしてつなぎ直す。' },
+      { title: '2 回めは読むだけ', text: '`sum xs` は要素も要るので、3 つの `f x` を計算して 6・4・2 で上書きし、`:sprint` は `[6,4,2]` になる。要素に trace を付けて `sum` を 2 回呼ぶと、計算の表示は 1 回めの 3 回だけで、2 回めは 12 を返しただけだった。' },
+      { title: '書き換えは式からは見えない', text: '処理系の内側ではメモリへの書き込み（[[06-cpu.html#s4.2|第6章 場面4]] の STORE と同じ操作）が起きている。それでも xs の値は束縛したときから `[6,4,2]` で、変わったのは表し方だけ。純粋な式には計算済みかを問う手段が無く、`:sprint` は ghci のデバッガがヒープを覗く命令である。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 左: ghci
+      S.text(44, 44, 'ghci（GHC 9.6.7）', { cls: 't-sm t-b' }, svg);
+      S.rect(30, 56, 326, 284, { rx: 6, cls: 'f-in s-none' }, svg);
+      st.lines = code(svg, 44, 82, GHCI2, 24);
+      // 右: ヒープの模式図
+      S.text(392, 44, 'ヒープ（模式図）', { cls: 't-sm t-b' }, svg);
+      S.rect(752, 32, 26, 16, { rx: 3, cls: 'f-sf s-d w15 dash' }, svg);
+      S.text(784, 44, 'サンク', { cls: 't-xs t-dim' }, svg);
+      S.rect(840, 32, 26, 16, { rx: 3, cls: 'f-d-soft s-d w15' }, svg);
+      S.text(872, 44, '計算済み', { cls: 't-xs t-dim' }, svg);
+      S.rect(392, 74, 40, 32, { rx: 4, cls: 'f-sf s-mid w15' }, svg);
+      S.text(412, 95, 'xs', { cls: 't-c t-mono t-md t-b' }, svg);
+      S.line(432, 90, 446, 90, { cls: 's-mid w15', 'marker-end': mk('mid') }, svg);
+      st.t0r = S.rect(450, 70, 300, 40, { rx: 5, cls: 'f-sf s-d w15 dash' }, svg);
+      st.t0s = mix(svg, 600, 95, [['サンク　', ''], ['map (*2) [3,2,1]', 't-mono']], 't-c t-sm');
+      st.t0t = S.text(600, 95, '間接（計算済み）→ 最初のセル', { cls: 't-c t-sm' }, svg);
+      st.t0a = S.line(510, 110, 510, 165, { cls: 's-mid w15', 'marker-end': mk('mid') }, svg);
+      S.text(392, 193, 'セル', { cls: 't-xs t-dim' }, svg);
+      S.text(392, 285, '要素', { cls: 't-xs t-dim' }, svg);
+      st.cells = CX2.map((x, k) => {
+        const g = S.g({}, svg);
+        S.rect(x, 170, 120, 36, { rx: 4, cls: 'f-d-soft s-d w15' }, g);
+        S.line(x + 36, 170, x + 36, 206, { cls: 's-d w1' }, g);
+        S.line(x + 78, 170, x + 78, 206, { cls: 's-d w1' }, g);
+        S.text(x + 18, 193, '(:)', { cls: 't-c t-mono t-sm t-b' }, g);
+        S.circle(x + 57, 188, 3.5, { cls: 'f-fg' }, g);
+        S.circle(x + 99, 188, 3.5, { cls: 'f-fg' }, g);
+        // 前のセルの残りの欄からこのセルへの矢印は、このセルと一緒に出す（できる前は指す先が無い）
+        if (k) S.line(CX2[k - 1] + 99, 188, x - 6, 188, { cls: 's-mid w15', 'marker-end': mk('mid') }, g);
+        S.line(x + 57, 188, x + 57, 257, { cls: 's-mid w15', 'marker-end': mk('mid') }, g);
+        const r = S.rect(x + 5, 262, 104, 36, { rx: 5, cls: 'f-sf s-d w15 dash' }, g);
+        const t = S.text(x + 57, 285, '', { cls: 't-c t-mono t-sm pre' }, g);
+        return { g, r, t };
+      });
+      st.nil = S.g({}, svg);
+      S.line(CX2[2] + 99, 188, 902, 188, { cls: 's-mid w15', 'marker-end': mk('mid') }, st.nil);
+      S.rect(906, 170, 24, 36, { rx: 4, cls: 'f-d-soft s-d w15' }, st.nil);
+      S.text(918, 193, '[]', { cls: 't-c t-mono t-sm t-b' }, st.nil);
+
+      S.line(30, 352, 930, 352, { cls: 's-rule w1' }, svg);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+
+      // 段階1: サンクとクロージャの中身
+      S.text(46, 380, 'サンクとクロージャの中身（GHC 9.6.7、x86-64。1 語 ＝ 8 バイト）', { cls: 't-sm t-b' }, P[0]);
+      S.text(46, 418, 'サンク', { cls: 't-sm t-b' }, P[0]);
+      S.text(46, 434, '例：要素の f x', { cls: 't-xs t-dim' }, P[0]);
+      words(P[0], 180, 398, 34, [['計算するコードの番地', 190], ['（空き）', 150, 'f-sf s-d w15 dash'], ['f ＝ (*2)', 120, null, 't-mono t-sm'], ['x ＝ 3', 120, null, 't-mono t-sm']]);
+      S.text(275, 450, '見出しの語', { cls: 't-c t-xs t-dim' }, P[0]);
+      S.text(445, 450, '計算した値の番地を後で書く', { cls: 't-c t-xs t-dim' }, P[0]);
+      S.text(640, 450, '自由変数', { cls: 't-c t-xs t-dim' }, P[0]);
+      S.text(46, 494, 'クロージャ', { cls: 't-sm t-b' }, P[0]);
+      S.text(46, 510, '第38章 場面2 の add3', { cls: 't-xs t-dim' }, P[0]);
+      words(P[0], 180, 474, 34, [['コードの番地', 190], ['自由変数 n ＝ 3', 150]]);
+      S.text(916, 522, 'ghc-heap で見た f x のサンクの種類は THUNK_2_0（自由変数 2 つ、4 語）', { cls: 't-xs t-dim t-end' }, P[0]);
+      S.text(916, 540, '形は RTS のヘッダ Closures.h の StgThunk と StgClosure', { cls: 't-xs t-dim t-end' }, P[0]);
+
+      // 段階2: map の定義
+      S.text(46, 380, 'map の定義（Haskell 2010 の Prelude）', { cls: 't-sm t-b' }, P[1]);
+      code(P[1], 60, 412, ['map f []     = []', 'map f (x:xs) = f x : map f xs'], 26, 't-mono t-md');
+      S.line(184, 444, 184, 466, { cls: 's-mid w1' }, P[1]);
+      S.text(184, 482, '要素のサンク（残る）', { cls: 't-c t-xs t-b' }, P[1]);
+      S.line(247, 444, 247, 500, { cls: 's-mid w1' }, P[1]);
+      S.text(247, 516, '残りのサンク（length が順に計算した）', { cls: 't-c t-xs t-b t-x' }, P[1]);
+
+      // 段階3: 上書き
+      S.text(46, 380, '上書き：サンクを結果への間接にする（GHC 9.6.7 の RTS）', { cls: 't-sm t-b' }, P[2]);
+      S.text(52, 418, '前', { cls: 't-sm t-b' }, P[2]);
+      words(P[2], 90, 398, 32, [['計算するコードの番地', 190], ['（空き）', 130, 'f-sf s-d w15 dash'], ['自由変数', 100], ['自由変数', 110]]);
+      S.text(52, 476, '後', { cls: 't-sm t-b' }, P[2]);
+      words(P[2], 90, 456, 32, [['間接の印', 190, 'f-x-soft s-x w15', 't-sm t-b t-x'], ['結果の番地', 130, 'f-x-soft s-x w15', 't-sm t-b t-x'], ['自由変数', 100], ['自由変数', 110]]);
+      S.path('M355,488 V506 H740 V492', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, P[2]);
+      S.rect(690, 456, 110, 32, { rx: 4, cls: 'f-d-soft s-d w15' }, P[2]);
+      S.text(745, 476, '結果の値', { cls: 't-c t-sm' }, P[2]);
+      S.text(185, 530, '書き換えた 2 語', { cls: 't-c t-xs t-b t-x' }, P[2]);
+      S.text(525, 530, 'そのまま', { cls: 't-c t-xs t-dim' }, P[2]);
+      S.text(916, 404, 'ghc-heap で見た種類（-O0）', { cls: 't-xs t-dim t-end' }, P[2]);
+      S.text(916, 422, '前 THUNK、後 BLACKHOLE（間接）', { cls: 't-xs t-b t-end' }, P[2]);
+
+      // 段階4: 2 回めは読むだけ
+      S.text(46, 380, '要素に trace を付けて、sum を 2 回呼ぶ（ghci。import Debug.Trace の後）', { cls: 't-sm t-b' }, P[3]);
+      S.rect(46, 392, 870, 140, { rx: 5, cls: 'f-in s-none' }, P[3]);
+      S.text(60, 414, 'ghci> ys = map (\\x -> trace ("計算 " ++ show x) (x * 2)) [3,2,1] :: [Int]', { cls: 't-mono t-sm pre' }, P[3]);
+      code(P[3], 60, 440, ['ghci> sum ys', '計算 3', '計算 2', '計算 1', '12'], 19);
+      code(P[3], 360, 440, ['ghci> sum ys', '12'], 19);
+      S.text(200, 478, '← 1 回め：要素を 3 つ計算', { cls: 't-xs t-b t-x' }, P[3]);
+      S.text(470, 459, '← 2 回め：読むだけ', { cls: 't-xs t-b t-d' }, P[3]);
+
+      // 段階5: 変わったのは表し方だけ
+      S.text(46, 380, '変わったのは表し方だけ', { cls: 't-sm t-b' }, P[4]);
+      S.text(60, 408, 'いつ', { cls: 't-xs t-dim' }, P[4]);
+      S.text(250, 408, ':sprint xs（ヒープの表し方）', { cls: 't-xs t-dim' }, P[4]);
+      S.text(560, 408, 'xs の値', { cls: 't-xs t-dim' }, P[4]);
+      S.line(46, 416, 760, 416, { cls: 's-rule w1' }, P[4]);
+      [['束縛した直後', 'xs = _'], ['length xs の後', 'xs = [_,_,_]'], ['sum xs の後', 'xs = [6,4,2]']].forEach(([w, s], k) => {
+        const y = 442 + k * 28;
+        S.text(60, y, w, { cls: 't-sm' }, P[4]);
+        S.text(250, y, s, { cls: 't-mono t-sm t-b t-x' }, P[4]);
+        S.text(560, y, '[6,4,2]', { cls: 't-mono t-sm t-b t-d' }, P[4]);
+      });
+      S.text(46, 534, ':sprint は ghci のデバッガの命令で、Haskell の式の中からは使えない', { cls: 't-xs t-mid' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      st.lines.forEach((t, k) => {
+        op(t, k < SHOW2[i] ? 1 : 0);
+        const prompt = /^ghci>/.test(GHCI2[k]);
+        t.setAttribute('class', 't-mono t-sm pre' + (k === HL2[i] ? ' t-b t-x' : (prompt ? '' : ' t-d')));
+      });
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // 段階2: length がセルを左から順に作る（最初のセルができたとき xs のサンクは間接になる）
+      const tl = i === 1 ? (run ? ctx.ts : 99) : (i > 1 ? 99 : -1);
+      st.cells.forEach((c, k) => op(c.g, tl >= 0.4 + k * 0.8 ? 1 : 0));
+      op(st.nil, tl >= 0.4 + 3 * 0.8 ? 1 : 0);
+      const upd = tl >= 0.4;
+      st.t0r.setAttribute('class', upd ? (i === 2 ? 'f-x-soft s-x w2' : 'f-d-soft s-d w15') : 'f-sf s-d w15 dash');
+      op(st.t0s, upd ? 0 : 1);
+      op(st.t0t, upd ? 1 : 0);
+      st.t0t.setAttribute('class', 't-c t-sm' + (i === 2 ? ' t-b t-x' : ''));
+      op(st.t0a, upd ? 1 : 0);
+      // 段階4: sum が要素を左から順に計算して上書きする
+      const te = i === 3 ? (run ? ctx.ts : 99) : (i > 3 ? 99 : -1);
+      st.cells.forEach((c, k) => {
+        const v = te >= 0.5 + k * 0.8;
+        c.r.setAttribute('class', v ? (i === 3 ? 'f-d-soft s-x w2' : 'f-d-soft s-d w15') : 'f-sf s-d w15 dash');
+        c.t.textContent = v ? String(VAL2[k]) : 'サンク (*2) ' + SRC2[k];
+        c.t.setAttribute('class', 't-c t-mono pre ' + (v ? 't-md t-b' : 't-sm'));
+      });
+    }
+  };
+
+  /* ================================================================
+     場面3 どこまで計算するか
+     ghci（GHC 9.6.7）: xs = map (*2) [3,2,1] :: [Int] の後、xs `seq` () → :sprint xs は xs = _ : _、head xs（6）の後は
+     xs = 6 : _、length xs（3）の後は xs = [6,_,_]。undefined `seq` 3 は *** Exception: Prelude.undefined、
+     Just undefined `seq` 3 と (\x -> undefined) `seq` 3 は 3、length [undefined, undefined, undefined] は 3、
+     p = (undefined, 3) :: (Int, Int) を seq した後の :sprint p は p = (_,3)。let f _ = 3 in f $! undefined は例外、f $ undefined は 3。
+     length・seq・$! の定義は Haskell 2010 の報告（6.2 と Prelude）。foldl' は考え方を示す定義で、-O0 で base の foldl' と
+     同じ最大の常駐量 44,328 バイトだった（n ＝ 100 万）
+     ================================================================ */
+  /* :sprint の形を描く小さなセル（左端 x、上端 y）。hd・tl は '_'（サンク）・'ptr'（次のセルへ）・値の文字 */
+  function sCell(parent, x, y, hd, tl, mk) {
+    const g = S.g({}, parent);
+    S.rect(x, y, 120, 32, { rx: 4, cls: 'f-d-soft s-d w15' }, g);
+    S.line(x + 36, y, x + 36, y + 32, { cls: 's-d w1' }, g);
+    S.line(x + 78, y, x + 78, y + 32, { cls: 's-d w1' }, g);
+    S.text(x + 18, y + 21, '(:)', { cls: 't-c t-mono t-sm t-b' }, g);
+    const slot = (sx, v) => {
+      if (v === '_') {
+        S.rect(sx + 7, y + 6, 28, 20, { rx: 3, cls: 'f-sf s-d w1 dash' }, g);
+        S.text(sx + 21, y + 21, '_', { cls: 't-c t-mono t-sm' }, g);
+      } else if (v === 'ptr') {
+        S.circle(sx + 21, y + 16, 3.5, { cls: 'f-fg' }, g);
+        S.line(sx + 21, y + 16, sx + 76, y + 16, { cls: 's-mid w15', 'marker-end': mk('mid') }, g);
+      } else S.text(sx + 21, y + 21, v, { cls: 't-c t-mono t-md t-b t-x' }, g);
+    };
+    slot(x + 36, hd);
+    slot(x + 78, tl);
+    return g;
+  }
+  const WH3 = [['6 : _', 'Just undefined', '(undefined, 3)', '\\x -> undefined'], ['1 + 2', 'map (*2) xs', 'undefined']];
+  const s3 = {
+    steps: [
+      { title: '値を要るのは 3 か所', text: '要求の出どころは 3 つ。場合分け（パターンマッチ）は、どの場合かを決める外側の構築子を要る。Int の `+` のような組み込みの演算は、両方の数を要る。最後に main の入出力が、表示する文字を要る。要求は main から始まり、この 3 つを通って届いた所だけが計算される。' },
+      { title: '外側の構築子で止まる', text: '計算は、いちばん外側が構築子（`:`・`Just`・組など）か λ になった所で止まる。この形を**弱頭部正規形**（WHNF）と呼び、中の欄はサンクのままでよい。xs を WHNF にする `seq xs ()`（[[3:4|seq で強制する]]）の後の `:sprint` は `_ : _` で、先頭も残りもまだサンク。' },
+      { title: '要る所だけが進む', text: '続けて `head xs` は先頭だけを要り、`:sprint` は `6 : _`。`length xs` は骨組みだけを要り、`[6,_,_]`。`length (_:l) = 1 + length l` は要素を `_` で受け、見ない。どの操作も、自分の場合分けと演算が要る所までしか計算しない。' },
+      { title: 'WHNF の例', text: 'WHNF にするとは、外側の構築子か λ が見えるまで計算すること。外側の決まらない `undefined` だけが例外になり、外側の決まった `Just undefined`・λ・組は、中に undefined があっても止まる。length は要素を見ないので、要素が 3 つとも undefined でも 3 を返す。' },
+      { title: 'seq で強制する', text: '`seq a b` の値は b だが、返すまでに a も WHNF まで計算する（Haskell 2010。a が ⊥ なら ⊥。⊥ は止まらないか例外の値）。どちらを先に計算するかは決めていない。値を要る前に計算させることを**強制**という。`f $! x` は値呼びの適用で、`foldl\'` は途中の値を 1 歩ごとに強制する。' },
+      { title: '遅延評価と非正格', text: 'Haskell 2010 の報告が決めているのは、引数は要るときだけ計算される、という言語の意味（**非正格**）。遅延評価（必要呼び）は、それを実現する処理系の方法の 1 つである。だから GHC は、必ず要ると分かった引数を先に計算してもよい（[[5|代償（スペースリーク）]]）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 左上: 値を要る 3 か所
+      S.text(44, 40, '値を要る 3 か所', { cls: 't-sm t-b' }, svg);
+      st.board = S.g({}, svg);
+      S.rect(30, 52, 456, 100, { rx: 6, cls: 'f-in s-none' }, st.board);
+      st.hot = [];
+      const hot = (s) => { const t = [s, '']; st.hot.push(t); return t; };
+      const L = [
+        [['main = ', ''], hot('print'), [' (length xs)', '']],
+        [['length ', ''], hot('[]'), ['    = 0', '']],
+        [['length ', ''], hot('(_:l)'), [' = 1 ', ''], hot('+'), [' length l', '']]
+      ];
+      st.hotEls = [];
+      L.forEach((parts, k) => {
+        const t = S.text(44, 78 + k * 28, '', { cls: 't-mono t-md pre' }, st.board);
+        parts.forEach((p) => { const sp = S.el('tspan', { text: p[0] }, t); if (st.hot.includes(p)) st.hotEls.push(sp); });
+      });
+      st.notes = [['入出力：表示する文字を要る', 78], ['場合分け：外側の構築子を要る', 106], ['+ は両方の数を要る。_ は見ない', 134]].map(([s, y]) => S.text(286, y, s, { cls: 't-xs t-b' }, st.board));
+      S.text(44, 172, 'length の 2 行は Haskell 2010 の Prelude の定義', { cls: 't-xs t-dim' }, svg);
+      // 右上: WHNF の例
+      st.wh = S.g({}, svg);
+      S.rect(506, 24, 424, 160, { rx: 6, cls: 'f-sf s-rule w1' }, st.wh);
+      S.text(520, 46, '弱頭部正規形（WHNF）：いちばん外側が構築子か λ', { cls: 't-sm t-b' }, st.wh);
+      S.text(520, 70, 'WHNF（ここで止まる）', { cls: 't-xs t-dim' }, st.wh);
+      S.text(736, 70, 'WHNF でない（まだ進める）', { cls: 't-xs t-dim' }, st.wh);
+      WH3[0].forEach((s, k) => S.text(520, 96 + k * 22, s, { cls: 't-mono t-sm t-b t-d pre' }, st.wh));
+      WH3[1].forEach((s, k) => S.text(736, 96 + k * 22, s, { cls: 't-mono t-sm pre' }, st.wh));
+      S.line(30, 206, 930, 206, { cls: 's-rule w1' }, svg);
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+
+      // 段階1: 要求の伝わる順
+      S.text(46, 234, 'main = print (length xs) で、要求が伝わる順', { cls: 't-sm t-b' }, P[0]);
+      const CH = [['print', '文字を要る'], ['show', '数を要る'], ['length の +', '残りの長さを要る'], ['length の場合分け', 'xs の外側を要る'], ['map の場合分け', '[3,2,1] の外側を要る']];
+      CH.forEach(([a, b], k) => {
+        const x = 46 + k * 176;
+        S.rect(x, 254, 150, 54, { rx: 6, cls: 'f-sf s-x w15' }, P[0]);
+        S.text(x + 75, 276, a, { cls: 't-c t-sm t-b' }, P[0]);
+        S.text(x + 75, 296, b, { cls: 't-c t-xs t-mid' }, P[0]);
+        if (k) S.line(x - 24, 281, x - 4, 281, { cls: 's-x w15', 'marker-end': mk('x') }, P[0]);
+      });
+      S.path('M825,310 V334 H121 V313', { cls: 'f-none s-d w15 dash', 'marker-end': mk('d') }, P[0]);
+      S.text(488, 350, '計算した値は逆向きに戻り、最後に print が 3 を表示する', { cls: 't-c t-xs t-d t-b' }, P[0]);
+      S.text(46, 384, 'length と map の場合分けは、セルごとに繰り返す（場面2 の length xs と同じ要り方）', { cls: 't-xs t-mid' }, P[0]);
+      S.text(46, 406, '要素のサンク (*2) 3 などは、どこからも要られないので計算しない', { cls: 't-xs t-mid' }, P[0]);
+
+      // 段階2・3: seq・head・length の後の形（ghci）
+      st.rows = [
+        { cmd: 'ghci> xs `seq` ()', out: 'xs = _ : _', y: 248, draw: (g, y) => { sCell(g, 420, y, '_', '_', mk); S.text(556, y + 21, '← 外側の (:) だけができた。先頭と残りはサンクのまま', { cls: 't-xs t-mid' }, g); } },
+        { cmd: 'ghci> head xs', out: 'xs = 6 : _', y: 322, draw: (g, y) => sCell(g, 420, y, '6', '_', mk) },
+        { cmd: 'ghci> length xs', out: 'xs = [6,_,_]', y: 396, draw: (g, y) => {
+          sCell(g, 420, y, '6', 'ptr', mk); sCell(g, 580, y, '_', 'ptr', mk); sCell(g, 740, y, '_', 'ptr', mk);
+          S.rect(900, y, 30, 32, { rx: 4, cls: 'f-d-soft s-d w15' }, g);
+          S.text(915, y + 21, '[]', { cls: 't-c t-mono t-sm t-b' }, g);
+        } }
+      ].map((r) => {
+        const g = S.g({ cls: 'fade hide' }, svg);
+        S.text(46, r.y + 12, r.cmd, { cls: 't-mono t-sm pre' }, g);
+        S.text(46, r.y + 32, 'ghci> :sprint xs', { cls: 't-mono t-sm pre t-dim' }, g);
+        S.text(212, r.y + 32, r.out, { cls: 't-mono t-sm t-b t-x pre' }, g);
+        r.draw(g, r.y);
+        return g;
+      });
+      S.text(46, 234, '先に ghci> xs = map (*2) [3,2,1] :: [Int] と束縛してから', { cls: 't-xs t-dim' }, P[1]);
+      S.text(46, 234, '先に ghci> xs = map (*2) [3,2,1] :: [Int] と束縛してから', { cls: 't-xs t-dim' }, P[2]);
+      S.text(420, 474, '黒い点は次のセルへの番地。破線の _ はサンク', { cls: 't-xs t-dim' }, P[2]);
+
+      // 段階4: WHNF の例（ghci）
+      S.text(46, 234, 'WHNF の例（ghci で確かめた）', { cls: 't-sm t-b' }, P[3]);
+      S.text(46, 260, '式', { cls: 't-xs t-dim' }, P[3]);
+      S.text(400, 260, '結果', { cls: 't-xs t-dim' }, P[3]);
+      S.text(650, 260, '理由', { cls: 't-xs t-dim' }, P[3]);
+      S.line(46, 268, 916, 268, { cls: 's-rule w1' }, P[3]);
+      [
+        ['undefined `seq` 3', '*** Exception: Prelude.undefined', '外側が決まらない', 1],
+        ['Just undefined `seq` 3', '3', '外側は Just', 0],
+        ['(\\x -> undefined) `seq` 3', '3', '外側は λ', 0],
+        ['length [undefined, undefined, undefined]', '3', '要素は見ない', 0],
+        ['p `seq` ()　（p = (undefined, 3)）', ':sprint p → p = (_,3)', '組の中は計算しない', 0]
+      ].forEach(([e, r, why, bad], k) => {
+        const y = 296 + k * 32;
+        S.text(46, y, e, { cls: 't-mono t-sm pre' }, P[3]);
+        S.text(400, y, r, { cls: 't-mono t-sm t-b pre ' + (bad ? 't-x' : 't-d') }, P[3]);
+        S.text(650, y, why, { cls: 't-sm' }, P[3]);
+      });
+
+      // 段階5: 強制の道具
+      S.text(46, 234, '強制の道具（seq と $! は Haskell 2010 の定義。foldl\' は考え方を示す定義）', { cls: 't-sm t-b' }, P[4]);
+      S.rect(46, 246, 560, 140, { rx: 5, cls: 'f-in s-none' }, P[4]);
+      code(P[4], 60, 270, [
+        'seq ⊥ b = ⊥',
+        'seq a b = b              -- a が ⊥ でないとき',
+        'f $! x  = x `seq` f x    -- 値呼びの適用',
+        "foldl' f z []     = z",
+        "foldl' f z (x:xs) = let z' = f z x in z' `seq` foldl' f z' xs"
+      ], 24);
+      S.rect(626, 246, 290, 140, { rx: 5, cls: 'f-sf s-d w1' }, P[4]);
+      S.text(640, 268, 'ghci（GHC 9.6.7）', { cls: 't-xs t-dim' }, P[4]);
+      code(P[4], 640, 292, ['ghci> let f _ = 3 in f $! undefined', '*** Exception: Prelude.undefined', 'ghci> let f _ = 3 in f $ undefined', '3'], 22);
+      S.text(46, 414, 'この foldl\' で 1 から 100 万までを足すと、-O0 の最大の常駐量は base の foldl\' と同じ 44,328 バイト（場面5）', { cls: 't-xs t-mid' }, P[4]);
+
+      // 段階6: 非正格と遅延評価
+      const P5 = P[5];
+      S.rect(46, 240, 400, 116, { rx: 6, cls: 'f-sf s-mid w15' }, P5);
+      S.text(62, 266, '非正格（言語の意味）', { cls: 't-md t-b' }, P5);
+      S.text(62, 292, 'Haskell 2010 の報告 6.2：関数の適用は非正格で、', { cls: 't-xs' }, P5);
+      S.text(62, 310, '引数は要るときだけ計算される', { cls: 't-xs' }, P5);
+      S.text(62, 336, 'どう実現するかは決めていない', { cls: 't-xs t-mid' }, P5);
+      S.line(452, 298, 504, 298, { cls: 's-mid w15', 'marker-end': mk('mid') }, P5);
+      S.text(478, 288, '実現', { cls: 't-c t-xs t-dim' }, P5);
+      S.rect(510, 240, 406, 116, { rx: 6, cls: 'f-sf s-mid w15' }, P5);
+      S.text(526, 266, '遅延評価（処理系の方法）', { cls: 't-md t-b' }, P5);
+      S.text(526, 292, '必要呼び：サンクを置き、要るときに計算して上書きする', { cls: 't-xs' }, P5);
+      S.text(526, 310, 'GHC は、必ず要ると分かった引数を先に計算してよい', { cls: 't-xs' }, P5);
+      S.text(526, 336, '（正格性解析。場面5）', { cls: 't-xs t-mid' }, P5);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      S.fade(st.rows[0], i === 1 || i === 2);
+      S.fade(st.rows[1], i === 2);
+      S.fade(st.rows[2], i === 2);
+      st.hotEls.forEach((sp) => sp.setAttribute('class', i === 0 ? 't-b t-x' : 't-b'));
+      st.notes.forEach((t) => t.setAttribute('class', 't-xs t-b' + (i === 0 ? ' t-x' : ' t-mid')));
+      op(st.wh, i === 0 ? 0.35 : 1);
+    }
+  };
+
+  /* ================================================================
+     場面4 無限のデータ
+     ghci（GHC 9.6.7）: take 3 [1..] は [1,2,3]。ys = [1..] :: [Int] に take 3 ys の後、:sprint ys は ys = 1 : 2 : 3 : _。
+     zs = map (^2) [1..] :: [Int] に takeWhile (< 40) zs は [1,4,9,16,25,36]、後の :sprint zs は 1 : 4 : 9 : 16 : 25 : 36 : 49 : _。
+     myIf True 1 undefined は 1、False && undefined は False。&& と iterate の定義は Haskell 2010 の Prelude。
+     Node.js 24.22.1: nat = (n) => [n, nat(n + 1)] の nat(1) は RangeError: Maximum call stack size exceeded、残りを関数に包むと
+     take(3, …) が [ 1, 2, 3 ]。for のループは [ 1, 4, 9, 16, 25, 36 ]。空の xs に myIf(xs.length > 0, xs[0].name, '空') は
+     TypeError: Cannot read properties of undefined (reading 'name')、xs.length > 0 && xs[0].name は false。
+     Hughes の主張は「Why Functional Programming Matters」の 4 節（著者の公開版で確かめた）
+     ================================================================ */
+  const ROW4 = [
+    { name: '[1..]', vals: ['1', '2', '3', '4', '5', '6', '7'], y: 140 },
+    { name: 'map (^2)', vals: ['1', '4', '9', '16', '25', '36', '49'], y: 192 },
+    { name: 'takeWhile (< 40)', vals: ['1', '4', '9', '16', '25', '36', '[]'], y: 244 }
+  ];
+  const PIPE4 = [['作る', '[1..]', 40, 170], ['変える', 'map (^2)', 270, 170], ['止める', 'takeWhile (< 40)', 500, 190], ['使う', 'print', 750, 170]];
+  const SX4 = (j) => 240 + j * 80;           // 表の列の左端
+  const TC4 = (c) => 0.4 + c * 1.4;          // 列 c の要求が始まる時刻
+  const s4 = {
+    steps: [
+      { title: '終わりの無いリスト', text: '`[1..]` は 1 から 1 ずつ増える、終わりの無いリスト。最初に作られるのは先頭のセルと残りを作るサンクだけで、残りは要られたときに 1 セルずつ作られる。`take 3` が 3 個を要った後の `:sprint` は `1 : 2 : 3 : _` で、4 個めから先は無い。' },
+      { title: '要求は後ろから前へ', text: '表示するとき、print が takeWhile に次のセルを要り、takeWhile が map に、map が `[1..]` に要る。値は逆向きに 1 個ずつ渡る。値呼びでは組の残りを先に計算するので、同じ形の列は作り終わらない。JavaScript で書くと、スタックがあふれて止まった。' },
+      { title: '止める部品が作る量を決める', text: '`takeWhile (< 40)` は 49 で条件が偽になり、`[]` を返して止まる。表示は `[1,4,9,16,25,36]`。後の `:sprint` は `1 : 4 : 9 : 16 : 25 : 36 : 49 : _` で、`[1..]` は 7 個だけ作られた。止めるかを決めるために、49 は計算された。' },
+      { title: '作る・変える・止めるを分ける', text: 'Hughes は「Why Functional Programming Matters」（1984 年に書き 1989 年に出版）で、遅延評価は止める条件をループの本体から切り離せると書いた。候補を作る部品と選ぶ部品を別々に書き、合成（[[38-closure.html#s4|第38章 場面4]]）でつなぐ。値呼びのループでは、3 つを 1 つの本体に混ぜる。' },
+      { title: '自分で書いた if と短絡', text: '値呼びでは、自分で書いた `myIf(c, t, e)` は両方の枝を先に計算する。空の配列 xs に `myIf(xs.length > 0, xs[0].name, \'空\')` は TypeError。言語の `?:`・`&&`・`||` は要る側しか計算しない（短絡）。Haskell では同じことを普通の関数で書ける。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 上: 部品の並び
+      st.pipe = PIPE4.map(([role, c, x, w]) => {
+        S.text(x, 26, role, { cls: 't-xs t-dim' }, svg);
+        const r = S.rect(x, 34, w, 44, { rx: 6, cls: 'f-sf s-rule w1' }, svg);
+        S.text(x + w / 2, 61, c, { cls: 't-c t-mono t-md t-b pre' }, svg);
+        return r;
+      });
+      [[210, 270], [440, 500], [690, 750]].forEach(([a, b]) => {
+        S.line(b - 4, 48, a + 6, 48, { cls: 's-mid w15', 'marker-end': mk('mid') }, svg);
+        S.line(a + 4, 66, b - 6, 66, { cls: 's-d w15', 'marker-end': mk('d') }, svg);
+        S.text((a + b) / 2, 42, '要る', { cls: 't-c t-xs t-mid' }, svg);
+        S.text((a + b) / 2, 92, '値', { cls: 't-c t-xs t-d' }, svg);
+      });
+      // 中: 各部品が作ったセルの表
+      S.text(40, 124, '要求の回', { cls: 't-xs t-dim' }, svg);
+      for (let j = 0; j < 7; j++) S.text(SX4(j) + 30, 124, String(j + 1), { cls: 't-c t-xs t-dim' }, svg);
+      st.grid = ROW4.map((R, r) => {
+        S.text(40, R.y + 22, R.name, { cls: 't-mono t-sm pre' }, svg);
+        return [0, 1, 2, 3, 4, 5, 6, 7].map((j) => {
+          const g = S.g({}, svg);
+          const rc = S.rect(SX4(j), R.y, 60, 34, { rx: 4, cls: 'f-d-soft s-d w15' }, g);
+          const t = S.text(SX4(j) + 30, R.y + 22, '', { cls: 't-c t-mono t-md t-b' }, g);
+          return { g, rc, t };
+        });
+      });
+      S.text(40, 312, 'print の表示', { cls: 't-xs t-dim' }, svg);
+      st.out = S.text(240, 312, '[1,4,9,16,25,36]', { cls: 't-mono t-md t-b t-d' }, svg);
+      S.line(30, 332, 930, 332, { cls: 's-rule w1' }, svg);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+
+      // 段階1: take 3 [1..]
+      S.text(46, 358, '終わりの無いリストから、要る分だけ取る', { cls: 't-sm t-b' }, P[0]);
+      S.rect(46, 370, 430, 160, { rx: 5, cls: 'f-in s-none' }, P[0]);
+      code(P[0], 60, 392, ['ghci> take 3 [1..]', '[1,2,3]', 'ghci> ys = [1..] :: [Int]', 'ghci> take 3 ys', '[1,2,3]', 'ghci> :sprint ys', 'ys = 1 : 2 : 3 : _'], 20);
+      S.text(496, 392, '作る部品の形（Haskell 2010 の Prelude）', { cls: 't-xs t-dim' }, P[0]);
+      S.text(496, 418, 'iterate f x = x : iterate f (f x)', { cls: 't-mono t-sm pre' }, P[0]);
+      S.text(496, 444, '残り iterate f (f x) はサンクで置かれる', { cls: 't-xs t-mid' }, P[0]);
+      S.text(496, 470, '型を決めない [1..] は Integer で、終わりが無い', { cls: 't-xs t-mid' }, P[0]);
+      S.text(496, 492, 'Integer なら iterate (+1) 1 も同じ列', { cls: 't-xs t-mid' }, P[0]);
+      S.text(496, 514, 'Int の [1..] は maxBound（9,223,372,036,854,775,807）で終わる', { cls: 't-xs t-mid' }, P[0]);
+
+      // 段階2: 値呼びで同じ形の列を作る
+      S.text(46, 358, '値呼びの JavaScript で、同じ形の列を作る（Node.js 24.22.1）', { cls: 't-sm t-b' }, P[1]);
+      S.rect(46, 370, 870, 160, { rx: 5, cls: 'f-in s-none' }, P[1]);
+      code(P[1], 60, 394, [
+        'const nat = (n) => [n, nat(n + 1)];           // 先頭と残りの組。残りを先に計算する',
+        'nat(1);',
+        '',
+        'const natL = (n) => [n, () => natL(n + 1)];   // 残りを関数に包む（サンクと同じ形）',
+        'take(3, natL(1));                             // take は先頭から 3 個取る自作の関数'
+      ], 24);
+      S.text(140, 418, '→ RangeError: Maximum call stack size exceeded', { cls: 't-mono t-sm t-b t-x pre' }, P[1]);
+      S.text(60, 514, '→ [ 1, 2, 3 ]', { cls: 't-mono t-sm t-b t-d pre' }, P[1]);
+
+      // 段階3: :sprint zs
+      S.text(46, 358, 'takeWhile が止めた後に、作られた所を見る（ghci）', { cls: 't-sm t-b' }, P[2]);
+      S.rect(46, 370, 560, 110, { rx: 5, cls: 'f-in s-none' }, P[2]);
+      code(P[2], 60, 392, ['ghci> zs = map (^2) [1..] :: [Int]', 'ghci> takeWhile (< 40) zs', '[1,4,9,16,25,36]', 'ghci> :sprint zs'], 20);
+      S.text(60, 472, 'zs = 1 : 4 : 9 : 16 : 25 : 36 : 49 : _', { cls: 't-mono t-sm t-b t-x pre' }, P[2]);
+      S.text(628, 392, '49 は (< 40) を確かめるために計算した', { cls: 't-xs t-mid' }, P[2]);
+      S.text(628, 414, '_ は作られなかった残り（サンク）', { cls: 't-xs t-mid' }, P[2]);
+
+      // 段階4: 部品に分けるか、1 つの本体に混ぜるか
+      S.text(46, 358, 'Haskell：3 つの部品を合成でつなぐ', { cls: 't-sm t-b' }, P[3]);
+      S.rect(46, 370, 360, 110, { rx: 5, cls: 'f-in s-none' }, P[3]);
+      S.text(60, 398, 'takeWhile (< 40) (map (^2) [1..])', { cls: 't-mono t-md pre' }, P[3]);
+      [['止める', 60, 120], ['変える', 195, 60], ['作る', 263, 45]].forEach(([s, x, w]) => {
+        S.line(x, 410, x + w, 410, { cls: 's-mid w15' }, P[3]);
+        S.text(x + w / 2, 428, s, { cls: 't-c t-xs t-b' }, P[3]);
+      });
+      S.text(60, 466, '→ [1,4,9,16,25,36]', { cls: 't-mono t-sm t-b t-d pre' }, P[3]);
+      S.text(436, 358, 'JavaScript：値呼びのループに 3 つを混ぜる', { cls: 't-sm t-b' }, P[3]);
+      S.rect(436, 370, 480, 158, { rx: 5, cls: 'f-in s-none' }, P[3]);
+      code(P[3], 450, 392, [
+        'const out = [];',
+        'for (let n = 1; ; n++) {     // 作る',
+        '  const s = n * n;           // 変える',
+        '  if (s >= 40) break;        // 止める',
+        '  out.push(s);',
+        '}'
+      ], 20);
+      S.text(450, 516, 'out → [ 1, 4, 9, 16, 25, 36 ]', { cls: 't-mono t-sm t-b t-d pre' }, P[3]);
+
+      // 段階5: 自分で書いた if
+      S.text(46, 358, 'JavaScript（値呼び）', { cls: 't-sm t-b' }, P[4]);
+      S.rect(46, 370, 440, 160, { rx: 5, cls: 'f-in s-none' }, P[4]);
+      code(P[4], 60, 392, [
+        'const myIf = (c, t, e) => (c ? t : e);',
+        'const xs = [];',
+        "myIf(xs.length > 0, xs[0].name, '空');"
+      ], 20);
+      S.text(60, 452, '→ TypeError: Cannot read properties', { cls: 't-mono t-sm t-b t-x pre' }, P[4]);
+      S.text(60, 470, '  of undefined (reading \'name\')', { cls: 't-mono t-sm t-b t-x pre' }, P[4]);
+      S.text(60, 498, 'xs.length > 0 && xs[0].name', { cls: 't-mono t-sm pre' }, P[4]);
+      S.text(60, 518, '→ false（&& は右を計算しない）', { cls: 't-sm t-b t-d' }, P[4]);
+      S.text(506, 358, 'Haskell（ghci）', { cls: 't-sm t-b' }, P[4]);
+      S.rect(506, 370, 410, 160, { rx: 5, cls: 'f-in s-none' }, P[4]);
+      code(P[4], 520, 392, [
+        'myIf c t e = if c then t else e',
+        'myIf True 1 undefined        -- 1',
+        '',
+        'True  && x = x               -- Prelude',
+        'False && _ = False',
+        'False && undefined           -- False'
+      ], 20);
+      S.text(520, 518, '_ で受けた引数は計算しない', { cls: 't-xs t-mid' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // 段階1: [1..] の行だけ、take 3 の後の姿（1 : 2 : 3 : _）
+      // 段階2: 列ごとに、要求が print から [1..] へ伝わり（部品の枠）、値が上の行から順に入る
+      const t = i === 1 && run ? ctx.ts : 99;
+      let lit = -1;
+      const made = [0, 0, 0];      // 行ごとに作ったセルの数
+      for (let c = 0; c < 7; c++) {
+        const u = t - TC4(c);
+        if (u < 0) break;
+        if (u < 0.6) lit = 3 - Math.min(3, Math.floor(u / 0.15));
+        for (let r = 0; r < 3; r++) if (u >= 0.6 + r * 0.2) made[r] = c + 1;
+      }
+      st.pipe.forEach((r, k) => r.setAttribute('class', k === lit ? 'f-sf s-x w2' : 'f-sf s-rule w1'));
+      op(st.out, i >= 1 && made[2] === 7 ? 1 : 0);
+      st.grid.forEach((row, r) => row.forEach((cell, j) => {
+        let n = made[r], show = true, txt = '', thunk = false;
+        if (i === 0) { n = r === 0 ? 3 : -1; }
+        if (n < 0) show = false;
+        else if (j < n) txt = ROW4[r].vals[j];
+        else if (j === n && !(r === 2 && n === 7)) { txt = '_'; thunk = true; }
+        else show = false;
+        if (r === 2 && j === 6 && n === 7) txt = '[]';
+        op(cell.g, show ? 1 : 0);
+        cell.t.textContent = txt;
+        const end = j === 6 && n === 7;            // 49 と [] と 7
+        const hl = i === 2 && (end || thunk);
+        cell.rc.setAttribute('class', thunk ? 'f-sf s-d w15 dash' + (hl ? ' s-x' : '') : (hl ? 'f-x-soft s-x w2' : 'f-d-soft s-d w15'));
+        cell.t.setAttribute('class', 't-c t-mono t-md' + (thunk ? '' : ' t-b') + (hl ? ' t-x' : ''));
+      }));
+    }
+  };
+
+  /* ================================================================
+     場面5 代償（スペースリーク）
+     GHC 9.6.7、main = print (foldl (+) 0 [1 .. 1000000 :: Int]) と foldl' 版を ghc -O0／-O2 -rtsopts で作り、+RTS -s で測った
+     （2026-11-22）。答えはどれも 500000500000。
+       foldl  -O0: 割り当て 161,310,256、最大の常駐量 49,563,296、total memory in use 101 MiB（3 回とも同じ）
+       foldl' -O0: 88,050,736、44,328、6 MiB ／ foldl・foldl' -O2: 50,552、44,328、6 MiB
+       foldl  -O1 -fno-strictness: 81,310,024、38,551,768、87 MiB
+     -O2 の -ddump-simpl（-dsuppress-all -dsuppress-uniques）は $wgo3 (+# wild 1#) (+# ww wild) のループ（和は Int# のまま）。
+     -O1 -fno-strictness は main_go3 (+# wild 1#) (case v of { I# x1 -> I# (+# x1 wild) })（和はサンクで渡る）。
+     -O0 の +RTS -hT では、鎖を積む間は THUNK と I#、たどる間は STACK と BLACKHOLE が大半だった（標本の時刻は実行ごとに違う）。
+     ghci で foldl (\a x -> "(" ++ a ++ " + " ++ show x ++ ")") "0" [1,2,3] は "(((0 + 1) + 2) + 3)"、scanl (+) 0 [1..6] は
+     [0,1,3,6,10,15,21]。foldl の定義は Haskell 2010 の Prelude。引用は「A History of Haskell」3.1・3.2 節
+     ================================================================ */
+  const CHX5 = [190, 266, 342, 418, 494, 570];   // 鎖の箱の左端（0、+ 1〜+ 5）。箱の幅は 56
+  const NX5 = 676;                                // + n の箱の左端（幅 96）
+  const SUM5 = ['0', '1', '3', '6', '10', '15'];
+  const ACC5 = ['0', '1', '3', '6', '10', '15', '21'];
+  const TB5 = [
+    ['foldl  -O0', 49563296, '49,563,296', '101 MiB', '161,310,256'],
+    ["foldl' -O0", 44328, '44,328', '6 MiB', '88,050,736'],
+    ['foldl  -O2', 44328, '44,328', '6 MiB', '50,552'],
+    ["foldl' -O2", 44328, '44,328', '6 MiB', '50,552'],
+    ['foldl  -O1 -fno-strictness', 38551768, '38,551,768', '87 MiB', '81,310,024']
+  ];
+  const s5 = {
+    steps: [
+      { title: 'foldl は足さずに積む', text: 'foldl は途中の値 `f z x` を計算せずに次へ渡す（定義は図5）。foldl 自身はこの値で場合分けしないので、最後まで誰も要らない。`foldl (+) 0 [1..n]` の途中の値は、足し算のサンクが左へつながる鎖 `((0 + 1) + 2) + …` になり、n 個積まれる。' },
+      { title: '最後にまとめて計算する', text: '最後に print が和を要ると、いちばん外の `+` は左の値を要り、その左もさらに左を要る。鎖の深さの分だけ、足し算の続きを待つ枠がスタックに積まれる（[[27-algorithm.html#s5.5|第27章 場面5]]）。-O0 の実行を `+RTS -hT` で見ると、たどる間はスタックと計算中のサンクが大半だった。' },
+      { title: 'foldl\' は 1 歩ごとに足す', text: '`foldl\'` は、途中の値を 1 歩ごとに seq で WHNF にする（[[3|どこまで計算するか]]）。Int の WHNF は数そのものなので、途中の値は 1 つの数で済み、鎖はできない。足し算の回数は foldl と同じ n 回で、違うのは計算する時刻と、その間に持つ物。' },
+      { title: '-O0 で測る', text: '-O0 では、foldl の最大の常駐量が foldl\' の約 1,100 倍になった。foldl は要素 1 個あたり約 50 バイトを、和を求め終えるまで持った。foldl\' も割り当ては 88 MB あるが、すぐ捨てる物なので常駐は 44 KB で済む（[[39-immutable.html#s5.3|第39章 場面5]]）。' },
+      { title: '-O2 では差が消える', text: '-O2 では foldl も foldl\' と同じになった。`-ddump-simpl` で見ると、GHC は foldl と `[1..n]` を 1 つのループにし、和を箱に入れない数のまま回した。-O1 で正格性解析を切る（`-fno-strictness`）と鎖が戻る。直るかどうかは最適化しだいで、式からは読めない。' },
+      { title: '読みにくさと純粋さ', text: '「A History of Haskell」（2007 年）は、熟練者でも遅延のプログラムのメモリの使い方を予測しにくいと書き、そのため seq などの正格な機能を足したと述べる。また、評価の順が要求で決まるので、関数の呼び出しで入出力を確実に行うことはほぼできず、Haskell は純粋になった、と書く。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 上: 2 本の帯（foldl の途中の値と foldl' の途中の値）
+      st.laneA = S.g({}, svg);
+      S.rect(30, 24, 900, 80, { rx: 6, cls: 'f-sf s-rule w1' }, st.laneA);
+      S.text(46, 54, 'foldl', { cls: 't-mono t-md t-b' }, st.laneA);
+      S.text(46, 74, '途中の値は計算しない', { cls: 't-xs t-dim' }, st.laneA);
+      st.chain = CHX5.map((x, k) => {
+        const g = S.g({}, st.laneA);
+        if (k) S.line(x - 1, 64, CHX5[k - 1] + 60, 64, { cls: 's-mid w15', 'marker-end': mk('mid') }, g);
+        const r = S.rect(x, 49, 56, 30, { rx: 4, cls: 'f-sf s-d w15 dash' }, g);
+        const t = S.text(x + 28, 69, '', { cls: 't-c t-mono t-sm' }, g);
+        return { g, r, t };
+      });
+      st.dots = S.text(646, 69, '…', { cls: 't-c t-md t-b' }, st.laneA);
+      st.nBox = S.g({}, st.laneA);
+      S.line(NX5 - 1, 64, 660, 64, { cls: 's-mid w15', 'marker-end': mk('mid') }, st.nBox);
+      st.nR = S.rect(NX5, 49, 96, 30, { rx: 4, cls: 'f-sf s-d w15 dash' }, st.nBox);
+      st.nT = S.text(NX5 + 48, 69, '', { cls: 't-c t-mono t-sm' }, st.nBox);
+      st.cntA = S.text(916, 69, '', { cls: 't-sm t-b t-end' }, st.laneA);
+      st.laneB = S.g({}, svg);
+      S.rect(30, 114, 900, 80, { rx: 6, cls: 'f-sf s-rule w1' }, st.laneB);
+      S.text(46, 144, "foldl'", { cls: 't-mono t-md t-b' }, st.laneB);
+      S.text(46, 164, '1 歩ごとに足す', { cls: 't-xs t-dim' }, st.laneB);
+      st.accR = S.rect(190, 139, 150, 30, { rx: 4, cls: 'f-d-soft s-d w15' }, st.laneB);
+      st.accT = S.text(265, 159, '', { cls: 't-c t-mono t-sm t-b' }, st.laneB);
+      S.text(356, 159, '← 途中の値（和）はいつも 1 つの数', { cls: 't-xs t-mid' }, st.laneB);
+      S.text(916, 159, '数 1 個', { cls: 't-sm t-b t-end' }, st.laneB);
+      S.line(30, 206, 930, 206, { cls: 's-rule w1' }, svg);
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+
+      // 段階1: foldl の定義と、[1,2,3] での形
+      S.text(46, 234, 'foldl の定義（Haskell 2010 の Prelude）', { cls: 't-sm t-b' }, P[0]);
+      code(P[0], 60, 262, ['foldl f z []     = z', 'foldl f z (x:xs) = foldl f (f z x) xs'], 24, 't-mono t-md');
+      S.text(46, 330, '[1,2,3] で置き換えていくと', { cls: 't-sm t-b' }, P[0]);
+      S.rect(46, 342, 560, 132, { rx: 5, cls: 'f-in s-none' }, P[0]);
+      code(P[0], 60, 364, [
+        'foldl (+) 0 [1,2,3]',
+        '= foldl (+) (0 + 1) [2,3]',
+        '= foldl (+) ((0 + 1) + 2) [3]',
+        '= foldl (+) (((0 + 1) + 2) + 3) []',
+        '= ((0 + 1) + 2) + 3          -- ここまで足し算は 0 回'
+      ], 24);
+      S.text(46, 500, 'ghci で途中の値を文字にして畳むと "(((0 + 1) + 2) + 3)"（足し算の形が残る）', { cls: 't-xs t-mid' }, P[0]);
+
+      // 段階2: 鎖をたどる（n ＝ 3 の例）
+      S.text(46, 234, '((0 + 1) + 2) + 3 を計算するとき（n ＝ 3 の例）', { cls: 't-sm t-b' }, P[1]);
+      S.text(60, 270, 'いちばん深いときのスタック', { cls: 't-xs t-dim' }, P[1]);
+      [['いま計算：0 + 1', 'f-x-soft s-x w15', 't-x'], ['待ち：＿ + 2', 'f-in s-mid w1', ''], ['待ち：＿ + 3', 'f-in s-mid w1', '']].forEach(([s, box, c], k) => {
+        S.rect(60, 284 + k * 38, 200, 32, { rx: 4, cls: box }, P[1]);
+        S.text(160, 305 + k * 38, s, { cls: 't-c t-sm t-b ' + c }, P[1]);
+      });
+      S.text(60, 418, '↑ 上に積み、上から降ろす', { cls: 't-xs t-mid' }, P[1]);
+      S.text(320, 270, '戻りながら足す', { cls: 't-xs t-dim' }, P[1]);
+      code(P[1], 320, 300, ['0 + 1 = 1', '1 + 2 = 3', '3 + 3 = 6'], 30, 't-mono t-md t-b t-d');
+      S.text(320, 400, '待ちの枠は鎖の深さの数だけ積まれる', { cls: 't-xs t-mid' }, P[1]);
+      S.text(320, 420, 'n ＝ 100 万なら 100 万段', { cls: 't-xs t-b' }, P[1]);
+      S.rect(560, 256, 356, 170, { rx: 6, cls: 'f-sf s-rule w1' }, P[1]);
+      S.text(576, 280, '-O0、n ＝ 100 万の +RTS -hT の内訳', { cls: 't-xs t-dim' }, P[1]);
+      S.text(576, 308, '鎖を積む間', { cls: 't-sm t-b' }, P[1]);
+      S.text(576, 328, 'サンク（THUNK）と数の箱（I#）', { cls: 't-xs' }, P[1]);
+      S.text(576, 360, '鎖をたどる間', { cls: 't-sm t-b' }, P[1]);
+      S.text(576, 380, 'スタック（STACK）と計算中のサンク', { cls: 't-xs' }, P[1]);
+      S.text(576, 398, '（BLACKHOLE）が大半', { cls: 't-xs' }, P[1]);
+
+      // 段階3: foldl' の形
+      S.text(46, 234, "foldl' で置き換えていくと（seq が途中の値を先に計算する）", { cls: 't-sm t-b' }, P[2]);
+      S.rect(46, 246, 560, 132, { rx: 5, cls: 'f-in s-none' }, P[2]);
+      code(P[2], 60, 268, [
+        "foldl' (+) 0 [1,2,3]",
+        "= foldl' (+) 1 [2,3]          -- 0 + 1 を先に計算",
+        "= foldl' (+) 3 [3]",
+        "= foldl' (+) 6 []",
+        '= 6'
+      ], 24);
+      S.text(46, 404, '途中の値の列 0, 1, 3, 6, 10, 15, 21, … は scanl (+) 0 [1..] と同じ（ghci で確かめた）', { cls: 't-xs t-mid' }, P[2]);
+
+      // 段階4〜6: 測った値の表
+      st.tbl = S.g({ cls: 'fade hide' }, svg);
+      S.text(46, 230, 'GHC 9.6.7、n ＝ 1,000,000、+RTS -s（単位はバイト）', { cls: 't-sm t-b' }, st.tbl);
+      S.text(46, 256, '版', { cls: 't-xs t-dim' }, st.tbl);
+      S.text(330, 256, '最大の常駐量', { cls: 't-xs t-dim t-end' }, st.tbl);
+      S.text(690, 256, '使ったメモリ', { cls: 't-xs t-dim t-end' }, st.tbl);
+      S.text(916, 256, '割り当ての合計', { cls: 't-xs t-dim t-end' }, st.tbl);
+      S.line(46, 264, 916, 264, { cls: 's-rule w1' }, st.tbl);
+      st.rows = TB5.map(([l, v, vs, mem, alloc], k) => {
+        const y = 288 + k * 26;
+        const hl = S.rect(40, y - 18, 880, 24, { rx: 3, cls: 'f-x-soft' }, st.tbl);
+        S.text(46, y, l, { cls: 't-mono t-sm pre' + (k === 4 ? ' t-mid' : '') }, st.tbl);
+        S.text(330, y, vs, { cls: 't-mono t-sm t-b t-end' }, st.tbl);
+        S.rect(342, y - 12, Math.max(2, v / 49563296 * 230), 14, { cls: 'f-d' }, st.tbl);
+        S.text(690, y, mem, { cls: 't-mono t-sm t-end' }, st.tbl);
+        S.text(916, y, alloc, { cls: 't-mono t-sm t-end' }, st.tbl);
+        return hl;
+      });
+      S.text(46, 430, '最大の常駐量（maximum residency）：GC のときに測った、生きている物の量の最大', { cls: 't-xs t-dim' }, st.tbl);
+      // 段階4: 数の読み方
+      S.text(46, 452, '使ったメモリ（total memory in use）：RTS が OS から取ったメモリの最大', { cls: 't-xs t-dim' }, P[3]);
+      S.text(46, 474, '割り当ての合計（bytes allocated in the heap）：ヒープに作った物の量の合計（すぐ捨てた物も数える）', { cls: 't-xs t-dim' }, P[3]);
+      // 段階5: GHC が書き換えたループ（-ddump-simpl の主な行）
+      S.text(46, 460, '-O2 のループ：和 ww は箱に入れない数', { cls: 't-xs t-b' }, P[4]);
+      S.text(46, 480, '$wgo3 (+# wild 1#) (+# ww wild)', { cls: 't-mono t-sm pre t-d t-b' }, P[4]);
+      S.text(46, 512, '-O1 -fno-strictness のループ：和 v はサンクで次へ渡る', { cls: 't-xs t-b' }, P[4]);
+      S.text(46, 532, 'main_go3 (+# wild 1#) (case v of { I# x1 -> I# (+# x1 wild) })', { cls: 't-mono t-sm pre t-x t-b' }, P[4]);
+      // 段階6: 遅延評価が Haskell に残したもの
+      [[46, 'メモリの使い方が', '予測しにくい'], [266, 'seq・正格な', 'データ型を足した'], [486, '評価の順が', '要求で決まる'], [706, '関数の中で入出力', 'できず純粋に']].forEach(([x, a, b], k) => {
+        S.rect(x, 448, 190, 54, { rx: 6, cls: 'f-sf s-mid w15' }, P[5]);
+        S.text(x + 95, 470, a, { cls: 't-c t-sm t-b' }, P[5]);
+        S.text(x + 95, 490, b, { cls: 't-c t-sm t-b' }, P[5]);
+        if (k === 1 || k === 3) S.line(x - 26, 475, x - 4, 475, { cls: 's-mid w15', 'marker-end': mk('mid') }, P[5]);
+      });
+      S.text(46, 528, '「A History of Haskell」3.1・3.2 節。入出力の型の話は第42章', { cls: 't-xs t-dim' }, P[5]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      S.fade(st.tbl, i >= 3);
+      st.rows.forEach((r, k) => op(r, (i === 3 && k <= 1) || (i === 4 && k >= 2) ? 1 : 0));
+      op(st.laneA, i === 2 ? 0.4 : 1);
+      op(st.laneB, i <= 1 ? 0.35 : 1);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // 段階1: 鎖が 1 つずつ伸びる。段階2: いちばん外から左へ要求が進み（x）、戻りながら値が入る
+      const t = run ? ctx.ts : 99;
+      const grow = i === 0 ? t : 99;
+      const vis = (k) => grow >= 0.2 + 0.45 * k;
+      st.chain.forEach((c, k) => op(c.g, vis(k) ? 1 : 0));
+      op(st.dots, vis(6) ? 1 : 0);
+      op(st.nBox, vis(7) ? 1 : 0);
+      const force = i === 1 ? t : -1;
+      const T2 = 0.3 + 0.3 * 6 + 0.4;
+      const lit = (j) => force >= 0.3 + 0.3 * j;                     // j = 0 が + n、1〜5 が + 5〜+ 1
+      const done = (k) => force >= T2 + 0.35 * (k - 1);               // k = 1〜5、6 が + n
+      st.chain.forEach((c, k) => {
+        if (k === 0) { c.t.textContent = '0'; c.r.setAttribute('class', 'f-d-soft s-d w15'); return; }
+        const v = done(k), l = lit(6 - k) && !v;
+        c.t.textContent = v ? SUM5[k] : '+ ' + k;
+        c.r.setAttribute('class', v ? 'f-d-soft s-d w15' : (l ? 'f-x-soft s-x w2 dash' : 'f-sf s-d w15 dash'));
+        c.t.setAttribute('class', 't-c t-mono t-sm' + (v ? ' t-b' : '') + (l ? ' t-x t-b' : ''));
+      });
+      const vn = done(6), ln = lit(0) && !vn;
+      st.nT.textContent = vn ? '500000500000' : '+ n';
+      st.nR.setAttribute('class', vn ? 'f-d-soft s-d w15' : (ln ? 'f-x-soft s-x w2 dash' : 'f-sf s-d w15 dash'));
+      st.nT.setAttribute('class', 't-c t-mono t-sm' + (vn ? ' t-b' : '') + (ln ? ' t-x t-b' : ''));
+      const shown = st.chain.filter((c, k) => k && vis(k)).length;
+      st.cntA.textContent = i === 1 ? '待ちの枠：最大 100 万段' : (vis(7) ? 'サンク 100 万個' : 'サンク ' + shown + ' 個');
+      st.cntA.setAttribute('class', 't-sm t-b t-end' + (i <= 1 ? ' t-x' : ''));
+      // 段階3: foldl' の途中の値が 1 つの箱の中で変わる
+      const a = i === 2 ? t : 99;
+      let k = -1;
+      for (let j = 0; j < ACC5.length; j++) if (a >= 0.3 + 0.5 * j) k = j;
+      const fin = a >= 0.3 + 0.5 * ACC5.length + 0.5;
+      st.accT.textContent = fin ? '500000500000' : (k >= 0 ? ACC5[k] : '0');
+      st.accR.setAttribute('class', 'f-d-soft w15 ' + (i === 2 ? 's-x' : 's-d'));
+    }
+  };
+
+  /* ================================================================
+     場面6 正格な言語の中の遅延
+     rustc 1.95.0（--edition 2021）: 左上のプログラムの出力は「まだ何も計算していない」、map 1〜map 7、[1, 4, 9, 16, 25, 36]。
+     v.iter().map(|x| x * 2); だけの行は warning: unused `Map` that must be used（注記は図のとおり。空の行は省いた）。
+     std::cell::LazyCell の例は「まだ計算していない」「1 + 2 を計算」「6」。
+     Node.js 24.22.1: map の呼び出しは take(3).toArray() の前 0 回・後 3 回、[ 1, 4, 9 ]。配列の map は 3 回で [ 6, 4, 2 ]。
+     typeof Iterator.prototype.takeWhile は 'undefined'（map・take は 'function'）。Iterator のヘルパーは ECMAScript 2025
+     ================================================================ */
+  const RS6 = [
+    'let it = (1..)',
+    '    .map(|x: u64| { println!("map {}", x); x * x })',
+    '    .take_while(|&x| x < 40);',
+    'println!("まだ何も計算していない");',
+    'let v: Vec<u64> = it.collect();',
+    'println!("{:?}", v);'
+  ];
+  const RSO6 = ['まだ何も計算していない', 'map 1', 'map 2', 'map 3', 'map 4', 'map 5', 'map 6', 'map 7', '[1, 4, 9, 16, 25, 36]'];
+  const JS6 = [
+    'function* nat() { let n = 1; while (true) yield n++; }',
+    'let calls = 0;',
+    'const it = nat().map((x) => { calls++; return x * x; });',
+    'console.log(calls);',
+    'console.log(it.take(3).toArray());',
+    'console.log(calls);'
+  ];
+  const s6 = {
+    steps: [
+      { title: 'Rust の Iterator は引かれて動く', text: 'Rust の `map` や `take_while` は計算せず、元の Iterator を包んだ値を返すだけ。`collect` が `next` を呼ぶたびに、要求が前へ伝わる。map は「まだ何も計算していない」の後に 7 回走り、49 で止まった。[[4|無限のデータ]]の ghci で作られた数と同じである。' },
+      { title: '使わなければ何もしない', text: 'Iterator を作って使わずに捨てると、rustc は警告を出す。標準ライブラリが Map などの型に「使わなければならない」印（`#[must_use]`）を付けているからで、注記は遅延であることを告げる。値呼びの言語では、遅延の値の使い忘れは、何も起きないという誤りになる。' },
+      { title: 'JavaScript のジェネレータ', text: '`function*` で書いた関数はジェネレータを返し、`yield` のたびに止まる。`while (true)` で終わりが無くても、引かれた分しか進まない。ECMAScript 2025 で入った Iterator の `map`・`take` も遅延で、take(3) が引いた 3 個の分だけ map を呼んだ。' },
+      { title: '遅延を既定にするか', text: 'Rust の `std::cell::LazyCell` は、包んだクロージャを最初に読まれたときに 1 回だけ走らせて覚える（必要呼び）。Haskell は既定で式を遅延にし、正格にする所を seq などで示す。Rust と JavaScript は値呼びを既定にし、遅延にする所を型や関数で示す。' },
+      { title: '計算の記述と実行を分ける', text: 'Iterator・ジェネレータ・遅延のリストは、どれも「どう計算するか」の記述で、実行は使う側が引くときに起きる。この分け方は入出力にも使える。Haskell の `main` は入出力の手順の記述で、それを実行するのはランタイムである（[[42-monad.html#s5.2|第42章 場面5]]）。' },
+      { title: '答え：いつ計算するかを処理系に預ける', text: '「いつ計算するか」を書き手から処理系へ移せるのは、式が純粋だから。副作用が無いので、遅らせても早めても値は変わらない。機械の上では、遅らせた式はコードの番地と自由変数を持つサンクで、計算済みにするのは 2 語の書き込み。代償は、メモリの使い方が式から読みにくくなること。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 左上: Rust
+      st.rs = S.g({}, svg);
+      S.text(44, 38, 'Rust（rustc 1.95.0）', { cls: 't-sm t-b' }, st.rs);
+      S.rect(30, 48, 436, 124, { rx: 5, cls: 'f-in s-none' }, st.rs);
+      code(st.rs, 42, 70, RS6, 19);
+      S.text(44, 192, '出力', { cls: 't-xs t-dim' }, st.rs);
+      S.rect(30, 200, 436, 164, { rx: 5, cls: 'f-sf s-d w1' }, st.rs);
+      st.rsOut = RSO6.map((s, k) => S.text(42, 220 + k * 17, s, { cls: 't-mono t-sm pre' + (k === 8 ? ' t-b t-d' : (k ? ' t-x' : ' t-b')) }, st.rs));
+      S.text(452, 220 + 7 * 17, '← 49 で止まる', { cls: 't-xs t-mid t-end' }, st.rs);
+      // 右上: JavaScript
+      st.js = S.g({}, svg);
+      S.text(504, 38, 'JavaScript（Node.js 24.22.1）', { cls: 't-sm t-b' }, st.js);
+      S.rect(490, 48, 440, 124, { rx: 5, cls: 'f-in s-none' }, st.js);
+      code(st.js, 502, 70, JS6, 19);
+      S.text(504, 192, '出力', { cls: 't-xs t-dim' }, st.js);
+      S.rect(490, 200, 440, 164, { rx: 5, cls: 'f-sf s-d w1' }, st.js);
+      st.jsOut = [['0', 'map はまだ 1 回も呼ばれていない'], ['[ 1, 4, 9 ]', ''], ['3', 'take(3) が引いた分だけ呼ばれた']].map(([s, n], k) => {
+        const g = S.g({}, st.js);
+        S.text(502, 220 + k * 18, s, { cls: 't-mono t-sm t-b' + (k === 1 ? ' t-d' : ' t-x') }, g);
+        if (n) S.text(600, 220 + k * 18, '← ' + n, { cls: 't-xs t-mid' }, g);
+        return g;
+      });
+      S.line(502, 284, 916, 284, { cls: 's-rule w1' }, st.js);
+      S.text(502, 304, '配列の map は、その場で全部を計算する', { cls: 't-xs t-dim' }, st.js);
+      S.text(502, 324, '[3, 2, 1].map((x) => { c++; return x * 2; })', { cls: 't-mono t-sm pre' }, st.js);
+      S.text(502, 342, '→ [ 6, 4, 2 ]、c は 3', { cls: 't-sm t-b t-d' }, st.js);
+      S.text(916, 342, 'takeWhile のヘルパーは無い', { cls: 't-xs t-dim t-end' }, st.js);
+      S.line(30, 378, 930, 378, { cls: 's-rule w1' }, svg);
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+
+      // 段階1: next() で要求が前へ伝わる
+      S.text(46, 404, 'collect が next() を呼ぶたびに、要求が前へ伝わる', { cls: 't-sm t-b' }, P[0]);
+      [['(1..)', 46], ['map', 276], ['take_while', 506], ['collect', 736]].forEach(([s, x], k) => {
+        S.rect(x, 424, 170, 40, { rx: 6, cls: 'f-sf s-rule w1' }, P[0]);
+        S.text(x + 85, 449, s, { cls: 't-c t-mono t-md t-b' }, P[0]);
+        if (k) {
+          S.line(x - 4, 436, x - 56, 436, { cls: 's-mid w15', 'marker-end': mk('mid') }, P[0]);
+          S.line(x - 56, 454, x - 6, 454, { cls: 's-d w15', 'marker-end': mk('d') }, P[0]);
+          S.text(x - 30, 488, 'next()', { cls: 't-c t-xs t-mono t-mid' }, P[0]);
+        }
+      });
+      S.text(46, 524, 'map の中の表示が 1 回ずつ挟まるのは、値が 1 個ずつ渡るから（場面4 の表と同じ順）', { cls: 't-xs t-mid' }, P[0]);
+
+      // 段階2: rustc の警告
+      S.text(46, 400, 'v.iter().map(|x| x * 2); とだけ書いた行への rustc 1.95.0 の警告（空の行は省いた）', { cls: 't-sm t-b' }, P[1]);
+      S.rect(46, 410, 870, 128, { rx: 5, cls: 'f-x-soft s-x w15' }, P[1]);
+      code(P[1], 60, 430, [
+        'warning: unused `Map` that must be used',
+        ' --> lazy.rs:3:5',
+        '3 |     v.iter().map(|x| x * 2);',
+        '  |     ^^^^^^^^^^^^^^^^^^^^^^^',
+        '  = note: iterators are lazy and do nothing unless consumed',
+        '  = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default'
+      ], 19);
+
+      // 段階3: ジェネレータの動き
+      S.text(46, 404, 'ジェネレータは yield で止まり、next() で続きから動く', { cls: 't-sm t-b' }, P[2]);
+      [['nat() を呼ぶ', '本体はまだ動かない'], ['next()', 'n ＝ 1 を渡して止まる'], ['next()', '2 を渡して止まる'], ['next()', '3 を渡して止まる']].forEach(([a, b], k) => {
+        const x = 46 + k * 220;
+        S.rect(x, 420, 196, 54, { rx: 6, cls: 'f-sf ' + (k ? 's-d w15' : 's-rule w1') }, P[2]);
+        S.text(x + 98, 442, a, { cls: 't-c t-mono t-sm t-b' }, P[2]);
+        S.text(x + 98, 462, b, { cls: 't-c t-xs' }, P[2]);
+        if (k) S.line(x - 22, 447, x - 4, 447, { cls: 's-mid w15', 'marker-end': mk('mid') }, P[2]);
+      });
+      S.text(46, 504, 'take(3) が 3 個を受け取ると止め、4 個めは作られない', { cls: 't-xs t-mid' }, P[2]);
+
+      // 段階4: LazyCell
+      S.text(46, 400, 'Rust の LazyCell：最初に読まれたときに 1 回だけ計算して覚える', { cls: 't-sm t-b' }, P[3]);
+      S.rect(46, 410, 560, 92, { rx: 5, cls: 'f-in s-none' }, P[3]);
+      code(P[3], 60, 432, [
+        'use std::cell::LazyCell;',
+        'let x = LazyCell::new(|| { println!("1 + 2 を計算"); 1 + 2 });',
+        'println!("まだ計算していない");',
+        'println!("{}", *x + *x);'
+      ], 20);
+      S.rect(626, 410, 290, 92, { rx: 5, cls: 'f-sf s-d w1' }, P[3]);
+      S.text(640, 430, '出力（rustc 1.95.0）', { cls: 't-xs t-dim' }, P[3]);
+      code(P[3], 640, 452, ['まだ計算していない', '1 + 2 を計算', '6'], 20, 't-mono t-sm t-b t-d');
+      S.text(46, 528, 'x を 2 回読んでも、1 + 2 の計算は 1 回（場面1 の必要呼びと同じ）', { cls: 't-xs t-mid' }, P[3]);
+
+      // 段階5: 記述と、それを動かすもの
+      S.text(46, 402, '「どう計算するか」の記述', { cls: 't-xs t-dim' }, P[4]);
+      S.text(520, 402, '実行を起こすもの', { cls: 't-xs t-dim' }, P[4]);
+      [['Rust の Iterator', 'collect・sum・for（next() を呼ぶ）'], ['JavaScript のジェネレータ', 'next()・for…of・toArray()'], ['Haskell の遅延のリスト', '場合分けと入出力の要求（場面3）'], ['Haskell の IO の手順（main）', 'ランタイム（第42章 場面5）']].forEach(([a, b], k) => {
+        const y = 428 + k * 28;
+        S.text(46, y, a, { cls: 't-sm t-b' + (k === 3 ? ' t-x' : '') }, P[4]);
+        S.line(330, y - 4, 500, y - 4, { cls: 's-mid w15', 'marker-end': mk('mid') }, P[4]);
+        S.text(520, y, b, { cls: 't-sm' + (k === 3 ? ' t-b t-x' : '') }, P[4]);
+      });
+
+      // 段階6: 答え
+      [[46, '式が純粋', '副作用が無い'], [336, 'いつ計算しても値は同じ', '合流性（場面1）'], [626, '処理系が時刻を選ぶ', '遅らせる＝サンク、早める＝正格性解析']].forEach(([x, a, b], k) => {
+        S.rect(x, 432, 270, 58, { rx: 6, cls: 'f-sf ' + (k === 2 ? 's-x w2' : 's-mid w15') }, P[5]);
+        S.text(x + 135, 456, a, { cls: 't-c t-md t-b' + (k === 2 ? ' t-x' : '') }, P[5]);
+        S.text(x + 135, 476, b, { cls: 't-c t-xs' }, P[5]);
+        if (k) S.line(x - 18, 461, x - 4, 461, { cls: 's-mid w15', 'marker-end': mk('mid') }, P[5]);
+      });
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      op(st.rs, i === 2 ? 0.35 : 1);
+      op(st.js, i <= 1 ? 0.35 : 1);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // 段階1: Rust の出力が 1 行ずつ出る（map の表示は collect が引くたび）。段階3: JavaScript の出力
+      const tr = i === 0 && run ? ctx.ts : 99;
+      st.rsOut.forEach((t, k) => op(t, tr >= 0.4 + 0.45 * k ? 1 : 0));
+      const tj = i === 2 && run ? ctx.ts : 99;
+      st.jsOut.forEach((g, k) => op(g, tj >= 0.4 + 0.8 * k ? 1 : 0));
+    }
+  };
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第X部 関数型 ／ 第40章',
+      title: '遅延評価',
+      home: '../index.html',
+      prev: { href: '39-immutable.html', title: '不変データ' },
+      next: { href: '41-inference.html', title: '型推論と多相', lead: 'Haskell では、関数の引数にも戻り値にも型を書かずに済む。' },
+      legend: [{ c: 'd', label: 'データ（値・式・ヒープの物）' }, { c: 'x', label: '注目・変化（いま計算する所）' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>

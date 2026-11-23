@@ -1,0 +1,1280 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>モナド — YouTubeが見えるまで</title>
+<meta name="description" content="純粋な関数は、引数から戻り値を決めるほかに何もしない。失敗・状態・入出力のような作用を戻り値の型に出し、その型の値をつなぐ演算 >>= を型ごとに決めて扱う。その組と 3 つの則がモナドである。">
+<meta property="og:title" content="モナド — YouTubeが見えるまで">
+<meta property="og:description" content="純粋な関数は、引数から戻り値を決めるほかに何もしない。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第X部 関数型 ／ 第42章 ／ 全43章</p>
+    <h1 id="h-s0">モナド</h1>
+    <p class="standfirst">純粋な関数は、引数から戻り値を決めるほかに何もしない。失敗・状態・入出力のような作用は、戻り値の型（Maybe Int、s -&gt; (a, s)、IO a）に出し、その型の値をつなぐ演算 &gt;&gt;= を型ごとに決めて扱う。型を作る型・return・&gt;&gt;= の組が 3 つの則を満たすとき、それをモナドと呼ぶ。この章では Maybe・State・IO の順に、第37章で言語から外した状態と順序が、型に現れる形で戻ってくることを見る。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>純粋な関数に書けないこと</a><p>状態・入出力・失敗は「引数から戻り値へ」の外にある。作用を戻り値の型に出す。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>失敗をつなぐ</a><p>割り算を 3 回つなぎ、Nothing の場合分けを &gt;&gt;= にまとめる。Rust の and_then と ?。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>モナドの則</a><p>型を作る型・return・&gt;&gt;= と 3 つの則。則は合成の則で、do は &gt;&gt;= の書き方。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>状態をつなぐ</a><p>0 → 3 → 5 → 6 を状態を渡す関数で書き、受け渡しを State の &gt;&gt;= に任せる。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>入出力</a><p>IO a は手順という値。GHC は世界の印 State# RealWorld を渡して順序を固める。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>ほかの形と、ほかの道</a><p>リスト・Rust・Promise・変換子・代数的エフェクト。章の答え。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の章（カリー＝ハワード対応）へ。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードと出力は GHC 9.6.7（transformers 0.6.1.0）・rustc 1.95.0・Node.js 24.22.1・tsc 7.0.2（x86-64 の Linux）で 2026 年 11 月に動かして確かめた。出力は版と設定で変わる。文献は原典の年を添えた: Moggi「Notions of computation and monads」（1991 年。1989 年の LICS の論文の改訂版）、Wadler「The essence of functional programming」（1992 年）、Peyton Jones・Wadler「Imperative functional programming」（1993 年）、Hudak ほか「A History of Haskell: Being Lazy With Class」（2007 年）、Plotkin・Pretnar「Handlers of algebraic effects」（2009 年）。図は模式図。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 純粋な関数に書けないこと ================= -->
+<section class="scene sc-anim" id="s1" data-tab="作用" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>純粋な関数に書けないこと — 作用を型に出す</h2>
+    <p class="sh-meta"><span class="chip">Int -&gt; Int</span><span class="chip">() =&gt; number</span><span class="chip">Maybe Int</span><span class="chip">IO a</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">第41章の fmap は、Maybe の値やリストの要素に関数を当てた。この章は、その型を作る型を使って、純粋な関数に書けない失敗・状態・入出力を表す。まず、何が書けないのかを見る。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Haskell は遅延評価で、式がいつ評価されるかは要求で決まる（<a class="xref" href="40-lazy.html#s3">第40章 場面3</a>）。関数の呼び出しで作用を起こすと順序が定まらないので、純粋さを保ち、作用を型に出す道を選んだ（Hudak ほか「A History of Haskell」、2007 年）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="関数の本体と、その外にある状態・入出力・失敗。作用を戻り値の型に出す"></svg></div>
+    <figcaption>図1　上は関数の本体と、その外（状態・入出力・失敗）。下は段階ごとのコードと出力（GHC 9.6.7・Node.js 24.22.1・tsc 7.0.2）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 失敗をつなぐ ================= -->
+<section class="scene sc-anim" id="s2" data-tab="Maybe" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>失敗をつなぐ — Maybe と &gt;&gt;=</h2>
+    <p class="sh-meta"><span class="chip">Maybe</span><span class="chip">case</span><span class="chip">&gt;&gt;=</span><span class="chip">and_then</span><span class="chip">?</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">失敗するかもしれない計算を Maybe で表すと、使う側は毎回 Nothing かどうかを確かめることになる。6 を 3・2・1 で順に割る計算で、その確かめを 1 つの演算 &gt;&gt;= にまとめる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Haskell の div は負の数を −∞ の向きに丸め（div (−7) 2 は −4）、Rust の / は 0 の向きに切り捨てる（−7 / 2 は −3）。この場面の割り算は正の数なので、両方の言語で同じ値になる。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="割り算を 3 回つなぐ式と、0 で割って途中で止まる式。値が流れ、Nothing は関数を飛ばす"></svg></div>
+    <figcaption>図2　上は 2 つの式の流れ。丸が場合分け（段階3 から &gt;&gt;=）、下の迂回路は Nothing が関数を飛ばす道。下は段階ごとのコードと出力（GHC 9.6.7・rustc 1.95.0）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 モナドの則 ================= -->
+<section class="scene sc-anim" id="s3" data-tab="モナド則" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>モナド — 3 つの部品と 3 つの則</h2>
+    <p class="sh-meta"><span class="chip">return</span><span class="chip">&gt;&gt;=</span><span class="chip">&gt;=&gt;</span><span class="chip">do</span><span class="chip">Applicative</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">Maybe の &gt;&gt;= と同じ形の演算は、ほかの型にも作れる。型を作る型 M・return・&gt;&gt;= の組が 3 つの則を満たすとき、その組をモナドと呼ぶ。則を Maybe の具体的な値で確かめる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">計算の作用をモナドで表したのは Moggi（1989・1991 年）、それを Haskell のプログラムの組み立て方にしたのは Wadler（1990・1992 年）。圏論では、自己関手と 2 つの自然変換（単位と乗法）の組をモナドと呼ぶ。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="モナドの 3 つの部品と 3 つの則を Maybe の値で確かめた表、合成の則、do 記法、則を破る instance"></svg></div>
+    <figcaption>図3　上は 3 つの部品、中は 3 つの則と Maybe で確かめた値（GHC 9.6.7 の ghci）。下は段階ごとの中身。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 状態をつなぐ ================= -->
+<section class="scene sc-anim" id="s4" data-tab="State" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>状態をつなぐ — State</h2>
+    <p class="sh-meta"><span class="chip">s -&gt; (a, s)</span><span class="chip">newtype</span><span class="chip">0 → 3 → 5 → 6</span><span class="chip">-O2 の Core</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">状態を書き換えずに扱うには、いまの状態を引数で受け取り、新しい状態を戻り値で返せばよい。第6章 場面4 の sum の列 0 → 3 → 5 → 6 をこの形で書き、受け渡しを State の &gt;&gt;= に任せる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">seq の無い add では、状態は足し算のサンクの鎖として渡る。n ＝ 100 万で最大の常駐量は 38,551,800 バイト（seq 付きは 44,328 バイト。GHC 9.6.7 -O2 の +RTS -s）。State も遅延評価の代償（<a class="xref" href="40-lazy.html#s5">第40章 場面5</a>）を免れない。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="第6章の番地を書き換える sum と、状態を関数から関数へ渡す 0・3・5・6 の列。State の >>= と -O2 の Core"></svg></div>
+    <figcaption>図4　上は第6章 場面4 の 10 番地（1 つの場所を書き換える）と、この場面の状態の列（別々の値が渡る）。下は段階ごとのコードと出力（GHC 9.6.7）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 入出力 ================= -->
+<section class="scene sc-anim" id="s5" data-tab="IO" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>入出力 — IO と世界の印</h2>
+    <p class="sh-meta"><span class="chip">IO a</span><span class="chip">main</span><span class="chip">State# RealWorld</span><span class="chip">-O2 の Core</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">入出力をする計算の型は IO a である。IO a の値は、実行すると a が得られる入出力の手順で、式を評価しても入出力は起きない。手順を実行するのはランタイムで、入口は main の 1 つだけ。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">入出力をモナドで書く方法は Peyton Jones と Wadler の「Imperative functional programming」（1993 年）で、Haskell 1.3（1996 年）から言語の入出力になった。記述と実行を分ける考えは<a class="xref" href="40-lazy.html#s6">第40章 場面6</a>の続き。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="IO の手順を組み立てる式と、ランタイムが世界の印を渡しながら手順を実行する流れ、端末の入出力"></svg></div>
+    <figcaption>図5　上の左は手順を組み立てる式、右はランタイムが実行する順（線は世界の印の受け渡し）と端末。下は段階ごとのコードと GHC 9.6.7 の出力。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 ほかの形と、ほかの道 ================= -->
+<section class="scene sc-anim" id="s6" data-tab="ほかの道" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>ほかの形と、ほかの道 — 答え</h2>
+    <p class="sh-meta"><span class="chip">[a]</span><span class="chip">and_then</span><span class="chip">then</span><span class="chip">StateT</span><span class="chip">エフェクト</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">モナドの形は Maybe・State・IO だけのものではない。答えが複数ある計算や、ほかの言語の Option・Promise にも同じ形がある。最後に、作用を組み合わせる難しさと別の道を見て、章の答えを出す。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">モナドを重ねる変換子は Liang・Hudak・Jones（1995 年）が示した。Hudak ほか（2007 年）は、モナドはうまく組み合わさらないと書く。Kiselyov ほかと Kammar ほか（ともに 2013 年）は、ハンドラを変換子に代わる道として示した。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="同じ形をした型の表（Maybe・State・IO・リスト・Rust の Option・JavaScript の Promise）と、変換子・代数的エフェクト・章の答え"></svg></div>
+    <figcaption>図6　上は &gt;&gt;= の形をした型の表（値はこの章で確かめたもの）。下は段階ごとの中身（GHC 9.6.7・transformers 0.6.1.0・rustc 1.95.0・Node.js 24.22.1）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — 状態と順序を型に戻す</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>純粋な関数は、同じ引数に同じ値を返すほかに何もしない。状態の読み書き・入出力・失敗（作用）は型から見えないので、戻り値の型（Maybe a、s -&gt; (a, s)、IO a）に出す（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>Maybe をつなぐたびに書く場合分けを 1 つの演算にしたのが &gt;&gt;=。Nothing が出ると、その先の関数は呼ばれない。Rust の and_then と ? も同じ形（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>型を作る型 M・return・&gt;&gt;= の組が、左単位・右単位・結合の 3 つの則を満たすとき、モナドと呼ぶ。則は a -&gt; M b の関数の合成の則で、コンパイラは確かめない。do は &gt;&gt;= の書き方（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>State s a は s -&gt; (a, s) の関数に付けた名前で、&gt;&gt;= が状態を次の計算へ渡す。状態は書き換わる場所ではなく値の列で、GHC 9.6.7 の -O2 では累積引数のループになった（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>IO a は入出力の手順という値で、実行するのはランタイム。GHC は IO を世界の印 State# RealWorld の受け渡しで実装する。印は実行時に 0 バイトで、データの依存が順序を固める（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>同じ形はリスト・Rust の Option・JavaScript の Promise にもある（Promise は則 1 が崩れる）。作用を重ねるには変換子、別の道に代数的エフェクト。モナドは、言語から外した状態と順序を型に現れる形で戻す（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th>作用（副作用）</th><td>引数から戻り値を決める以外のこと。状態の読み書き、入出力、失敗など。純粋な関数は作用を持たない。</td></tr>
+        <tr><th>モナド</th><td>型を作る型 M と、return・&gt;&gt;= の 2 つの演算の組で、3 つの則を満たすもの。Haskell では型クラス Monad。</td></tr>
+        <tr><th>Maybe</th><td>値が無い Nothing か、値が 1 つある Just a の直和。失敗するかもしれない計算の戻り値の型。Rust の Option に当たる。</td></tr>
+        <tr><th>&gt;&gt;=（bind）と do</th><td>M a と a -&gt; M b から M b を作り、前の計算の結果を次の計算へ渡す演算。do { x &lt;- m; f x } は m &gt;&gt;= \x -&gt; f x と同じ。</td></tr>
+        <tr><th>return（pure）</th><td>作用の無い計算を作る演算。Maybe では Just、リストでは [x]。GHC の Monad では、return の既定の定義が pure。</td></tr>
+        <tr><th>モナド則</th><td>左単位・右単位・結合の 3 つ。a -&gt; M b の関数の合成 &gt;=&gt; が return を単位とし、括弧の付け方によらないこと。</td></tr>
+        <tr><th>State</th><td>s -&gt; (a, s) の関数に付けた型の名前。いまの状態を受け取り、結果と次の状態を返す。transformers では StateT s Identity。</td></tr>
+        <tr><th>IO</th><td>入出力の手順の型。実行はランタイム。GHC の中身は State# RealWorld -&gt; (# State# RealWorld, a #) で、印は 0 バイト。</td></tr>
+        <tr><th>Applicative</th><td>前の結果を見ずに作用を並べる型クラス（pure と &lt;*&gt;）。Monad より弱い形。GHC 7.10 から、Monad の instance には Applicative の instance が要る。</td></tr>
+        <tr><th>代数的エフェクト</th><td>計算は操作を呼ぶだけで、その意味を外側のハンドラが決める作用の扱い方。OCaml 5（Effect モジュール）や Koka が持つ。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg;
+
+  /* ---------- この章で使う部品 ---------- */
+
+  /* 濃さ（fade の付いた要素は 0.35 秒かけて変わる） */
+  const op = (el, v) => { el.style.opacity = v; };
+  /* 動きを止めているときは、段階の動きの終わりの姿を見せる */
+  const playing = () => YT.motion.playing;
+  /* 文字の幅の見積もり（等幅は 0.6 em、全角は 1 em）。札の幅を書体の読み込みに左右されずに決める */
+  const tw = (s, fs, mono) => Array.from(String(s)).reduce((a, c) => a + (c.charCodeAt(0) > 0x2000 ? fs : fs * (mono ? 0.6 : 0.58)), 0);
+  /* 等幅の行の並び（空白を詰めない）。文字の要素の配列を返す */
+  function code(parent, x, y, lines, lh, cls) {
+    return lines.map((s, k) => S.text(x, y + k * lh, s, { cls: (cls || 't-mono t-sm') + ' pre' }, parent));
+  }
+  /* 枠付きの札（中央 cx・cy）。{ g, r, t, w } を返す */
+  function box(parent, cx, cy, s, o) {
+    o = o || {};
+    const fs = o.fs || 12.5, w = o.w || Math.max(o.min || 22, tw(s, fs, o.mono) + (o.pad == null ? 16 : o.pad)), h = o.h || 26;
+    const g = S.g({ cls: o.gcls }, parent);
+    const r = S.rect(cx - w / 2, cy - h / 2, w, h, { rx: o.rx == null ? 5 : o.rx, cls: o.box || 'f-sf s-rule w1' }, g);
+    const t = S.text(cx, cy + fs * 0.36, s, { cls: 't-c ' + (o.cls || 't-md') + (o.mono ? ' t-mono' : '') }, g);
+    return { g, r, t, w };
+  }
+  /* 動かす札（原点が中央）。at で置き、set で文字を替える */
+  function chip(parent, s, o) {
+    o = o || {};
+    const fs = o.fs || 12.5, w = o.w || tw(s, fs, true) + 18;
+    const g = S.g({ cls: o.gcls }, parent);
+    const r = S.rect(-w / 2, -12, w, 24, { rx: 5, cls: o.box || 'f-sf s-d w15' }, g);
+    const t = S.text(0, 4.5, s, { cls: 't-c t-mono t-b ' + (o.cls || 't-md t-d') }, g);
+    return {
+      g, r, t, w,
+      at(x, y) { g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`); return this; },
+      set(s2) { t.textContent = s2; return this; }
+    };
+  }
+  /* 誤りの札（GHC・rustc の出力）。1 行目が見出し */
+  function errBox(parent, x, y, w, lines, lh) {
+    const g = S.g({}, parent);
+    lh = lh || 18;
+    S.rect(x, y, w, 14 + lines.length * lh, { rx: 5, cls: 'f-x-soft s-x w15' }, g);
+    lines.forEach((s, k) => S.text(x + 12, y + 22 + k * lh, s, { cls: 't-sm t-mono pre' + (k ? '' : ' t-b t-x') }, g));
+    return g;
+  }
+  /* 表（列の左端 xs、行の高さ lh）。見出しの行を薄く、区切りの線を引く。行ごとの文字の配列を返す */
+  function table(parent, x0, y0, w, xs, head, rows, lh, cls) {
+    xs.forEach((x, j) => S.text(x, y0, head[j], { cls: 't-xs t-dim' }, parent));
+    S.line(x0, y0 + 8, x0 + w, y0 + 8, { cls: 's-rule w1' }, parent);
+    return rows.map((row, k) => {
+      const y = y0 + 8 + (k + 1) * lh - lh * 0.32;
+      const bg = S.rect(x0, y - lh * 0.66, w, lh - 4, { rx: 4, cls: 'f-none' }, parent);
+      const ts = row.map((s, j) => S.text(xs[j], y, s, { cls: ((cls && cls[j]) || 't-sm') + ' pre' }, parent));
+      return { bg, ts };
+    });
+  }
+  /* 段階ごとの下の板の区切り */
+  const sep = (svg, y) => S.line(30, y, 930, y, { cls: 's-rule w1' }, svg);
+
+  /* ================================================================
+     場面1 純粋な関数に書けないこと
+     値: add3 2 ＝ 5（指示書 §4。ghci で確かめた）。next は Node.js 24.22.1 で 1・2・3 を返し、
+     型は tsc 7.0.2 の --declaration の出力（next: () => number、Date.now を包んだ関数も () => number）。
+     div (6 :: Int) 0 は GHC 9.6.7 の ghci で「*** Exception: divide by zero」。
+     divBy 3 6 + 1 の誤りは GHC 9.6.7 の ghci の出力（[GHC-39999] No instance for ‘Num (Maybe Int)’ arising from a use of ‘+’）
+     ================================================================ */
+  const s1 = {
+    steps: [
+      { title: '純粋な関数', text: '純粋な関数は、同じ引数には同じ値を返し、値を返すほかに何もしない。`add3 2` はいつ何回呼んでも 5 で、式 `add3 2` をどこでも 5 に置き換えられる（参照透過性。[[37-lambda.html#s1|第37章 場面1]]）。Haskell で型が `Int -> Int` の関数は、unsafe の付く関数を使わない限り、状態の読み書きも入出力もしない。' },
+      { title: '呼ぶたびに違う値', text: 'JavaScript の `next = () => ++counter` は、呼ぶたびに 1、2、3 を返す。関数の外の変数 counter を読んで書き換えるからで、tsc 7.0.2 が推した型 `() => number` にそれは出ない。式 `next()` は 1 つの値に置き換えられない。' },
+      { title: '作用 — 型に出ない 3 つ', text: '引数から戻り値を決める以外のことを**作用**（副作用）と呼ぶ。状態の読み書き、外の世界との入出力（時計を読む `Date.now()` も入力）、失敗。Haskell の `div` は、Int での型が `Int -> Int -> Int` のまま `div 6 0` で例外を投げる。どれも型からは見えない。' },
+      { title: '作用を戻り値の型に出す', text: '方針は、作用を戻り値の型に書くこと。失敗するかもしれない Int は `Maybe Int`（場面2）、状態 s を使う計算は `s -> (a, s)`（場面4）、入出力をする計算は `IO a`（場面5）。関数は純粋なままで、型を見れば何が起こりうるかが分かる。型を作る型（[[41-inference.html#s6|第41章 場面6]]）が作用の名前になる。' },
+      { title: 'そのままではつなげない', text: '`divBy 3 6` の型は `Maybe Int` で、Int ではない。`divBy 3 6 + 1` は GHC 9.6.7 で「No instance for ‘Num (Maybe Int)’」になる。作用を型に出すと、結果を次の計算へ渡すたびに型ごとの渡し方が要る。それをまとめた演算が次の場面の `>>=`。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 上: 関数の本体と、その外
+      S.text(40, 24, '関数の本体と、その外', { cls: 't-sm t-dim' }, svg);
+      // 外: 状態・入出力・失敗
+      const outer = st.outer = S.g({}, svg);
+      S.text(290, 26, '状態', { cls: 't-c t-sm t-dim' }, outer);
+      st.sBox = S.rect(240, 34, 100, 40, { rx: 6, cls: 'f-sf s-rule w1' }, outer);
+      st.sT = S.text(290, 59, 'counter = 0', { cls: 't-c t-mono t-sm' }, outer);
+      S.text(410, 26, '入出力', { cls: 't-c t-sm t-dim' }, outer);
+      st.ioBox = S.rect(360, 34, 100, 40, { rx: 6, cls: 'f-sf s-rule w1' }, outer);
+      S.text(410, 59, '時計・端末', { cls: 't-c t-sm' }, outer);
+      S.text(290, 248, '失敗', { cls: 't-end t-sm t-dim' }, outer);
+      st.xBox = S.rect(300, 226, 100, 36, { rx: 6, cls: 'f-sf s-rule w1' }, outer);
+      S.text(350, 249, '例外', { cls: 't-c t-sm' }, outer);
+      // 外との行き来の矢印（状態と入出力は読むのと書くのの 2 本、失敗は抜ける 1 本）
+      st.ch = [
+        [S.line(281, 77, 281, 97, { cls: 's-rule w2' }, svg), S.line(299, 97, 299, 77, { cls: 's-rule w2' }, svg)],
+        [S.line(401, 77, 401, 97, { cls: 's-rule w2' }, svg), S.line(419, 97, 419, 77, { cls: 's-rule w2' }, svg)],
+        [S.line(350, 203, 350, 223, { cls: 's-rule w2' }, svg)]
+      ];
+      // 段階3 の札（どの作用か）
+      st.why = S.g({ cls: 'fade hide' }, svg);
+      S.text(232, 92, 'counter を書き換える', { cls: 't-end t-xs t-x t-b' }, st.why);
+      S.text(470, 52, 'Date.now() で時計を読む', { cls: 't-xs t-x t-b' }, st.why);
+      S.text(410, 249, 'div 6 0 → divide by zero', { cls: 't-xs t-x t-b t-mono' }, st.why);
+      // 引数 → 関数 → 戻り値
+      S.text(95, 118, '引数', { cls: 't-c t-sm t-dim' }, svg);
+      S.rect(40, 128, 110, 44, { rx: 6, cls: 'f-sf s-rule w1' }, svg);
+      st.inT = S.text(95, 155, '2', { cls: 't-c t-mono t-md t-b' }, svg);
+      S.line(150, 150, 226, 150, { cls: 's-mid w15', 'marker-end': mk('mid') }, svg);
+      st.fBox = S.rect(230, 100, 240, 100, { rx: 10, cls: 'f-sf s-fg w2' }, svg);
+      st.fName = S.text(350, 132, 'add3', { cls: 't-c t-mono t-md t-b' }, svg);
+      st.fType = S.text(350, 160, 'Int -> Int', { cls: 't-c t-mono t-md' }, svg);
+      S.line(470, 150, 556, 150, { cls: 's-mid w15', 'marker-end': mk('mid') }, svg);
+      S.text(630, 118, '戻り値', { cls: 't-c t-sm t-dim' }, svg);
+      st.oBox = S.rect(560, 128, 140, 44, { rx: 6, cls: 'f-sf s-rule w1' }, svg);
+      st.outT = S.text(630, 155, '5', { cls: 't-c t-mono t-md t-b t-d' }, svg);
+      // 段階4: 作用の名前になった戻り値の型
+      st.types = S.g({ cls: 'fade hide' }, svg);
+      const TY = [['失敗', 'Maybe Int'], ['状態', 's -> (a, s)'], ['入出力', 'IO a']];
+      st.tyBoxes = TY.map(([k, s], j) => {
+        S.text(570, 199 + j * 26, k, { cls: 't-end t-xs t-dim' }, st.types);
+        return box(st.types, 650, 195 + j * 26, s, { mono: true, w: 140, h: 22, fs: 12.5, cls: 't-md t-b t-d', box: 'f-d-soft s-d w1' });
+      });
+      // 段階5: 次の計算が Int を待つ
+      st.next = S.g({ cls: 'fade hide' }, svg);
+      S.text(860, 118, '次の計算', { cls: 't-c t-sm t-dim' }, st.next);
+      S.rect(790, 128, 140, 44, { rx: 6, cls: 'f-sf s-fg w15' }, st.next);
+      S.text(860, 148, '(+ 1)', { cls: 't-c t-mono t-md t-b' }, st.next);
+      S.text(860, 164, 'Int を待つ', { cls: 't-c t-xs t-dim' }, st.next);
+      S.line(700, 150, 786, 150, { cls: 's-x w15 dash' }, st.next);
+      st.cross = S.text(744, 140, '✕', { cls: 't-c t-lg t-b t-x' }, st.next);
+      // 動く札: 引数と戻り値
+      st.cin = chip(svg, '2', { w: 46 });
+      st.cout = chip(svg, '5', { w: 46 });
+      st.cty = [0, 1, 2].map(() => chip(svg, '', { w: 18, box: 'f-x s-x w1' }));
+      st.cjust = chip(svg, 'Just 2', { w: 76 });
+
+      // 下: 段階ごとの中身
+      sep(svg, 280);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1
+      code(P[0], 52, 312, ['add3 :: Int -> Int', 'add3 = addN 3            -- 第38章 場面2 のクロージャ'], 22, 't-mono t-md');
+      st.calls1 = [0, 1, 2].map((k) => code(P[0], 52, 380 + k * 28, ['ghci> add3 2   ' + '→ 5'], 0, 't-mono t-md')[0]);
+      S.text(500, 408, 'いつ何回呼んでも 5', { cls: 't-md t-b t-d' }, P[0]);
+      // 段階2
+      code(P[1], 52, 312, ['let counter = 0;', 'const next = () => ++counter;'], 22, 't-mono t-md');
+      S.text(420, 334, '← tsc 7.0.2 が推した型：() => number', { cls: 't-sm t-mid' }, P[1]);
+      st.calls2 = [1, 2, 3].map((v, k) => code(P[1], 52, 390 + k * 28, ['next()   → ' + v], 0, 't-mono t-md')[0]);
+      st.cnt2 = [1, 2, 3].map((v, k) => S.text(260, 390 + k * 28, '（counter は ' + v + ' に）', { cls: 't-sm t-x fade hide' }, P[1]));
+      // 段階3
+      table(P[2], 40, 312, 880, [52, 172, 600], ['作用', '例', '型（作用は書かれていない）'], [
+        ['状態', 'next() が関数の外の counter を書き換える', '() => number'],
+        ['入出力', 'Date.now() が時計を読む（入力）', '() => number'],
+        ['失敗', 'div 6 0 が例外 divide by zero を投げる', 'Int -> Int -> Int']
+      ], 40, ['t-sm t-b t-x', 't-sm', 't-mono t-md']);
+      // 段階4
+      table(P[3], 40, 312, 880, [52, 172, 380], ['作用', '戻り値の型', '例'], [
+        ['失敗', 'Maybe Int', 'divBy :: Int -> Int -> Maybe Int        （場面2）'],
+        ['状態 s', 's -> (a, s)', 'addS 3 :: Int -> ((), Int)              （場面4）'],
+        ['入出力', 'IO a', 'getLine :: IO String                    （場面5）']
+      ], 40, ['t-sm t-b', 't-mono t-md t-b t-d', 't-mono t-sm']);
+      // 段階5
+      code(P[4], 52, 312, ['divBy :: Int -> Int -> Maybe Int', 'ghci> divBy 3 6        → Just 2', 'ghci> divBy 3 6 + 1'], 22, 't-mono t-md');
+      errBox(P[4], 52, 372, 600, [
+        'error: [GHC-39999]',
+        '    • No instance for ‘Num (Maybe Int)’ arising from a use of ‘+’'
+      ], 20);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      const NAME = ['add3', 'next', '関数 f', 'divBy', 'divBy'];
+      const TYPE = ['Int -> Int', '() => number', '型は作用を言わない', 'Int -> Int -> Maybe Int', 'Int -> Int -> Maybe Int'];
+      const IN = ['2', '()', 'x', '0  6', '3  6'];
+      const OUT = ['5', '3', 'f x', 'Nothing', 'Just 2'];
+      st.fName.textContent = NAME[i];
+      st.fType.textContent = TYPE[i];
+      st.fType.setAttribute('class', 't-c t-md' + (i === 2 ? ' t-x t-b' : ' t-mono'));
+      st.inT.textContent = IN[i];
+      st.outT.textContent = OUT[i];
+      // 外の 3 つ: 段階2 は状態だけ、段階3 は全部が x、段階4 からは戻り値の型に移る
+      const lit = [i === 1 || i === 2, i === 2, i === 2], mk = S.markers(ctx.svg);
+      [st.sBox, st.ioBox, st.xBox].forEach((bx, j) => {
+        st.ch[j].forEach((ln) => {
+          ln.setAttribute('class', (lit[j] ? 's-x w2' : 's-rule w2') + (i >= 3 ? ' dash2' : ''));
+          ln.setAttribute('marker-end', mk(lit[j] ? 'x' : 'dim'));
+        });
+        bx.setAttribute('class', lit[j] ? 'f-x-soft s-x w15' : 'f-sf s-rule w1');
+      });
+      op(st.outer, i === 0 || i >= 3 ? 0.45 : '');
+      st.sT.textContent = 'counter = ' + (i === 1 || i === 2 ? 3 : 0);
+      S.fade(st.why, i === 2);
+      S.fade(st.types, i === 3);
+      op(st.types, '');
+      S.fade(st.next, i === 4);
+      st.oBox.setAttribute('class', i >= 3 ? 'f-d-soft s-d w15' : 'f-sf s-rule w1');
+      st.calls1.forEach((t) => t.setAttribute('class', 't-mono t-md pre'));
+      st.calls2.forEach((t) => t.setAttribute('class', 't-mono t-md pre'));
+      st.cnt2.forEach((t) => S.fade(t, false));
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      const hideChip = (c) => op(c.g, 0);
+      [st.cin, st.cout, st.cjust].concat(st.cty).forEach(hideChip);
+      // 動かしている間は、引数と戻り値の値を動く札が持つ（止めているときは枠の中の文字で見せる）
+      op(st.inT, run && i <= 1 ? 0 : '');
+      op(st.outT, run && (i <= 1 || i === 4) ? 0 : '');
+      if (i === 0 || i === 1) {
+        // 呼び出しを 3 回。引数の札が関数へ入り、戻り値の札が出る。段階2 では呼ぶたびに counter が増える
+        const per = 3, total = 11;
+        const c = run ? U.mod(ctx.ts, total) : total;
+        const k = Math.min(2, Math.floor(c / per));          // いまの呼び出し（0〜2）
+        const done = c >= per * 3;
+        const f = done ? 1 : (c - k * per) / per;            // 呼び出しの中の進み
+        const nCalls = done ? 3 : k + (f >= 0.5 ? 1 : 0);    // 戻り値が出た呼び出しの数
+        if (run) {
+          if (!done && f < 0.4) {
+            st.cin.set(i === 0 ? '2' : '()').at(U.lerp(95, 300, U.ease.inOut(U.prog(f, 0.05, 0.3))), 150);
+            op(st.cin.g, '');
+          }
+          if (nCalls) {
+            const b = done || f < 0.5 ? 1 : U.ease.inOut(U.prog(f, 0.5, 0.3));
+            st.cout.set(i === 0 ? '5' : String(nCalls)).at(U.lerp(400, 630, b), 150);
+            op(st.cout.g, '');
+          }
+        }
+        const lines = i === 0 ? st.calls1 : st.calls2;
+        lines.forEach((t, j) => t.setAttribute('class', 't-mono t-md pre' + (j < nCalls ? (j === nCalls - 1 ? ' t-b t-d' : '') : ' t-dim')));
+        if (i === 1) {
+          st.outT.textContent = String(nCalls || '');
+          st.sT.textContent = 'counter = ' + nCalls;
+          st.cnt2.forEach((t, j) => S.fade(t, j < nCalls));
+          op(st.outer, '');
+        }
+      } else if (i === 3) {
+        // 外の 3 つ（失敗・状態・入出力）が、戻り値の型へ移る
+        const from = [[350, 213], [290, 87], [410, 87]];
+        const f = run ? U.ease.inOut(U.prog(ctx.ts, 0.4, 1.4)) : 1;
+        if (f < 1) st.cty.forEach((c, j) => { c.at(U.lerp(from[j][0], 572, f), U.lerp(from[j][1], 195 + j * 26, f)); op(c.g, ''); });
+        op(st.types, f < 1 ? U.remap(f, 0.6, 1, 0, 1).toFixed(2) : '');
+      } else if (i === 4) {
+        // Just 2 を次の計算へ渡そうとして、Int でないので止まる
+        const f = run ? U.ease.out(U.prog(U.mod(ctx.ts, 5), 0.4, 1.2)) : 1;
+        st.cjust.at(U.lerp(630, 690, f), 150);
+        op(st.cjust.g, run ? '' : 0);
+      }
+    }
+  };
+
+  /* ================================================================
+     場面2 失敗をつなぐ
+     値は GHC 9.6.7 の ghci で確かめた（指示書 §4）: divBy 3 6 ＝ Just 2、divBy 0 6 ＝ Nothing、
+     Just 6 >>= divBy 3 >>= divBy 2 >>= divBy 1 ＝ Just 1、Just 6 >>= divBy 0 >>= divBy 2 ＝ Nothing。入れ子の case の版も Just 1。
+     Debug.Trace で呼び出しを書く版（divByT）は、0 を挟むと「divBy 0 6」の 1 行だけを書いた。
+     Maybe の >>= の定義は base-4.18.3.0 の GHC.Base。:i (>>=) は infixl 1。
+     Rust は rustc 1.95.0（edition 2021）で Some(1)・None、? の版の calc(6) も Some(1)、map の版は Some(Some(2))
+     ================================================================ */
+  // 2 つの式の流れ。JX は場合分け（段階3 から >>=）の丸、関数の箱は JX + 20〜120、VX は線の上の値の札
+  const JX = [175, 390, 605], VX = [95, 337, 552, 790];
+  const ROWS = [
+    { y: 84, expr: 'Just 6 >>= divBy 3 >>= divBy 2 >>= divBy 1', fns: ['divBy 3', 'divBy 2', 'divBy 1'], args: ['6', '2', '1'], vals: ['Just 6', 'Just 2', 'Just 1', 'Just 1'] },
+    { y: 204, expr: 'Just 6 >>= divBy 0 >>= divBy 2', fns: ['divBy 0', 'divBy 2'], args: ['6', null], vals: ['Just 6', 'Nothing', 'Nothing'] }
+  ];
+  const EV = (r) => 2 * ROWS[r].fns.length + 1;      // 1 つの式の出来事の数（値を出す・段を通す）
+  const s2 = {
+    steps: [
+      { title: 'Maybe と divBy', text: '`Maybe a` は、値が無い `Nothing` と、値が 1 つある `Just a` の直和（[[29-imi.html#s2.3|第29章 場面2]]）。`divBy d n` は d が 0 なら Nothing、そうでなければ `Just (div n d)` を返す。`divBy 3 6` は `Just 2`、`divBy 0 6` は `Nothing`。' },
+      { title: '手でつなぐと、場合分けが入れ子になる', text: '6 を 3・2・1 で順に割る。`divBy 3 6` の結果は Maybe なので、次へ渡す前に `case`（値の形で分ける式）で Nothing か Just かを分け、Just なら中身に名前を付けて次の divBy に渡す。割る回数だけ場合分けが入れ子になり、Nothing の腕はどれも Nothing を返すだけ。' },
+      { title: '繰り返しを >>= にまとめる', text: '場合分けの繰り返しを 1 つの演算にしたのが `>>=`（bind）。`Nothing >>= k` は k を呼ばずに Nothing、`Just x >>= k` は `k x`。型は `Maybe a -> (a -> Maybe b) -> Maybe b` で、右に次の Maybe を返す関数を置く。左に結合する。' },
+      { title: 'Just 1 まで流れる', text: '`Just 6 >>= divBy 3 >>= divBy 2 >>= divBy 1` は、値が 6 → 2 → 1 → 1 と渡って `Just 1`（ghci の出力）。入れ子の case と同じ値で、場合分けは `>>=` の中に 1 つだけある。書く側は割る関数を並べるだけで、途中の値に名前を付けなくてよい。' },
+      { title: 'Nothing で止まる', text: '`Just 6 >>= divBy 0 >>= divBy 2` は `Nothing`。`divBy 0 6` が Nothing を返すと、次の `>>=` は divBy 2 を呼ばずに Nothing を渡す。呼ばれると名前を書く版（Debug.Trace）では、書かれたのは divBy 0 の 1 回だけだった。' },
+      { title: 'Rust の and_then と ?', text: 'Rust の `Option::and_then` は同じ演算で、0 を挟まなければ `Some(1)`、挟めば `None`。`?` は None ならその場で関数から None を返し、Some なら中身を取り出す（[[30-gbemu-desktop.html#s6.3|第30章 場面6]]）。`map` でつなぐと `Some(Some(2))` と入れ子になる（[[30-gbemu-desktop.html#s3.2|第30章 場面3]]）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      st.rows = ROWS.map((R, r) => {
+        const g = S.g({ cls: 'fade' }, svg), y = R.y, n = R.fns.length;
+        S.text(40, y - 46, R.expr, { cls: 't-mono t-md t-b pre' }, g);
+        // 線（値の札の下を通る）と、段ごとの関数の箱・迂回路
+        S.line(40, y, JX[0] - 12, y, { cls: 's-mid w15' }, g);
+        const stages = R.fns.map((fn, k) => {
+          const j = JX[k];
+          const by = S.path(`M${j},${y + 12} V${y + 32} H${j + 125} V${y + 1}`, { cls: 'f-none s-rule w15 dash' }, g);
+          // 迂回路の札は、式 A の最初の段（見本）と、式 B で実際に通る段にだけ付ける
+          const byT = (r === 0 && k === 0) || (r === 1 && k === 1) ? S.text(j + 62, y + 46, 'Nothing はここを通る', { cls: 't-c t-xs t-dim' }, g) : null;
+          S.line(j + 12, y, j + 18, y, { cls: 's-mid w15' }, g);
+          const fr = S.rect(j + 20, y - 15, 100, 30, { rx: 5, cls: 'f-sf s-rule w1' }, g);
+          const ft = S.text(j + 70, y + 4.5, fn, { cls: 't-c t-mono t-md' }, g);
+          const nx = k + 1 < n ? JX[k + 1] - 12 : VX[k + 1] + 40;
+          S.line(j + 120, y, nx, y, { cls: 's-mid w15', 'marker-end': k + 1 < n ? null : mk('mid') }, g);
+          const jc = S.circle(j, y, 11, { cls: 'f-sf s-mid w15' }, g);
+          const jt = S.text(j, y - 20, 'case', { cls: 't-c t-xs t-mono t-b t-dim' }, g);
+          const skip = S.text(j + 70, y - 21, '呼ばれない', { cls: 't-c t-xs t-b t-x fade hide' }, g);
+          return { by, byT, fr, ft, jc, jt, skip, fn };
+        });
+        const vals = R.vals.map((v, k) => {
+          const nothing = v === 'Nothing';
+          return box(g, VX[k], y, v, { mono: true, w: 66, h: 24, cls: 't-md t-b ' + (nothing ? 't-x' : 't-d'), box: nothing ? 'f-sf s-x w15' : 'f-sf s-d w15' });
+        });
+        const res = S.text(VX[n], y - 20, '結果', { cls: 't-c t-xs t-dim' }, g);
+        return { g, stages, vals, res, R };
+      });
+
+      // 下: 段階ごとの中身
+      sep(svg, 268);
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1
+      code(P[0], 52, 300, [
+        'data Maybe a = Nothing | Just a',
+        'divBy :: Int -> Int -> Maybe Int',
+        'divBy d n = if d == 0 then Nothing else Just (div n d)'
+      ], 22, 't-mono t-md');
+      S.text(330, 300, '← 値が無い ／ 値が 1 つある', { cls: 't-sm t-mid' }, P[0]);
+      code(P[0], 52, 390, ['ghci> divBy 3 6', 'ghci> divBy 0 6'], 26, 't-mono t-md');
+      S.text(250, 390, '→ Just 2', { cls: 't-mono t-md t-b t-d' }, P[0]);
+      S.text(250, 416, '→ Nothing', { cls: 't-mono t-md t-b t-x' }, P[0]);
+      // 段階2
+      const cs = code(P[1], 52, 300, [
+        'case divBy 3 6 of',
+        '  Nothing -> Nothing',
+        '  Just a  -> case divBy 2 a of',
+        '               Nothing -> Nothing',
+        '               Just b  -> divBy 1 b'
+      ], 24, 't-mono t-md');
+      [1, 3].forEach((k) => cs[k].setAttribute('class', 't-mono t-md t-b t-x pre'));
+      S.text(400, 348, '← Nothing の腕は、どれも Nothing を返すだけ', { cls: 't-sm t-x' }, P[1]);
+      S.text(400, 396, '→ Just 1', { cls: 't-mono t-md t-b t-d' }, P[1]);
+      // 段階3
+      code(P[2], 52, 300, ['(>>=) :: Maybe a -> (a -> Maybe b) -> Maybe b'], 24, 't-mono t-md t-b');
+      code(P[2], 52, 340, [
+        'instance Monad Maybe where',
+        '  (Just x) >>= k = k x',
+        '  Nothing  >>= _ = Nothing'
+      ], 24, 't-mono t-md');
+      S.text(420, 340, '← GHC 9.6.7 の base（GHC.Base）の定義', { cls: 't-sm t-mid' }, P[2]);
+      S.text(420, 364, '← 中身 x を取り出して、次の関数 k に渡す', { cls: 't-sm t-d' }, P[2]);
+      S.text(420, 388, '← k を呼ばない', { cls: 't-sm t-x' }, P[2]);
+      code(P[2], 52, 436, ['Just 6 >>= divBy 3 >>= divBy 2 >>= divBy 1', '＝ ((Just 6 >>= divBy 3) >>= divBy 2) >>= divBy 1'], 22, 't-mono t-md');
+      S.text(52, 492, ':i (>>=) は infixl 1（左に結合する）', { cls: 't-sm t-mid' }, P[2]);
+      // 段階4
+      code(P[3], 52, 300, ['ghci> Just 6 >>= divBy 3 >>= divBy 2 >>= divBy 1'], 24, 't-mono t-md');
+      S.text(52, 326, 'Just 1', { cls: 't-mono t-md t-b t-d' }, P[3]);
+      // 段階5
+      code(P[4], 52, 300, ['ghci> Just 6 >>= divBy 0 >>= divBy 2'], 24, 't-mono t-md');
+      S.text(52, 326, 'Nothing', { cls: 't-mono t-md t-b t-x' }, P[4]);
+      code(P[4], 52, 370, [
+        'divByT d n = trace ("divBy " ++ show d ++ " " ++ show n) (divBy d n)',
+        'ghci> Just 6 >>= divByT 0 >>= divByT 2'
+      ], 24, 't-mono t-md');
+      S.text(52, 418, 'divBy 0 6', { cls: 't-mono t-md t-b t-x' }, P[4]);
+      S.text(52, 442, 'Nothing', { cls: 't-mono t-md t-b t-x' }, P[4]);
+      S.text(200, 418, '← 書かれたのは 1 回だけ。divBy 2 は呼ばれていない', { cls: 't-sm t-x' }, P[4]);
+      S.text(52, 488, 'trace（Debug.Trace）は、値が求められたときに文字列を書く', { cls: 't-sm t-mid' }, P[4]);
+      // 段階6
+      code(P[5], 52, 296, [
+        'fn div_by(d: i32, n: i32) -> Option<i32> {',
+        '    if d == 0 { None } else { Some(n / d) }',
+        '}',
+        'Some(6).and_then(|n| div_by(3, n)).and_then(|n| div_by(2, n))',
+        '       .and_then(|n| div_by(1, n))',
+        'fn calc(n: i32) -> Option<i32> {',
+        '    let a = div_by(3, n)?;',
+        '    let b = div_by(2, a)?;',
+        '    div_by(1, b)',
+        '}',
+        'Some(6).map(|n| div_by(3, n))'
+      ], 21, 't-mono t-sm');
+      S.text(300, 380, '→ Some(1)（0 を挟むと None）', { cls: 't-sm t-b t-d' }, P[5]);
+      S.text(300, 422, '← None ならここで None を返す', { cls: 't-sm t-x' }, P[5]);
+      S.text(300, 464, 'calc(6) は Some(1)', { cls: 't-sm t-b t-d' }, P[5]);
+      S.text(300, 506, '→ Some(Some(2))：map は入れ子にする', { cls: 't-sm t-b t-x' }, P[5]);
+    },
+    /* 式 r の出来事を n 個まで済ませた姿。cur はいま起きている出来事（強調する）。dim は式ごと薄くする */
+    row(ctx, r, n, cur, dim) {
+      const W = ctx.state.rows[r], R = W.R;
+      op(W.g, dim ? 0.3 : '');
+      W.vals.forEach((v, k) => op(v.g, n > 2 * k ? '' : 0));
+      op(W.res, n >= EV(r) ? '' : 0);
+      W.stages.forEach((sg, k) => {
+        const fired = n > 2 * k + 1, now = cur === 2 * k + 1;
+        const skip = R.args[k] === null;
+        sg.by.setAttribute('class', 'f-none w15 dash ' + (fired && skip ? 's-x' : 's-rule'));
+        if (sg.byT) sg.byT.setAttribute('class', 't-c t-xs ' + (fired && skip ? 't-x t-b' : 't-dim'));
+        S.fade(sg.skip, fired && skip);
+        sg.fr.setAttribute('class', fired && !skip ? (now ? 'f-x-soft s-x w15' : 'f-d-soft s-d w1') : 'f-sf s-rule w1');
+        sg.ft.textContent = fired && !skip ? sg.fn + ' ' + R.args[k] : sg.fn;
+        op(sg.ft, fired && skip ? 0.4 : '');
+        sg.jc.setAttribute('class', now ? 'f-x-soft s-x w2' : 'f-sf s-mid w15');
+      });
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      st.rows.forEach((W) => W.stages.forEach((sg) => {
+        sg.jt.textContent = i <= 1 ? 'case' : '>>=';
+        sg.jt.setAttribute('class', 't-c t-xs t-mono t-b ' + (i === 1 || i === 2 ? 't-x' : 't-dim'));
+      }));
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing(), self = ctx.def;
+      // いま流している式（段階4 は式 A、段階5 は式 B）。出来事は 0.75 秒ごと、最後に 3 秒止めて繰り返す
+      const flow = (r) => {
+        const E = EV(r), total = 0.4 + 0.75 * E + 3;
+        if (!run) return [E, -1];
+        const c = U.mod(ctx.ts, total);
+        const n = Math.max(0, Math.min(E, Math.floor((c - 0.4) / 0.75) + 1));
+        const cur = n > 0 && c - 0.4 - 0.75 * (n - 1) < 0.6 ? n - 1 : -1;
+        return [n, cur];
+      };
+      if (i === 0) {
+        // divBy を 1 回ずつ呼んだ結果だけ（2 つの式の最初の段）
+        self.row(ctx, 0, 3, -1, false);
+        self.row(ctx, 1, 3, -1, false);
+      } else if (i === 3) {
+        const [n, cur] = flow(0);
+        self.row(ctx, 0, n, cur, false);
+        self.row(ctx, 1, EV(1), -1, true);
+      } else if (i === 4) {
+        const [n, cur] = flow(1);
+        self.row(ctx, 0, EV(0), -1, true);
+        self.row(ctx, 1, n, cur, false);
+      } else {
+        self.row(ctx, 0, EV(0), -1, false);
+        self.row(ctx, 1, EV(1), -1, i === 1 || i === 2);
+      }
+      // 段階1 は最初の段だけを見せ、残りの段を薄くする
+      st.rows.forEach((W) => W.stages.forEach((sg, k) => {
+        const later = i === 0 && k > 0;
+        [sg.fr, sg.jc, sg.by, sg.byT].forEach((e) => { if (e) op(e, later ? 0.25 : ''); });
+        op(sg.jt, i === 0 ? 0 : '');
+        if (later) op(sg.ft, 0.25);
+      }));
+    }
+  };
+
+  /* 1 行の中で書体や色を変える文字（tspan を並べる）。parts は [文字, クラス] の配列。tspan の配列を返す */
+  function spans(parent, x, y, parts, cls) {
+    const t = S.text(x, y, '', { cls: (cls || 't-mono t-sm') + ' pre' }, parent);
+    return parts.map(([s, c]) => S.el('tspan', { text: s, cls: c || null }, t));
+  }
+  const vis = (el, on) => { el.style.visibility = on ? '' : 'hidden'; };
+
+  /* ================================================================
+     場面3 モナドの則
+     値は GHC 9.6.7 の ghci で確かめた: return 6 >>= divBy 3 ＝ Just 2 ＝ divBy 3 6、Just 6 >>= return ＝ Just 6、
+     Nothing >>= return ＝ Nothing、(Just 6 >>= divBy 3) >>= divBy 2 ＝ Just 1 ＝ Just 6 >>= (\x -> divBy 3 x >>= divBy 2)、
+     divBy 0 にすると両辺とも Nothing。>=> の括弧の 2 通りはどちらも Just 1、return >=> divBy 3 と divBy 3 >=> return に 6 を
+     渡すとどちらも Just 2。calc 6 と、>>= と λ で書いた版はどちらも Just 1（0 で割る版は Nothing）。
+     :i Monad・:i Applicative は GHC 9.6.7 の出力（instance の行は抜粋）。則の式と「should satisfy」は base-4.18.3.0 の Monad の文書。
+     Count は ghc -Wall で警告なしにコンパイルでき、return 6 >>= step ＝ Count (12,2)、step 6 ＝ Count (12,1)
+     ================================================================ */
+  const LAWS = [
+    { name: '則 1', sub: '左単位', eq: 'return a >>= f  ＝  f a', y: 126, h: 58,
+      ex: [[['return 6 >>= divBy 3'], [' → '], ['Just 2', 'v'], ['  ＝  '], ['divBy 3 6'], [' → '], ['Just 2', 'v']]] },
+    { name: '則 2', sub: '右単位', eq: 'm >>= return  ＝  m', y: 192, h: 58,
+      ex: [[['Just 6 >>= return'], [' → '], ['Just 6', 'v'], ['  ＝  '], ['Just 6', 'v'], ['        '], ['Nothing >>= return'], [' → '], ['Nothing', 'v'], ['  ＝  '], ['Nothing', 'v']]] },
+    { name: '則 3', sub: '結合', eq: '(m >>= f) >>= g  ＝  m >>= (\\x -> f x >>= g)', y: 258, h: 80,
+      ex: [[['(Just 6 >>= divBy 3) >>= divBy 2'], [' → '], ['Just 1', 'v'], ['  ＝  '], ['Just 6 >>= (\\x -> divBy 3 x >>= divBy 2)'], [' → '], ['Just 1', 'v']],
+        [['(Just 6 >>= divBy 0) >>= divBy 2'], [' → '], ['Nothing', 'v'], ['  ＝  '], ['Just 6 >>= (\\x -> divBy 0 x >>= divBy 2)'], [' → '], ['Nothing', 'v']]] }
+  ];
+  const s3 = {
+    steps: [
+      { title: '3 つの部品', text: 'モナドは、型を作る型 M（種は `* -> *`。[[41-inference.html#s6|第41章 場面6]]）と 2 つの演算の組。`return :: a -> M a` は作用の無い計算を作り、`>>=` は計算の結果を次の計算につなぐ。Maybe では return が `Just`。GHC の型クラス Monad では、return の既定の定義が `pure`。' },
+      { title: '左単位と右単位', text: '則 1（左単位）: `return a >>= f` ＝ `f a`。`return 6 >>= divBy 3` も `divBy 3 6` も `Just 2`。則 2（右単位）: `m >>= return` ＝ `m`。m が `Just 6` でも `Nothing` でも成り立つ。return は前後どちらにつないでも何もしない。' },
+      { title: '結合', text: '則 3（結合）: `(m >>= f) >>= g` ＝ `m >>= (\\x -> f x >>= g)`。m を `Just 6`、f と g を divBy 3 と divBy 2 にすると両辺とも `Just 1`、f を divBy 0 にすると両辺とも `Nothing`。括弧の位置を変えても結果は同じ。' },
+      { title: '則は合成の則', text: '`a -> M b` の形の関数どうしをつなぐ `>=>`（Control.Monad）で書くと、則は「return を前後に挟んでも変わらない」「括弧の付け方によらない」になる。普通の関数の合成 `.` と id の則（[[38-closure.html#s4|第38章 場面4]]）と同じ形で、作用のある関数も括弧を気にせずに部品として組める。' },
+      { title: 'do 記法', text: '`do` は `>>=` の書き方の 1 つで、`do { x <- m; f x }` は `m >>= \\x -> f x` と同じ。`a <- divBy 3 n` は「divBy 3 n の結果を a と名付けて続ける」と読む。代入文の並びに見えるが、中身は `>>=` の連鎖で、Nothing が出た行から先は計算されない。' },
+      { title: '則は約束', text: '則はコンパイラが確かめない。return が 1 を数える `Count` は則 1 を破るが、GHC 9.6.7 は -Wall でも警告を出さなかった。Monad には Applicative の instance も要る。Applicative は、前の結果を見ずに作用を並べる、Monad より弱い形。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      // 上: 3 つの部品
+      const PARTS = [
+        [40, 230, '型を作る型 M', 'M :: * -> *', 'Maybe・リスト・IO など'],
+        [285, 250, 'return（作用の無い計算）', 'return :: a -> M a', 'Maybe では Just'],
+        [550, 370, '>>=（結果を次の計算へ）', '(>>=) :: M a -> (a -> M b) -> M b', 'Maybe では場面2 の定義']
+      ];
+      st.parts = PARTS.map(([x, w, t, m, s]) => {
+        const g = S.g({}, svg);
+        const r = S.rect(x, 18, w, 94, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+        S.text(x + 14, 40, t, { cls: 't-sm t-dim' }, g);
+        S.text(x + 14, 70, m, { cls: 't-mono t-md t-b pre' }, g);
+        S.text(x + 14, 96, s, { cls: 't-xs t-mid' }, g);
+        return { g, r };
+      });
+      // 中: 3 つの則
+      st.laws = LAWS.map((L) => {
+        const g = S.g({}, svg);
+        const r = S.rect(40, L.y, 880, L.h, { rx: 6, cls: 'f-sf s-rule w1' }, g);
+        S.text(56, L.y + 24, L.name, { cls: 't-md t-b' }, g);
+        S.text(56, L.y + 44, L.sub, { cls: 't-sm t-dim' }, g);
+        S.text(150, L.y + 24, L.eq, { cls: 't-mono t-md t-b pre' }, g);
+        const vals = [];
+        L.ex.forEach((ex, k) => {
+          const ts = spans(g, 150, L.y + 46 + k * 20, ex.map(([s, c]) => [s, c === 'v' ? 't-b t-d' : null]));
+          ts.forEach((t, j) => { if (ex[j][1] === 'v') vals.push(t); });
+        });
+        const ok = S.text(904, L.y + 24, '両辺が同じ', { cls: 't-end t-sm t-b t-d' }, g);
+        return { g, r, vals, ok };
+      });
+
+      // 下: 段階ごとの中身
+      sep(svg, 352);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1: ghci の :i Monad
+      code(P[0], 52, 380, [
+        'ghci> :i Monad',
+        'class Applicative m => Monad m where',
+        '  (>>=) :: m a -> (a -> m b) -> m b',
+        '  (>>) :: m a -> m b -> m b',
+        '  return :: a -> m a',
+        '  {-# MINIMAL (>>=) #-}'
+      ], 19, 't-mono t-sm');
+      S.text(52, 504, 'instance Monad Maybe ／ Monad [] ／ Monad IO ／ Monad (Either e) …（抜粋）', { cls: 't-mono t-sm pre t-mid' }, P[0]);
+      S.text(420, 399, '← Applicative の instance が要る（Applicative には Functor が要る）', { cls: 't-sm t-mid' }, P[0]);
+      S.text(420, 456, '← 既定の定義は return = pure', { cls: 't-sm t-mid' }, P[0]);
+      S.text(420, 475, '← 定義が要るのは >>= だけ', { cls: 't-sm t-mid' }, P[0]);
+      // 段階2・3: base の文書
+      S.text(52, 384, 'base 4.18.3.0 の Monad の文書', { cls: 't-sm t-dim' }, P[1]);
+      S.text(52, 410, 'Instances of Monad should satisfy the following:', { cls: 't-mono t-sm pre' }, P[1]);
+      S.text(52, 430, '[Left identity] [Right identity] [Associativity]', { cls: 't-mono t-sm pre' }, P[1]);
+      S.text(52, 462, '「満たすべき」と書くだけで、確かめるのは instance を書く人。Prelude の Maybe・リスト・IO の instance は満たす、とも書く', { cls: 't-sm t-mid' }, P[1]);
+      // 段階4: >=> と関数の合成
+      code(P[2], 52, 380, ['(>=>) :: Monad m => (a -> m b) -> (b -> m c) -> a -> m c'], 20, 't-mono t-sm t-b');
+      S.text(520, 380, '← Control.Monad', { cls: 't-sm t-mid' }, P[2]);
+      table(P[2], 40, 408, 880, [52, 220, 560], ['', '普通の関数の合成（第38章 場面4）', 'a -> M b の形の関数の合成'], [
+        ['何もしない部品', 'id', 'return'],
+        ['f の後に g', 'g . f', 'f >=> g'],
+        ['単位の則', 'id . f ＝ f ＝ f . id', 'return >=> f ＝ f ＝ f >=> return'],
+        ['結合の則', '(h . g) . f ＝ h . (g . f)', '(f >=> g) >=> h ＝ f >=> (g >=> h)']
+      ], 24, ['t-sm t-dim', 't-mono t-sm', 't-mono t-sm t-b']);
+      S.text(52, 536, '確かめた値: (divBy 3 >=> divBy 2) >=> divBy 1 と divBy 3 >=> (divBy 2 >=> divBy 1) に 6 を渡すと、どちらも Just 1', { cls: 't-xs t-mid' }, P[2]);
+      // 段階5: do と >>=
+      code(P[3], 52, 382, ['calc :: Int -> Maybe Int', 'calc n = do', '  a <- divBy 3 n', '  b <- divBy 2 a', '  divBy 1 b'], 22, 't-mono t-md');
+      S.text(430, 448, '＝', { cls: 't-c t-xl t-b t-x' }, P[3]);
+      code(P[3], 490, 404, ['calc n =', '  divBy 3 n >>= \\a ->', '  divBy 2 a >>= \\b ->', '  divBy 1 b'], 22, 't-mono t-md');
+      S.text(52, 518, 'ghci> calc 6', { cls: 't-mono t-md pre' }, P[3]);
+      S.text(170, 518, '→ Just 1', { cls: 't-mono t-md t-b t-d' }, P[3]);
+      S.text(300, 518, '（a <- divBy 0 n にした版は Nothing）', { cls: 't-sm t-mid' }, P[3]);
+      // 段階6: 則を破る instance
+      code(P[4], 52, 376, [
+        'newtype Count a = Count (a, Int) deriving Show',
+        'instance Applicative Count where',
+        '  pure a = Count (a, 1)',
+        '  Count (f, m) <*> Count (a, n) = Count (f a, m + n)',
+        'instance Monad Count where',
+        '  Count (a, n) >>= f = case f a of Count (b, m) -> Count (b, n + m)',
+        'step x = Count (x * 2, 1)'
+      ], 18, 't-mono t-sm');
+      S.text(260, 412, '← return（＝ pure）が 1 を数えてしまう', { cls: 't-sm t-x t-b' }, P[4]);
+      S.text(52, 508, 'ghci> return 6 >>= step   → Count (12,2)', { cls: 't-mono t-sm pre' }, P[4]);
+      S.text(52, 528, 'ghci> step 6              → Count (12,1)', { cls: 't-mono t-sm pre' }, P[4]);
+      S.text(400, 518, '← 違う値。則 1 が成り立たない', { cls: 't-sm t-b t-x' }, P[4]);
+      S.text(904, 376, 'Functor の instance は省いた', { cls: 't-end t-xs t-dim' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      const PANEL = [0, 1, 1, 2, 3, 4];
+      st.P.forEach((g, k) => S.fade(g, PANEL[i] === k));
+      st.parts.forEach((p) => {
+        p.r.setAttribute('class', i === 0 ? 'f-sf s-x w15' : 'f-sf s-rule w1');
+        op(p.g, i === 0 || i === 3 || i === 4 ? '' : 0.45);
+      });
+      st.laws.forEach((L, k) => {
+        const on = (i === 1 && k <= 1) || (i === 2 && k === 2) || (i === 5 && k === 0);
+        L.r.setAttribute('class', on ? 'f-sf s-x w15' : 'f-sf s-rule w1');
+        op(L.g, i === 0 ? 0.35 : (i >= 3 && !on ? 0.45 : ''));
+        // 段階6: 則 1 は、Maybe では成り立つが Count では成り立たない
+        const broke = i === 5 && k === 0;
+        L.ok.textContent = broke ? 'Maybe では同じ ／ Count では違う' : '両辺が同じ';
+        L.ok.setAttribute('class', 't-end t-sm t-b ' + (broke ? 't-x' : 't-d'));
+      });
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // 段階2・3: 強調した則の両辺の値を、左辺・右辺の順に出し、最後に「両辺が同じ」を出す
+      st.laws.forEach((L, k) => {
+        const active = (i === 1 && k <= 1) || (i === 2 && k === 2);
+        const c = active && run ? U.mod(ctx.ts, 8) : 8;
+        const n = L.vals.length, show = Math.min(n, Math.floor(Math.max(0, c - 0.5) / 0.6) + 1);
+        L.vals.forEach((t, j) => vis(t, i === 0 || !active || j < show));
+        vis(L.ok, i !== 0 && (!active || c >= 0.5 + 0.6 * n));
+      });
+    }
+  };
+
+  /* ================================================================
+     場面4 状態をつなぐ
+     値は GHC 9.6.7 の ghci で確かめた（自分で定義した State。base には無い）: manual 0 ＝ ((),6)、wrong 0 ＝ ((),4)、
+     runState prog 0 ＝ ((),6)、addS 3 0 ＝ ((),3)。wrong を ghc -Wall でコンパイルすると
+     「warning: [-Wunused-local-binds] Defined but not used: ‘s2’」だけが出た（ファイルの位置は省いた）。
+     Core は ghc -O2 -ddump-simpl -dsuppress-all -dsuppress-uniques の出力。sumS は seq 付きの add と do で書いた版で、
+     sumS_$s$wsumS の形になった。go は第38章の if の形（$wgo、束縛の名前は wild）。
+     機械語（-ddump-asm）はどちらも addq %rsi,%r14 / decq %rsi / testq %rsi,%rsi / jne のループで、
+     sumS にはヒープの残りを確かめる 4 命令（addq $-16,%r12 など）が加わる。
+     seq の無い add の sumS 1000000 は、+RTS -s で最大の常駐量 38,551,800 バイト（seq 付きは 44,328 バイト）
+     ================================================================ */
+  const SX = [80, 320, 540, 760], FX = [140, 380, 600];   // 状態の値の札の中央、関数の箱の左端（幅 120）
+  const SV = [0, 3, 5, 6];
+  const s4 = {
+    steps: [
+      { title: '状態を受け取り、返す', text: '`addS n s = ((), s + n)` は、いまの状態 s を引数で受け取り、足した後の状態を戻り値の組 `(a, s)` の 2 つめで返す。1 つめの a は計算の結果で、ここでは `()`（値が 1 つしかない型で、結果が無いことを表す）。何も書き換えず、同じ s には同じ組を返す純粋な関数である。' },
+      { title: '手で渡す', text: '3・2・1 を順に足すには、前の呼び出しが返した状態を次に渡す。名前は s0 → s1 → s2 → s3 と増え、値は 0 → 3 → 5 → 6。第6章 場面4 で 10 番地（sum）に順に書いた値と同じ列が、ここでは別々の名前の値として並ぶ（[[06-cpu.html#s4.6|第6章 場面4]]）。' },
+      { title: '渡し間違えても型は通る', text: '3 回めに s2 ではなく s1 を渡すと、答えは 4 になる。状態はどれも Int なので型検査は通り、GHC 9.6.7 の -Wall も「s2 を定義したが使っていない」と警告するだけだった。状態を手で渡す限り、渡す順を守る責任は書き手に残る。' },
+      { title: '受け渡しを >>= に任せる', text: '`newtype` は中身 1 つの型に別の名前を付ける宣言で、実行時の表し方は中身と同じ（[[29-imi.html#s1|第29章 場面1]]）。`State s a` は `s -> (a, s)` の関数に付けた名前。その `>>=` は、前の計算が返した状態 s1 を次の計算に渡す。状態の受け渡しは、この定義の 1 か所だけになる。' },
+      { title: 'do で書く', text: '`add n = State (\\s -> ((), s + n))` を do で 3 つ並べると、s1・s2 という名前はプログラムから消え、渡し間違えようがない。`runState prog 0` は `((), 6)`。状態は書き換わる場所ではなく、関数から関数へ渡る値で、累積引数（[[38-closure.html#s6|第38章 場面6]]）と同じ役をする。' },
+      { title: '機械の上では', text: '足し算を `seq` で先に済ませる add（[[40-lazy.html#s3|第40章 場面3]]）で `sumS n` を書くと、GHC 9.6.7 の -O2 は State と `>>=` を消し、状態を引数に持つ末尾再帰にした。第38章の `go acc n` と同じ形の Core で、機械語はどちらも状態を r14 に置くループ。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 上 1 段め: 第6章の 10 番地（1 つの場所を書き換える）
+      st.six = S.g({}, svg);
+      S.text(40, 24, '第6章 場面4：10 番地（sum）を書き換える', { cls: 't-sm t-dim' }, st.six);
+      S.rect(40, 34, 70, 40, { rx: 5, cls: 'f-d-soft s-d w15' }, st.six);
+      st.cellT = S.text(75, 61, '6', { cls: 't-c t-mono t-lg t-b t-d' }, st.six);
+      st.hist = spans(st.six, 130, 60, ['0', ' → ', '3', ' → ', '5', ' → ', '6'].map((s) => [s]), 't-mono t-md');
+      S.text(330, 60, '同じ番地の中身が、命令ごとに入れ替わる', { cls: 't-sm t-mid' }, st.six);
+      // 上 2 段め: 状態が値として渡る線
+      S.text(40, 104, 'この場面：状態は、関数から関数へ渡る値', { cls: 't-sm t-dim' }, svg);
+      st.frame = S.g({ cls: 'fade hide' }, svg);
+      S.rect(118, 118, 626, 96, { rx: 10, cls: 'f-x-soft s-x w15 dash' }, st.frame);
+      S.text(431, 232, 'State の >>= が、前の状態を次の計算に渡す', { cls: 't-c t-sm t-b t-x' }, st.frame);
+      st.wires = [];
+      st.boxes = FX.map((x, k) => {
+        const w1 = S.line(SX[k] + 24, 160, x - 3, 160, { cls: 's-mid w15', 'marker-end': mk('mid') }, svg);
+        const w2 = S.line(x + 120, 160, SX[k + 1] - 27, 160, { cls: 's-mid w15', 'marker-end': mk('mid') }, svg);
+        st.wires.push(w1, w2);
+        const g = S.g({}, svg);
+        const r = S.rect(x, 140, 120, 40, { rx: 6, cls: 'f-sf s-fg w15' }, g);
+        S.text(x + 60, 165, 'addS ' + [3, 2, 1][k], { cls: 't-c t-mono t-md t-b' }, g);
+        const pr = S.text(x + 60, 200, '→ ((), ' + SV[k + 1] + ')', { cls: 't-c t-xs t-mono t-dim' }, g);
+        return { g, r, pr };
+      });
+      st.vals = SV.map((v, k) => box(svg, SX[k], 160, String(v), { mono: true, w: 46, h: 28, fs: 15, cls: 't-lg t-b t-d', box: 'f-sf s-d w15' }));
+      st.names = SV.map((v, k) => S.text(SX[k], 136, 's' + k, { cls: 't-c t-mono t-sm t-b' }, svg));
+      // 段階3: s2 ではなく s1 を渡す道
+      st.wrong = S.g({ cls: 'fade hide' }, svg);
+      S.path('M338,146 C360,100 640,100 660,137', { cls: 'f-none s-x w2 dash', 'marker-end': mk('x') }, st.wrong);
+      S.text(490, 98, 's2 ではなく s1 を渡す', { cls: 't-c t-xs t-b t-x' }, st.wrong);
+      S.text(540, 228, 's2 は使われない', { cls: 't-c t-xs t-b t-x' }, st.wrong);
+
+      // 下: 段階ごとの中身
+      sep(svg, 248);
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1
+      code(P[0], 52, 282, ['addS :: Int -> Int -> ((), Int)', 'addS n s = ((), s + n)'], 22, 't-mono t-md');
+      code(P[0], 52, 350, ['ghci> addS 3 0', 'ghci> addS 2 3'], 24, 't-mono t-md');
+      S.text(200, 350, '→ ((),3)', { cls: 't-mono t-md t-b t-d' }, P[0]);
+      S.text(200, 374, '→ ((),5)', { cls: 't-mono t-md t-b t-d' }, P[0]);
+      // 段階2
+      code(P[1], 52, 280, ['manual :: Int -> ((), Int)', 'manual s0 =', '  let ((), s1) = addS 3 s0', '      ((), s2) = addS 2 s1', '      ((), s3) = addS 1 s2', '  in ((), s3)'], 21, 't-mono t-md');
+      S.text(52, 422, 'ghci> manual 0', { cls: 't-mono t-md pre' }, P[1]);
+      S.text(200, 422, '→ ((),6)', { cls: 't-mono t-md t-b t-d' }, P[1]);
+      // 段階3
+      const wc = code(P[2], 52, 280, ['wrong s0 =', '  let ((), s1) = addS 3 s0', '      ((), s2) = addS 2 s1', '      ((), s3) = addS 1 s1', '  in ((), s3)'], 21, 't-mono t-md');
+      wc[3].setAttribute('class', 't-mono t-md t-b t-x pre');
+      S.text(330, 343, '← s2 のはずが s1', { cls: 't-sm t-b t-x' }, P[2]);
+      S.text(52, 400, 'ghci> wrong 0', { cls: 't-mono t-md pre' }, P[2]);
+      S.text(200, 400, '→ ((),4)', { cls: 't-mono t-md t-b t-x' }, P[2]);
+      S.text(52, 436, 'ghc -Wall の出力（ファイルの位置は省いた）', { cls: 't-xs t-dim' }, P[2]);
+      const wb = S.g({}, P[2]);
+      S.rect(52, 446, 560, 52, { rx: 5, cls: 'f-sf s-mid w1' }, wb);
+      S.text(64, 467, 'warning: [-Wunused-local-binds]', { cls: 't-mono t-sm t-b pre' }, wb);
+      S.text(64, 487, '    Defined but not used: ‘s2’', { cls: 't-mono t-sm pre' }, wb);
+      // 段階4
+      code(P[3], 52, 280, ['newtype State s a = State (s -> (a, s))', 'runState :: State s a -> s -> (a, s)', 'runState (State g) = g'], 21, 't-mono t-md');
+      code(P[3], 52, 360, ['instance Monad (State s) where', '  State g >>= f = State (\\s -> case g s of', '                               (a, s1) -> runState (f a) s1)'], 21, 't-mono t-md');
+      S.text(560, 402, '← 前の計算 g が返した状態 s1 を、次の計算 f a に渡す', { cls: 't-sm t-x' }, P[3]);
+      S.text(52, 448, 'Functor と Applicative の instance は省いた。State は base に無いので、自分で定義して動かした', { cls: 't-sm t-mid' }, P[3]);
+      // 段階5
+      code(P[4], 52, 280, ['add :: Int -> State Int ()', 'add n = State (\\s -> ((), s + n))', '', 'prog :: State Int ()', 'prog = do', '  add 3', '  add 2', '  add 1'], 20, 't-mono t-md');
+      S.text(52, 452, 'ghci> runState prog 0', { cls: 't-mono t-md pre' }, P[4]);
+      S.text(250, 452, '→ ((),6)', { cls: 't-mono t-md t-b t-d' }, P[4]);
+      S.text(400, 380, '← 状態の名前が無い', { cls: 't-sm t-x' }, P[4]);
+      // 段階6
+      code(P[5], 52, 274, [
+        'add n = State (\\s -> let s1 = s + n in s1 `seq` ((), s1))',
+        'sumS :: Int -> State Int ()',
+        'sumS 0 = return ()',
+        'sumS n = do { add n; sumS (n - 1) }'
+      ], 18, 't-mono t-sm');
+      S.text(52, 358, 'sumS の Core（GHC 9.6.7 -O2）', { cls: 't-xs t-dim' }, P[5]);
+      code(P[5], 52, 378, ['sumS_$s$wsumS = \\ sc sc1 ->', '  case sc1 of ds {', '    __DEFAULT -> sumS_$s$wsumS (+# sc ds) (-# ds 1#);', '    0# -> (# I# sc #)', '  }'], 18, 't-mono t-sm');
+      S.text(500, 358, '第38章の go acc n の Core（同じ設定）', { cls: 't-xs t-dim' }, P[5]);
+      code(P[5], 500, 378, ['$wgo = \\ ww ww1 ->', '  case ww1 of wild {', '    __DEFAULT -> $wgo (+# ww wild) (-# wild 1#);', '    0# -> ww', '  }'], 18, 't-mono t-sm');
+      S.text(52, 488, 'sc と ww が状態（足した合計）、sc1 と ww1 が残りの n。State の >>= は展開されて残らない', { cls: 't-sm t-mid' }, P[5]);
+      S.text(52, 512, '機械語（x86-64）: どちらも addq %rsi,%r14 → decq %rsi → testq → jne のループ。sumS にはヒープを確かめる 4 命令が加わる', { cls: 't-xs t-mid' }, P[5]);
+      S.text(52, 532, 'Core は -dsuppress-all -dsuppress-uniques で飾りを省いた', { cls: 't-xs t-dim' }, P[5]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      S.fade(st.frame, i === 3 || i === 4);
+      S.fade(st.wrong, i === 2);
+      op(st.six, i === 1 ? '' : 0.45);
+      // 名前: 段階5（do）では途中の名前が消える
+      st.names.forEach((t, k) => {
+        t.textContent = i === 4 ? ['最初', '', '', '最後'][k] : 's' + k;
+        t.setAttribute('class', 't-c t-sm t-b' + (i === 4 ? ' t-dim' : ' t-mono'));
+      });
+      st.vals[3].t.textContent = i === 2 ? '4' : '6';
+      st.vals[3].t.setAttribute('class', 't-c t-lg t-b t-mono ' + (i === 2 ? 't-x' : 't-d'));
+      st.vals[3].r.setAttribute('class', i === 2 ? 'f-sf s-x w15' : 'f-sf s-d w15');
+      // 段階3: s2 から 3 つめの箱への線を破線にする
+      st.wires[4].setAttribute('class', 's-mid w15' + (i === 2 ? ' dash2' : ''));
+      st.boxes[2].pr.textContent = '→ ((), ' + (i === 2 ? 4 : 6) + ')';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // 状態の列を左から順に出す（0.8 秒ごとに 1 つの箱を通る）。第6章の番地の中身も同じ時刻に入れ替える
+      const flowing = i === 1 || i === 2 || i === 4;
+      const c = flowing && run ? U.mod(ctx.ts, 7) : 7;
+      const n = Math.min(3, Math.floor(Math.max(0, c - 0.3) / 1.1));   // 通り終えた箱の数
+      const lit = flowing && run && c < 3.6 ? Math.floor((c - 0.3) / 1.1) : -1;
+      const upto = i === 0 ? 1 : (flowing ? n : 3);                    // 見せる状態の値の番号（0〜3）
+      // 段階1 は 1 つめの箱（addS 3 0）だけを見せ、残りを薄くする
+      st.vals.forEach((v, k) => op(v.g, k <= upto ? '' : (i === 0 ? 0.25 : 0)));
+      st.names.forEach((t, k) => op(t, k <= upto || i === 4 ? '' : (i === 0 ? 0.25 : 0)));
+      st.boxes.forEach((b, k) => {
+        const on = lit === k && c - 0.3 - 1.1 * k < 0.6;
+        b.r.setAttribute('class', on ? 'f-x-soft s-x w2' : 'f-sf s-fg w15');
+        op(b.g, i === 0 && k > 0 ? 0.3 : '');
+        op(b.pr, k < upto || i === 0 ? '' : 0);
+      });
+      st.wires.forEach((w, k) => op(w, i === 0 && k > 1 ? 0.3 : ''));
+      // 第6章の番地: 段階2 では同じ時刻に中身が 0 → 3 → 5 → 6 と入れ替わる
+      const cur = i === 1 ? n : 3;
+      st.cellT.textContent = String(SV[cur]);
+      st.hist.forEach((t, j) => t.setAttribute('class', j % 2 ? 't-dim' : (j / 2 === cur ? 't-b t-d' : 't-dim')));
+    }
+  };
+
+  /* ================================================================
+     場面5 入出力
+     acts の main は GHC 9.6.7（-O0）でコンパイルして実行し、b が 2 行だけ出た。
+     getLine ++ "!" の誤りは ghci の出力（[GHC-83865]）。:i IO は GHC.Exts を読み込んだ ghci の出力
+     （読み込まないと GHC.Prim.State# GHC.Prim.RealWorld と長い名前で出る）。
+     Core は main = getLine >>= putStrLn を ghc -ddump-simpl（-dsuppress-idinfo -dsuppress-coercions -dsuppress-module-prefixes
+     -dsuppress-uniques -dsuppress-type-applications。-O0 は -dsuppress-coercions なし）で出したもの。-O2 の版は、
+     wantReadableHandle_1 の引数の改行を詰め、cast の部分を (…) にした。機械語（-O2 -ddump-asm）の main1 は
+     wantReadableHandle_1 に r14・rsi・rdi の 3 つ（hGetLine3・stdin・hGetLine2）だけを渡して飛ぶ。STG（-ddump-stg-final）では印が void# になる。
+     State# の説明は GHC 9.6.7 の GHC.Prim の文書（It is represented by nothing at all.）。
+     Haskell 2010 の報告書の第7章の文は haskell.org の版で確かめた
+     ================================================================ */
+  const s5 = {
+    steps: [
+      { title: '手順という値', text: '`getLine :: IO String` は文字列ではなく、「1 行を読み、その文字列を結果にする」手順という値。putStrLn の手順を 3 つ並べたリスト `acts` を作っても何も出ない。main が `acts !! 1`（2 番めの要素）を 2 回実行すると b が 2 行出て、a と c は出なかった。' },
+      { title: '実行するのはランタイム', text: 'プログラムの入口は `main :: IO ()` の 1 つ。式 `getLine >>= putStrLn` は、2 つの手順を `>>=` でつないだ手順を組み立てるだけ。-O0 の Core では main は IO の辞書を渡した `>>=` の適用（[[41-inference.html#s5|第41章 場面5]]）で、それを実行するのは `runMainIO`。' },
+      { title: 'IO から出られない', text: '`IO a` から a を取り出す安全な関数は無く、`getLine ++ "!"` は型の誤り（GHC-83865）になる。だから型に IO の無い関数は入出力をしない。抜け道は System.IO.Unsafe の `unsafePerformIO :: IO a -> a` などで、名前のとおり安全の外にある。' },
+      { title: 'GHC の中身は State と同じ形', text: '`:i IO` によると、IO は `State# RealWorld -> (# State# RealWorld, a #)` に付けた newtype。場面4 の State の s を、世界の印 `State# RealWorld` にした形。`(# … #)` はヒープに作らない組（unboxed tuple）。' },
+      { title: '世界の印は 0 バイト', text: '-O2 の Core の main は、印 s を受け取って 1 行を読む手順に渡し、返った新しい印 ipv を書く手順に渡す。書く手順は ipv が無いと始められないので、順序がデータの依存で決まる。GHC.Prim の文書は State# を「何によっても表されない」と書き、機械語にも印を渡す命令は無かった。' },
+      { title: '順序は >>= の中に戻る', text: 'Haskell 2010 の報告書は、式の評価の順はデータの依存だけで縛られ、入出力の手順の順は実装が守る、と書く。印の受け渡しは GHC の実装の方法で、仕様が決めた形ではない。第37章で式の意味から外した順序（[[37-lambda.html#s4|第37章 場面4]]）は、IO の `>>=` の中に戻っている。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 左上: 手順を組み立てる式
+      S.text(40, 26, '式：手順を組み立てる（評価しても入出力は起きない）', { cls: 't-sm t-dim' }, svg);
+      st.acts = S.g({ cls: 'fade hide' }, svg);
+      S.text(70, 58, 'acts（IO () のリスト）', { cls: 't-xs t-dim' }, st.acts);
+      st.tiles = ['a', 'b', 'c'].map((c, k) => box(st.acts, 150, 84 + k * 44, 'putStrLn "' + c + '"', { mono: true, w: 160, h: 30, cls: 't-md' }));
+      S.text(240, 132, '← acts !! 1 を 2 回実行', { cls: 't-sm t-b t-x' }, st.acts);
+      st.tree = S.g({ cls: 'fade hide' }, svg);
+      S.text(176, 79, 'main =', { cls: 't-end t-mono t-md t-b' }, st.tree);
+      box(st.tree, 215, 74, '>>=', { mono: true, w: 60, h: 28, cls: 't-md t-b', box: 'f-sf s-fg w15' });
+      S.line(205, 88, 140, 144, { cls: 's-mid w15' }, st.tree);
+      S.line(225, 88, 292, 144, { cls: 's-mid w15' }, st.tree);
+      box(st.tree, 125, 158, 'getLine', { mono: true, w: 110, h: 28, cls: 't-md' });
+      box(st.tree, 305, 158, 'putStrLn', { mono: true, w: 120, h: 28, cls: 't-md' });
+      S.text(125, 192, 'IO String', { cls: 't-c t-xs t-mono t-dim' }, st.tree);
+      S.text(305, 192, 'String -> IO ()', { cls: 't-c t-xs t-mono t-dim' }, st.tree);
+      S.text(215, 222, '組み立てた結果は、IO () の値が 1 つ', { cls: 't-c t-xs t-mid' }, st.tree);
+      // 右上: ランタイムが実行する順と、端末
+      S.text(440, 26, 'ランタイム：手順を実行する', { cls: 't-sm t-dim' }, svg);
+      st.chain = S.g({ cls: 'fade' }, svg);
+      // 実行の順の線（段階4 からは世界の印の受け渡しとして x で描く）
+      st.wire5 = [[450, 516], [644, 726], [874, 918]].map(([a, b]) => S.line(a, 82, b, 82, { cls: 's-mid w2', 'marker-end': mk('mid') }, st.chain));
+      st.gBox = S.rect(520, 64, 120, 36, { rx: 6, cls: 'f-sf s-fg w15' }, st.chain);
+      S.text(580, 87, 'getLine', { cls: 't-c t-mono t-md t-b' }, st.chain);
+      st.pBox = S.rect(730, 64, 140, 36, { rx: 6, cls: 'f-sf s-fg w15' }, st.chain);
+      S.text(800, 87, 'putStrLn', { cls: 't-c t-mono t-md t-b' }, st.chain);
+      st.wl = [[483, 's'], [685, 'ipv'], [898, '']].map(([x, s]) => S.text(x, 72, s, { cls: 't-c t-mono t-sm t-b t-x' }, st.chain));
+      st.wcap = S.text(920, 50, '線の上を渡るのは世界の印 State# RealWorld', { cls: 't-end t-xs t-b t-x' }, st.chain);
+      S.path('M584,101 C584,142 796,142 796,101', { cls: 'f-none s-d w15', 'marker-end': mk('d') }, st.chain);
+      st.dcap = S.text(690, 154, '読んだ文字列', { cls: 't-c t-xs t-d' }, st.chain);
+      // 端末
+      S.rect(470, 168, 450, 70, { rx: 6, cls: 'f-in s-rule w1' }, svg);
+      S.text(484, 186, '端末', { cls: 't-xs t-dim' }, svg);
+      st.term = [0, 1].map((k) => S.text(530, 206 + k * 22, '', { cls: 't-mono t-md t-b' }, svg));
+      st.termK = [0, 1].map((k) => S.text(610, 206 + k * 22, '', { cls: 't-xs t-dim' }, svg));
+      // 動く札: 世界の印と、読んだ文字列
+      st.wtok = chip(svg, '印', { w: 28, fs: 11, cls: 't-xs t-x', box: 'f-sf s-x w15' });
+      st.dtok = chip(svg, 'hello', { w: 56, fs: 11, cls: 't-sm t-d', box: 'f-sf s-d w15' });
+      st.dpath = st.chain.querySelector('path');
+
+      // 下: 段階ごとの中身
+      sep(svg, 252);
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1
+      code(P[0], 52, 284, ['main :: IO ()', 'main = do', '  let acts = [putStrLn "a", putStrLn "b", putStrLn "c"]', '  acts !! 1', '  acts !! 1'], 22, 't-mono t-md');
+      S.text(560, 306, '← リストを作るだけでは何も出ない', { cls: 't-sm t-mid' }, P[0]);
+      S.text(560, 350, '← 実行した手順だけが端末に書く', { cls: 't-sm t-x' }, P[0]);
+      // 段階2
+      code(P[1], 52, 284, ['main :: IO ()', 'main = getLine >>= putStrLn'], 22, 't-mono t-md');
+      S.text(52, 346, '-O0 の Core（GHC 9.6.7 -ddump-simpl）', { cls: 't-xs t-dim' }, P[1]);
+      code(P[1], 52, 370, ['main = >>= GHC.Base.$fMonadIO getLine putStrLn', ':Main.main = GHC.TopHandler.runMainIO main'], 22, 't-mono t-md');
+      S.text(52, 422, '$fMonadIO は IO の Monad の辞書。:Main.main がプログラムの本当の入口で、runMainIO が main を実行する', { cls: 't-sm t-mid' }, P[1]);
+      // 段階3
+      S.text(52, 284, 'ghci> getLine ++ "!"', { cls: 't-mono t-md pre' }, P[2]);
+      errBox(P[2], 52, 296, 560, ['error: [GHC-83865]', '    • Couldn\'t match expected type: [Char]', '                  with actual type: IO String'], 19);
+      code(P[2], 52, 400, ['ghci> import System.IO.Unsafe', 'ghci> :t unsafePerformIO', 'unsafePerformIO :: IO a -> a'], 22, 't-mono t-md');
+      S.text(420, 444, '← IO を外す関数。安全の外にある', { cls: 't-sm t-x' }, P[2]);
+      // 段階4
+      code(P[3], 52, 284, ['ghci> import GHC.Exts', 'ghci> :i IO', 'type IO :: * -> *', 'newtype IO a', '  = GHC.Types.IO (State# RealWorld -> (# State# RealWorld, a #))'], 21, 't-mono t-md');
+      S.text(52, 400, 'instance の行は省いた', { cls: 't-xs t-dim' }, P[3]);
+      S.text(52, 440, '場面4：', { cls: 't-sm t-dim' }, P[3]);
+      S.text(110, 440, 'newtype State s a = State (s -> (a, s))', { cls: 't-mono t-md pre' }, P[3]);
+      S.text(52, 480, 's を State# RealWorld に、組 (a, s) を (# State# RealWorld, a #) にすると IO になる（組の順は逆）', { cls: 't-sm t-x' }, P[3]);
+      // 段階5
+      S.text(52, 278, '-O2 の Core（引数の改行を詰め、cast の部分を (…) にした）', { cls: 't-xs t-dim' }, P[4]);
+      code(P[4], 52, 298, [
+        'main1 :: State# RealWorld -> (# State# RealWorld, () #)',
+        'main1',
+        '  = \\ (s :: State# RealWorld) ->',
+        '      case wantReadableHandle_1 hGetLine3 stdin (…) s',
+        '      of',
+        '      { (# ipv, ipv1 #) ->',
+        '      hPutStr2 stdout ipv1 True ipv',
+        '      }'
+      ], 18, 't-mono t-sm');
+      S.text(470, 352, '← 印 s を、1 行を読む手順に渡す', { cls: 't-sm t-x' }, P[4]);
+      S.text(470, 388, '← 新しい印 ipv と、読んだ文字列 ipv1', { cls: 't-sm t-x' }, P[4]);
+      S.text(470, 406, '← ipv を、書く手順に渡す', { cls: 't-sm t-x' }, P[4]);
+      S.text(52, 456, '機械語（-O2 -ddump-asm）', { cls: 't-xs t-dim' }, P[4]);
+      code(P[4], 52, 476, ['leaq hGetLine2_closure+2(%rip),%rdi', 'leaq stdin_closure(%rip),%rsi', 'leaq hGetLine3_closure(%rip),%r14', 'jmp wantReadableHandle_1_info'], 17, 't-mono t-sm');
+      S.text(360, 510, '← 渡す値は 3 つ。印の分は無い', { cls: 't-sm t-b t-x' }, P[4]);
+      // 段階6
+      const col = (x, title, lines, cls) => {
+        S.text(x, 284, title, { cls: 't-md t-b' }, P[5]);
+        lines.forEach((s, k) => S.text(x, 312 + k * 22, s, { cls: cls || 't-sm' }, P[5]));
+      };
+      col(52, '式の評価（純粋）', ['順はデータの依存だけで縛られる', '止まる限り、順は結果を変えない（第37章 場面4）']);
+      col(500, 'IO の手順', ['順は >>= でつないだとおりで、実装が守る', 'GHC は、印を前の手順から次の手順へ渡して守る']);
+      S.line(476, 270, 476, 350, { cls: 's-rule w1' }, P[5]);
+      S.text(52, 392, 'Haskell 2010 の報告書（第7章）', { cls: 't-xs t-dim' }, P[5]);
+      code(P[5], 52, 414, [
+        'The order of evaluation of expressions in Haskell is constrained only by data',
+        'dependencies; … Haskell\'s I/O monad provides the user with a way to specify the',
+        'sequential chaining of actions, and an implementation is obliged to preserve this order.'
+      ], 19, 't-mono t-xs');
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      S.fade(st.acts, i === 0);
+      S.fade(st.tree, i >= 1);
+      S.fade(st.chain, i >= 1);
+      op(st.tree, i === 2 || i === 5 ? 0.45 : '');
+      const world = i >= 3, mk = S.markers(ctx.svg);
+      st.wl.forEach((t) => S.fade(t, world));
+      S.fade(st.wcap, world);
+      st.wire5.forEach((w) => { w.setAttribute('class', world ? 's-x w2' : 's-mid w2'); w.setAttribute('marker-end', mk(world ? 'x' : 'mid')); });
+      st.dcap.textContent = world ? 'ipv1（読んだ文字列）' : '読んだ文字列';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      op(st.wtok.g, 0); op(st.dtok.g, 0);
+      const setTerm = (a, b, ka, kb) => {
+        st.term[0].textContent = a; st.term[1].textContent = b;
+        st.termK[0].textContent = ka; st.termK[1].textContent = kb;
+      };
+      if (i === 0) {
+        // acts !! 1 を 2 回実行する。2 番めの札が光るたびに、端末に b が 1 行出る
+        const c = run ? U.mod(ctx.ts, 6) : 6;
+        const n = c >= 2.2 ? 2 : c >= 1 ? 1 : 0;
+        const on = run && ((c >= 0.6 && c < 1.2) || (c >= 1.8 && c < 2.4));
+        st.tiles.forEach((tl, k) => tl.r.setAttribute('class', k === 1 ? (on ? 'f-x-soft s-x w2' : 'f-sf s-x w15') : 'f-sf s-rule w1'));
+        setTerm(n >= 1 ? 'b' : '', n >= 2 ? 'b' : '', n >= 1 ? '← 1 回め' : '', n >= 2 ? '← 2 回め' : '');
+        return;
+      }
+      // main = getLine >>= putStrLn を実行する。実行の順（段階4 からは世界の印）が線を進み、getLine で入力を待ち、読んだ文字列が putStrLn へ渡る
+      st.wtok.set(i >= 3 ? '印' : '');
+      st.wtok.r.setAttribute('class', i >= 3 ? 'f-sf s-x w15' : 'f-mid s-mid w1');
+      const animate = (i === 1 || i === 4) && run;
+      const c = animate ? U.mod(ctx.ts, 7) : 7;
+      const typed = Math.max(0, Math.min(5, Math.floor((c - 1.0) / 0.16)));
+      const inGet = animate && c >= 0.9 && c < 2.0, inPut = animate && c >= 2.7 && c < 3.4;
+      st.gBox.setAttribute('class', inGet ? 'f-x-soft s-x w2' : 'f-sf s-fg w15');
+      st.pBox.setAttribute('class', inPut ? 'f-x-soft s-x w2' : 'f-sf s-fg w15');
+      if (animate && c < 4.2) {
+        let x;
+        if (c < 0.9) x = U.lerp(452, 520, U.prog(c, 0.3, 0.6));
+        else if (c < 2.0) x = 580;
+        else if (c < 2.7) x = U.lerp(640, 730, U.prog(c, 2.0, 0.6));
+        else if (c < 3.4) x = 800;
+        else x = U.lerp(870, 912, U.prog(c, 3.4, 0.6));
+        if (!(c >= 0.9 && c < 2.0) && !(c >= 2.7 && c < 3.4)) { st.wtok.at(x, 82); op(st.wtok.g, ''); }
+        const f = U.prog(c, 2.0, 0.7);
+        if (f > 0.08 && f < 0.92) { const p = S.along(st.dpath, f); st.dtok.at(p.x, p.y); op(st.dtok.g, ''); }
+      }
+      const input = c >= 1.0 ? 'hello'.slice(0, typed) : '';
+      setTerm(input, c >= 3.2 ? 'hello' : '', input ? '← getLine が読んだ入力' : '', c >= 3.2 ? '← putStrLn の出力' : '');
+    }
+  };
+
+  /* ================================================================
+     場面6 ほかの形と、ほかの道
+     リスト: [1,2] >>= \x -> [x, x*10] ＝ [1,10,2,20]、x が 1 のとき [] を返す版は [2,20]、return 5 :: [Int] ＝ [5]（ghci）。
+     リストの >>= の定義は base-4.18.3.0 の GHC.Base。Rust（rustc 1.95.0）: Option は Some(1)・None、Result は Ok(1)・Err("0 で割った")、
+     flat_map は [1, 10, 2, 20]、async fn の calc(6) を自前の小さな実行器（Waker::noop で poll）で動かして Some(1)。
+     Promise（Node.js 24.22.1）: 入れ子の resolve の値は 1、Promise.resolve(q) === q は true、
+     a ＝ Promise.resolve(1)・f ＝ x => Promise.resolve(typeof x) で Promise.resolve(a).then(f) は 'number'、f(a) は 'object'。
+     a ＝ 6・f ＝ x => Promise.resolve(x / 3) なら両辺とも 2。
+     変換子（transformers 0.6.1.0、Control.Monad.Trans.State.Strict と Control.Monad.Trans.Maybe）: 本文の 3 つの式の値は ghci で確かめた。
+     代数的エフェクト: OCaml 5.0.0（2022-12-16）の Effect、Koka は公式の頁で確かめた（手元では動かしていない）。
+     GHC 9.6.1 の限定継続（prompt#・control0#）は、手元の GHC 9.6.7 の文書（9.6.1 の変更点と GHC.Prim）で確かめた
+     ================================================================ */
+  const SAME = [
+    ['Maybe a（場面2）', 'Just', 'Nothing なら次を呼ばない', 'Just 1 ／ Nothing'],
+    ['State s a（場面4）', '状態をそのまま返す', '状態を次の計算へ渡す', '((),6)'],
+    ['IO a（場面5）', '入出力をしない手順', '実行し、結果で次を決める', '端末に b が 2 行'],
+    ['[a]（リスト）', '[x]', '要素ごとに当て、つなぐ', '[1,10,2,20]'],
+    ['Rust の Option<T>', 'Some', 'and_then', 'Some(1) ／ None'],
+    ['JavaScript の Promise', 'Promise.resolve', 'then（入れ子を平らにする）', '則 1 が崩れる例がある']
+  ];
+  const s6 = {
+    steps: [
+      { title: 'リスト — 答えが複数ある計算', text: 'リストもモナドで、return x は `[x]`、`xs >>= f` は要素ごとに f を当てて結果をつなぐ。`[1,2] >>= \\x -> [x, x*10]` は `[1,10,2,20]`。答えの数だけ道が分かれ、空のリストを返した道は消える。Rust の `flat_map` も同じ列を返した。' },
+      { title: 'Rust — まとめる名前の無い同じ形', text: 'Rust の `Option::and_then`・`Result::and_then`・`Iterator::flat_map` は `>>=` の形。M を型の変数にできない（[[41-inference.html#s6|第41章 場面6]]）ので、std にこれらをまとめるトレイトは無い。async の中の `.await?` は、do と同じく文の並びで書く。' },
+      { title: 'Promise の then', text: 'JavaScript の `then` は map と `>>=` を兼ね、返した値が Promise なら平らにする。そのため a が Promise だと、則 1 の両辺 `Promise.resolve(a).then(f)` と `f(a)` が違う値になった。async／await は then の連鎖を文で書く形。' },
+      { title: '作用を重ねる — 変換子', text: '失敗と状態を一緒に使うには、モナドを重ねる変換子を使う。割った回数を状態に数えながら 0 で割ると、`StateT Int Maybe` は状態ごと Nothing になり、`MaybeT (State Int)` は失敗しても回数 2 が残った。重ねる順で意味が変わり、作用が増えるたびに組み方を選ぶ。' },
+      { title: '別の道 — 代数的エフェクト', text: '代数的エフェクトとハンドラ（Plotkin と Pretnar、2009 年）では、計算は「状態を読む」「失敗する」などの操作を呼ぶだけで、意味は外側のハンドラが決め、その順もハンドラを置く側が選ぶ。OCaml 5.0（2022 年）や Koka が持ち、GHC 9.6 は土台の限定継続を RTS に入れた。' },
+      { title: '答え — 状態と順序は型に戻る', text: '第37章は計算を式の簡約にし、言語から状態と順序を外した。モナドはそれを型に現れる形で戻す。状態は `s -> (a, s)` の受け渡しとして、順序は `>>=` の連鎖として戻り、IO では印の受け渡しになる。純粋な式は手順を組み立て、実行はランタイムが受け持つ。代償は型ごとの書き方と、作用を組み合わせる手間。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 上: >>= の形をした型の表
+      st.rows = table(svg, 40, 30, 880, [52, 236, 420, 660], ['M a', 'return（作用の無い計算）', '>>=（つなぎ方）', 'この章で確かめた値'], SAME, 31,
+        ['t-sm t-b', 't-mono t-sm', 't-sm', 't-sm t-b t-d']);
+
+      // 下: 段階ごとの中身
+      sep(svg, 240);
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1: リスト
+      code(P[0], 52, 270, ['instance Monad [] where', '  xs >>= f = [y | x <- xs, y <- f x]'], 20, 't-mono t-sm');
+      S.text(330, 290, '← base 4.18.3.0（GHC.Base）の定義', { cls: 't-sm t-mid' }, P[0]);
+      st.lst = S.g({}, P[0]);
+      const L1 = box(st.lst, 90, 344, '1', { mono: true, w: 34, h: 26, cls: 't-md t-b t-d', box: 'f-sf s-d w15' });
+      const L2 = box(st.lst, 90, 404, '2', { mono: true, w: 34, h: 26, cls: 't-md t-b t-d', box: 'f-sf s-d w15' });
+      S.text(160, 328, '\\x -> [x, x*10]', { cls: 't-c t-mono t-xs t-mid' }, st.lst);
+      st.lb = [S.line(108, 344, 216, 344, { cls: 's-mid w15', 'marker-end': mk('mid') }, st.lst), S.line(108, 404, 216, 404, { cls: 's-mid w15', 'marker-end': mk('mid') }, st.lst)];
+      const B1 = box(st.lst, 262, 344, '[1, 10]', { mono: true, w: 84, h: 26, cls: 't-md t-b t-d', box: 'f-sf s-d w15' });
+      const B2 = box(st.lst, 262, 404, '[2, 20]', { mono: true, w: 84, h: 26, cls: 't-md t-b t-d', box: 'f-sf s-d w15' });
+      st.lj = [S.line(306, 348, 384, 368, { cls: 's-mid w15' }, st.lst), S.line(306, 400, 384, 380, { cls: 's-mid w15' }, st.lst)];
+      S.text(348, 378, 'つなぐ', { cls: 't-c t-xs t-mid' }, st.lst);
+      const J = box(st.lst, 450, 374, '[1,10,2,20]', { mono: true, w: 120, h: 28, cls: 't-md t-b t-d', box: 'f-d-soft s-d w15' });
+      st.lparts = [[L1.g, L2.g], [B1.g, B2.g].concat(st.lb), [J.g].concat(st.lj)];
+      code(P[0], 560, 330, ['ghci> [1,2] >>= \\x -> [x, x*10]', '[1,10,2,20]'], 20, 't-mono t-sm');
+      code(P[0], 560, 386, ['ghci> [1,2] >>= \\x -> if x == 1 then [] else [x, x*10]', '[2,20]'], 20, 't-mono t-sm');
+      S.text(560, 432, '← 1 の道は空のリストを返して消えた', { cls: 't-sm t-x' }, P[0]);
+      code(P[0], 52, 480, ['vec![1, 2].into_iter().flat_map(|x| vec![x, x * 10]).collect::<Vec<i32>>()'], 20, 't-mono t-sm');
+      S.text(52, 504, '→ [1, 10, 2, 20]（rustc 1.95.0）', { cls: 't-sm t-b t-d' }, P[0]);
+      // 段階2: Rust
+      table(P[1], 40, 266, 880, [52, 200, 420], ['型', '>>= に当たるもの', '確かめた値（rustc 1.95.0）'], [
+        ['Option<T>', 'and_then', 'Some(1)、0 を挟むと None（場面2）'],
+        ['Result<T, E>', 'and_then', 'Ok(1)、0 を挟むと Err("0 で割った")'],
+        ['Iterator', 'flat_map', '[1, 10, 2, 20]'],
+        ['Future', 'async の中の .await', 'calc(6) は Some(1)']
+      ], 25, ['t-mono t-sm t-b', 't-mono t-sm', 't-mono t-sm']);
+      code(P[1], 52, 412, [
+        'async fn div_by(d: i32, n: i32) -> Option<i32> { if d == 0 { None } else { Some(n / d) } }',
+        'async fn calc(n: i32) -> Option<i32> {',
+        '    let a = div_by(3, n).await?;',
+        '    let b = div_by(2, a).await?;',
+        '    div_by(1, b).await',
+        '}'
+      ], 18, 't-mono t-sm');
+      S.text(320, 448, '← .await で値を待ち、? で None なら返る', { cls: 't-sm t-x' }, P[1]);
+      S.text(52, 532, 'calc は Waker::noop で poll する小さな実行器で動かした。4 つをまとめるトレイトは std に無い', { cls: 't-xs t-mid' }, P[1]);
+      // 段階3: Promise
+      code(P[2], 52, 270, ['Promise.resolve(Promise.resolve(1)).then(v => console.log(v))'], 20, 't-mono t-sm');
+      S.text(560, 270, '→ 1（入れ子が平らになる）', { cls: 't-sm t-b t-d' }, P[2]);
+      code(P[2], 52, 312, ['const a = Promise.resolve(1);', 'const f = x => Promise.resolve(typeof x);', 'Promise.resolve(a).then(f)', 'f(a)'], 22, 't-mono t-sm');
+      S.text(260, 312, '← a 自身が Promise', { cls: 't-sm t-mid' }, P[2]);
+      S.text(300, 356, '→ \'number\'', { cls: 't-mono t-sm t-b t-x' }, P[2]);
+      S.text(300, 378, '→ \'object\'', { cls: 't-mono t-sm t-b t-x' }, P[2]);
+      S.text(420, 356, '← Promise.resolve(a) は a そのもの（=== が true）で、then が 1 を渡す', { cls: 't-sm t-x' }, P[2]);
+      S.text(420, 378, '← f は Promise そのものを受け取る', { cls: 't-sm t-x' }, P[2]);
+      S.text(52, 424, '則 1（return a >>= f ＝ f a）の両辺が、a が Promise のときに食い違う', { cls: 't-sm t-b t-x' }, P[2]);
+      S.text(52, 450, 'a ＝ 6、f ＝ x => Promise.resolve(x / 3) なら両辺とも 2。then のこの動きで、Promise は厳密にはモナドの則を満たさない', { cls: 't-sm t-mid' }, P[2]);
+      S.text(52, 490, 'Node.js 24.22.1 で確かめた', { cls: 't-xs t-dim' }, P[2]);
+      // 段階4: 変換子
+      code(P[3], 52, 268, [
+        'stepA :: Int -> Int -> StateT Int Maybe Int',
+        'stepA d n = do { modify (+ 1); lift (divBy d n) }',
+        'ghci> runStateT (stepA 3 6 >>= stepA 2 >>= stepA 1) 0',
+        'ghci> runStateT (stepA 3 6 >>= stepA 0 >>= stepA 2) 0'
+      ], 20, 't-mono t-sm');
+      S.text(520, 308, '→ Just (1,3)', { cls: 't-mono t-sm t-b t-d' }, P[3]);
+      S.text(520, 328, '→ Nothing', { cls: 't-mono t-sm t-b t-x' }, P[3]);
+      S.text(640, 328, '← 回数（状態）ごと消える', { cls: 't-sm t-x' }, P[3]);
+      code(P[3], 52, 378, [
+        'stepB :: Int -> Int -> MaybeT (State Int) Int',
+        'stepB d n = do { lift (modify (+ 1)); MaybeT (return (divBy d n)) }',
+        'ghci> runState (runMaybeT (stepB 3 6 >>= stepB 0 >>= stepB 2)) 0'
+      ], 20, 't-mono t-sm');
+      S.text(520, 434, '→ (Nothing,2)', { cls: 't-mono t-sm t-b t-x' }, P[3]);
+      S.text(640, 434, '← 失敗しても回数 2 が残る', { cls: 't-sm t-x' }, P[3]);
+      S.text(52, 476, 'modify (+ 1) は状態に 1 を足す、lift は内側のモナドの計算を外側に持ち上げる（transformers 0.6.1.0）', { cls: 't-sm t-mid' }, P[3]);
+      // 段階5: 代数的エフェクト（模式図）
+      S.text(52, 266, '模式図（手元では動かしていない）', { cls: 't-xs t-dim' }, P[4]);
+      S.rect(52, 280, 300, 150, { rx: 8, cls: 'f-sf s-fg w15' }, P[4]);
+      S.text(66, 302, '計算', { cls: 't-sm t-b' }, P[4]);
+      code(P[4], 66, 330, ['n ← 状態を読む', '状態に 1 を足す', 'd が 0 なら失敗する', '…'], 22, 't-sm');
+      S.text(202, 412, '操作の名前を呼ぶだけ', { cls: 't-c t-xs t-mid' }, P[4]);
+      S.rect(540, 280, 330, 66, { rx: 8, cls: 'f-sf s-x w15' }, P[4]);
+      S.text(556, 304, 'ハンドラ A：状態', { cls: 't-sm t-b t-x' }, P[4]);
+      S.text(556, 328, '読む・書くに、状態を渡す意味を与える', { cls: 't-xs t-mid' }, P[4]);
+      S.rect(540, 362, 330, 66, { rx: 8, cls: 'f-sf s-x w15' }, P[4]);
+      S.text(556, 386, 'ハンドラ B：失敗', { cls: 't-sm t-b t-x' }, P[4]);
+      S.text(556, 410, '失敗に、Nothing を返す意味を与える', { cls: 't-xs t-mid' }, P[4]);
+      st.op = [S.line(356, 330, 534, 312, { cls: 's-x w15', 'marker-end': mk('x') }, P[4]), S.line(356, 374, 534, 394, { cls: 's-x w15', 'marker-end': mk('x') }, P[4])];
+      st.back = [S.line(534, 324, 358, 342, { cls: 's-d w15 dash', 'marker-end': mk('d') }, P[4])];
+      S.text(446, 306, '操作', { cls: 't-c t-xs t-b t-x' }, P[4]);
+      S.text(446, 352, '続きを再開', { cls: 't-c t-xs t-b t-d' }, P[4]);
+      S.text(52, 462, 'A を外に置くか B を外に置くかは、ハンドラを置く側が決める（計算の側は変えない）', { cls: 't-sm t-mid' }, P[4]);
+      S.text(52, 488, 'OCaml 5.0（2022 年 12 月）は標準ライブラリの Effect モジュールで、Koka は言語の機能として持つ', { cls: 't-sm t-mid' }, P[4]);
+      S.text(52, 512, 'GHC 9.6.1 は限定継続の primop（prompt#・control0#）を入れた。base に安全な API は無く、ライブラリが使う', { cls: 't-sm t-mid' }, P[4]);
+      // 段階6: 答え
+      table(P[5], 40, 266, 880, [52, 330, 760], ['第37章で言語から外したもの', 'モナドで戻ってくる形', '場面'], [
+        ['書き換わる状態', 's -> (a, s) の受け渡し（State）', '4'],
+        ['文の順序', '>>= の連鎖。IO では印の受け渡し', '3・5'],
+        ['型の外の作用（失敗・入出力）', '戻り値の型 Maybe a・IO a', '1・2・5']
+      ], 32, ['t-sm t-b', 't-sm t-b t-x', 't-sm t-mono']);
+      S.text(52, 410, '純粋な式は手順を組み立てる。手順を実行し、機械の状態を書き換えるのはランタイム（第6章の CPU のまま）', { cls: 't-sm t-mid' }, P[5]);
+      S.text(52, 444, '代償', { cls: 't-sm t-b' }, P[5]);
+      code(P[5], 52, 468, [
+        '・型ごとの書き方（Rust と JavaScript では型ごとに別のメソッド。Promise は則も崩れる）',
+        '・作用を組み合わせる手間（変換子の重ね方。別の道として代数的エフェクト）',
+        '・遅延評価との相性（場面4 の注記：State も状態のサンクを積みうる）'
+      ], 22, 't-sm');
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      const HL = [[3], [4], [5], [], [], [0, 1, 2]];
+      st.rows.forEach((r, k) => {
+        const on = HL[i].includes(k);
+        r.bg.setAttribute('class', on ? 'f-x-soft' : 'f-none');
+        r.ts.forEach((t) => op(t, on || (i >= 3 && i <= 4) ? '' : 0.5));
+      });
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      if (i === 0) {
+        // 1 と 2 から道が分かれ、最後に 1 本につながる
+        const c = run ? U.mod(ctx.ts, 6) : 6;
+        st.lparts.forEach((ps, k) => ps.forEach((e) => op(e, c >= 0.4 + k * 0.9 ? '' : 0)));
+      }
+    }
+  };
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第X部 関数型 ／ 第42章',
+      title: 'モナド',
+      home: '../index.html',
+      prev: { href: '41-inference.html', title: '型推論と多相' },
+      next: { href: '43-curry-howard.html', title: 'カリー＝ハワード対応', lead: '型検査の規則と、論理の証明の規則は、同じ形をしている。' },
+      legend: [{ c: 'd', label: '値・データ' }, { c: 'x', label: '注目・変化' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>

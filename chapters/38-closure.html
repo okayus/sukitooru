@@ -1,0 +1,1384 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>高階関数とクロージャ — YouTubeが見えるまで</title>
+<meta name="description" content="第37章のλ計算では、関数を引数に渡すのも、関数を返すのも、ふつうの式だった。この章では、関数を数と同じ値として扱う言語で、関数を受け取る関数が手順の骨組みを部品にすることと、関数の値が機械の上で何になるかを見る。">
+<meta property="og:title" content="高階関数とクロージャ — YouTubeが見えるまで">
+<meta property="og:description" content="第37章のλ計算では、関数を引数に渡すのも、関数を返すのも、ふつうの式だった。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第X部 関数型 ／ 第38章 ／ 全43章</p>
+    <h1 id="h-s0">高階関数とクロージャ</h1>
+    <p class="standfirst">第37章のλ計算では、関数を引数に渡すのも、関数を返すのも、ふつうの式だった。この章では、関数を数と同じ値として扱う言語で、関数を受け取る関数（高階関数）が手順の骨組みを部品にする書き方と、それが機械の上で何になるかを見る。関数の値は機械語の番地と環境の組（クロージャ）になり、再帰の繰り返しは、最後にすることが呼び出しだけならループになる。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>関数は値</a><p>関数を渡す・返す・しまう。map は関数を受け取る関数。C の関数ポインタとの違い。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>クロージャ</a><p>関数の値は、コードの番地と自由変数の環境の組。Rust と V8 の実物、字句的スコープ。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>カリー化</a><p>引数を 1 つずつ受け取る形にすると、一部だけ渡せる。処理系は毎回は作らない。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>合成</a><p>部品の出力を次の入力につなぐ。型が合えばつながり、機械の上では 1 つのループになる。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>畳み込み</a><p>リストの 2 つの形に沿った再帰と、それを 1 つにまとめた foldr。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>末尾呼び出し</a><p>最後が呼び出しだけなら枠を使い回せ、機械語ではループになる。保証は言語ごとに違う。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の章（不変データ）へ。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードと出力は GHC 9.6.7・rustc 1.95.0・Node.js 24.22.1（V8 13.6）・gcc 15.2.0（x86-64 の Linux）で 2026 年 11 月に動かして確かめた（Rust は edition 2021。機械語の飾りの行と、関数の入口の endbr64 は省いた）。出力は版と設定で変わる。文献は原典の年を添えた。図は模式図。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 関数は値 ================= -->
+<section class="scene sc-anim" id="s1" data-tab="関数は値" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>関数は値 — 渡す・返す・しまう</h2>
+    <p class="sh-meta"><span class="chip">map</span><span class="chip">(*2)</span><span class="chip">第一級</span><span class="chip">関数ポインタ</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">第37章のλ計算では、関数を引数に渡すのも返すのも、ふつうの式だった。実際の言語は数やリストを機械の表現で持ち、関数をそれらと同じ値として扱えるかは言語によって違う。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">「第一級」は Strachey の 1967 年の講義（2000 年に出版）の言葉。ALGOL の実数は式に書け、変数に代入できるが、手続きは呼ぶか引数に渡すことしかできないので「二級の市民」だ、と書いた。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="map に関数 (*2) とリスト [3,2,1] を渡し、[6,4,2] を得る図と、段階ごとのコード"></svg></div>
+    <figcaption>図1　上は map に関数 (*2) とリスト [3,2,1] を渡す図。下は段階ごとの中身（型の注釈、map の型、関数のリスト、3 つの言語、C の関数ポインタ）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 クロージャ ================= -->
+<section class="scene sc-anim" id="s2" data-tab="クロージャ" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>クロージャ — コードと環境の組</h2>
+    <p class="sh-meta"><span class="chip">addN 3</span><span class="chip">自由変数</span><span class="chip">E0373</span><span class="chip">size_of_val</span><span class="chip">%DebugPrint</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">関数を返す関数では、返した関数の本体が、もう終わった呼び出しの引数を使う。式の上では引数を置き換えれば済むが、機械の上の関数の値は、コードの番地だけでは足りない。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">JavaScript のクロージャは、値の写しでなく変数そのものを持つ。addN の中で f を作った後に n = 10 と代入すると、addN(3)(2) は 12 になった。Rust の move は値を写し、Haskell の変数は書き換えない。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="addN 3 が返す関数の、コードと環境の組をメモリの上に描いた図"></svg></div>
+    <figcaption>図2　上は例のコードと、メモリの模式図（段階2 は addN の枠、段階3 からはヒープのクロージャ）。下は段階ごとの中身（簡約の列、rustc の誤り、Landin と STG、Rust と V8 の実物、スコープの比べ）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 カリー化と部分適用 ================= -->
+<section class="scene sc-anim" id="s3" data-tab="カリー化" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>カリー化と部分適用 — 引数を 1 つずつ渡す</h2>
+    <p class="sh-meta"><span class="chip">Int -&gt; Int -&gt; Int</span><span class="chip">add 3</span><span class="chip">curry</span><span class="chip">STG</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">場面2 の addN は、Int を 1 つ受け取って関数を返した。2 つの数を足す関数も、同じ形で書ける。引数を 1 つ受け取るたびに関数を返す形にすると、引数の一部だけを先に渡して部品を作れる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">多引数の関数を 1 引数の関数の連なりで表す考えは、Schönfinkel の 1924 年の論文（Mathematische Annalen 92 巻）にあり、Curry が組合せ論理で多く使った。カリー化の名は Curry から来ている。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="add の型の読み方と、引数を 1 つずつ受け取る様子"></svg></div>
+    <figcaption>図3　上は add の型の読み方と、引数を 1 つずつ受け取る様子（3 を受け取ると、3 を環境に持つ関数ができる）。下は段階ごとの中身（型の括弧、部分適用、curry、GHC の STG、部品）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 合成 ================= -->
+<section class="scene sc-anim" id="s4" data-tab="合成" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>関数合成 — 部品をつなぐ</h2>
+    <p class="sh-meta"><span class="chip">(.)</span><span class="chip">filter odd</span><span class="chip">map (*2)</span><span class="chip">sum</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">部分適用で作った部品は、出力を次の部品の入力につなげられる。つないだものも 1 つの関数で、途中の値に名前を付けず、書き換える変数も置かずに手順を書ける。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">JavaScript の配列の filter と map は、仕様どおり途中の配列 [3,1] と [6,2] を作ってから次へ渡す。要素を 1 つずつ流して途中を作らない書き方は、遅延評価と Iterator の話になる（<a class="xref" href="40-lazy.html#s6">第40章 場面6</a>）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="sum . map (*2) . filter odd に [3,2,1] を渡したときの値の流れ"></svg></div>
+    <figcaption>図4　上は sum . map (*2) . filter odd に [3,2,1] を渡したときの値の流れ。下は段階ごとの中身（定義と型、部品ごとの出力、型の誤り、for のループ、機械語と Core）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 再帰と畳み込み ================= -->
+<section class="scene sc-anim" id="s5" data-tab="畳み込み" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>再帰と畳み込み — データの形に沿って</h2>
+    <p class="sh-meta"><span class="chip">[]</span><span class="chip">x : xs</span><span class="chip">foldr</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">Haskell にはループの文が無く、繰り返しは再帰で書く。リストは「空」か「先頭と残り」の 2 つの形しか無いので、リストの関数は 2 つの場合の式で書ける。その形を 1 つにまとめた高階関数が foldr である。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">左から畳む foldl は ((0 + 3) + 2) + 1 の形を作る。足し算では答えは同じ 6 だが、引き算では foldr (-) 0 [3,2,1] が 2、foldl (-) 0 [3,2,1] が -6 と違う。foldl の代償は<a class="xref" href="40-lazy.html#s5">第40章 場面5</a>。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="リスト [3,2,1] の : の木と、foldr による置き換え"></svg></div>
+    <figcaption>図5　上はリスト [3,2,1] を : の木で描いたもの（段階4 で : が + に、[] が 0 に替わり、下から計算する）。下は段階ごとの中身。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 末尾呼び出し ================= -->
+<section class="scene sc-anim" id="s6" data-tab="末尾呼び出し" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>末尾呼び出し — 繰り返しの状態を引数に</h2>
+    <p class="sh-meta"><span class="chip">sumTo</span><span class="chip">go acc n</span><span class="chip">jmp</span><span class="chip">-O2</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">再帰で繰り返すと、呼び出しのたびにスタックの枠が 1 枚積もる。関数が最後にすることが呼び出しだけなら、いまの枠を使い回せる。機械語では、これは呼び出しではなく先頭へ戻る飛び越しになる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">GHC は足りなくなるとスタックを伸ばすので、手元の GHC 9.6.7 では末尾でない sumTo 1000000 も 500000500000 を返した。RTS の -K で上限を小さくすると、Stack space overflow で止まる。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="sumTo 3 の枠が積もる様子と、go 0 3 が 1 枚の枠を使い回す様子、第6章の sum と n の列"></svg></div>
+    <figcaption>図6　上は呼び出しの枠（sumTo は積もり、go は 1 枚を使い回す）と、第6章 場面4 の sum・n と go の acc・n の列。下は段階ごとの中身。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — 関数を値にする</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>関数を数と同じように渡し、返し、しまえるとき第一級の関数と呼び、map のように関数を受け取る関数を高階関数と呼ぶ。C の関数ポインタは番地だけで、実行中に関数を作れない（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>関数の値は、コードの番地と自由変数の値を入れた環境の組（クロージャ）。Rust は捕まえた変数を欄に持つ構造体、V8 は Context を指す関数の物で表す（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>Int -&gt; Int -&gt; Int は Int -&gt; (Int -&gt; Int) で、引数を一部だけ渡す部分適用で部品を作れる。カリー化は関数の形を変えることで、別の語（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>合成 f . g は、型の合う部品を、途中の名前も書き換える変数も無しにつなぐ。rustc -O と GHC -O2 は、つないだ全体を 1 つのループにした（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>リストの 2 つの形に沿った再帰を 1 つにまとめたのが foldr で、: を f に、[] を z に置き換える。有限のリストなら、f が止まる限り止まる（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>最後が呼び出しだけなら枠を使い回せ、機械語では先頭へ戻るループになる。繰り返しの状態は累積引数に移り、保証は言語ごとに違う（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th>第一級関数</th><td>引数に渡す、戻り値にする、名前やデータ構造にしまうの 3 つが、数と同じようにできる関数。Strachey の 1967 年の講義の言葉。</td></tr>
+        <tr><th>高階関数</th><td>関数を受け取るか返す関数。map・filter・foldr・(.)。</td></tr>
+        <tr><th><i class="sw d"></i>クロージャ・環境</th><td>関数の値を、コードの番地と、自由変数の値を入れた環境の組で表したもの（Landin、1964 年）。Rust で i32 を 1 つ move すると 4 バイト。</td></tr>
+        <tr><th>字句的スコープ</th><td>関数の中の名前を、定義した場所の環境で探す決まり。呼び出した側で探す決まり（第36章の saba）は動的スコープ。</td></tr>
+        <tr><th>カリー化</th><td>組を受け取る関数を、引数を 1 つずつ受け取る関数の連なりに変えること。curry・uncurry。考えは Schönfinkel（1924 年）、名は Curry から。</td></tr>
+        <tr><th>部分適用</th><td>引数の一部だけを渡し、残りを待つ関数を得ること。add 3 :: Int -&gt; Int。</td></tr>
+        <tr><th>関数合成</th><td>(f . g) x = f (g x)。g の出力の型と f の入力の型が同じときだけつながる。</td></tr>
+        <tr><th>畳み込み（fold）</th><td>リストの : を f に、[] を z に置き換えて 1 つの値にする高階関数。foldr (+) 0 [3,2,1] ＝ 6。</td></tr>
+        <tr><th>末尾呼び出し</th><td>関数が最後にすることが、ほかの関数（自分も含む）を呼ぶことだけの呼び出し。枠を使い回せる。gcc 15.2 -O2 では 3 命令のループ。</td></tr>
+        <tr><th>累積引数</th><td>途中の結果を運ぶ引数。go acc n の acc。第6章の sum が書き換えていた値を、引数で次の呼び出しへ渡す。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg;
+
+  /* ---------- この章で使う部品 ---------- */
+
+  /* 濃さ（fade の付いた要素は 0.35 秒かけて変わる） */
+  const op = (el, v) => { el.style.opacity = v; };
+  /* 動きを止めているときは、段階の動きの終わりの姿を見せる */
+  const playing = () => YT.motion.playing;
+  /* 文字の幅の見積もり（等幅は 0.6 em、全角は 1 em）。札の幅を書体の読み込みに左右されずに決める */
+  const tw = (s, fs, mono) => Array.from(String(s)).reduce((a, c) => a + (c.charCodeAt(0) > 0x2000 ? fs : fs * (mono ? 0.6 : 0.58)), 0);
+  /* 等幅の行の並び（空白を詰めない） */
+  function code(parent, x, y, lines, lh, cls) {
+    return lines.map((s, k) => S.text(x, y + k * lh, s, { cls: (cls || 't-mono t-sm') + ' pre' }, parent));
+  }
+  /* 枠付きの札（中央 cx・cy）。{ g, r, t, w } を返す */
+  function box(parent, cx, cy, s, o) {
+    o = o || {};
+    const fs = o.fs || 11, w = o.w || Math.max(o.min || 22, tw(s, fs, o.mono) + (o.pad == null ? 14 : o.pad)), h = o.h || 24;
+    const g = S.g({}, parent);
+    const r = S.rect(cx - w / 2, cy - h / 2, w, h, { rx: 4, cls: o.box || 'f-sf s-rule w1' }, g);
+    const t = S.text(cx, cy + fs * 0.36, s, { cls: 't-c ' + (o.cls || 't-sm') + (o.mono ? ' t-mono' : '') }, g);
+    return { g, r, t, w, cx, cy };
+  }
+  /* コードや機械語の列を枠に入れて描く。rows は [文字, 注記, 強調] の並び。下端の y を返す */
+  function codeCol(g, x, y, w, rows, o) {
+    o = o || {};
+    const lh = o.lh || 18, h = 12 + rows.length * lh;
+    S.rect(x, y, w, h, { rx: 6, cls: o.box || 'f-in s-rule w1' }, g);
+    rows.forEach(([s, note, hl], k) => {
+      const yy = y + 19 + k * lh;
+      if (hl) S.rect(x + 6, yy - 13, w - 12, lh - 1, { rx: 3, cls: 'f-x-soft s-none' }, g);
+      S.text(x + 12, yy, s, { cls: (o.cls || 't-sm t-mono') + ' pre' }, g);
+      if (note) S.text(x + (o.nx || 250), yy, '← ' + note, { cls: 't-xs' + (hl ? ' t-x t-b' : ' t-mid') }, g);
+    });
+    return y + h;
+  }
+  /* 誤りの札（コンパイラの出力）。1 行目が見出し */
+  function errBox(parent, x, y, w, lines, lh, fcls) {
+    const g = S.g({}, parent);
+    const h = 12 + lines.length * (lh || 18);
+    S.rect(x, y, w, h, { rx: 5, cls: 'f-x-soft s-x w15' }, g);
+    lines.forEach((s, k) => S.text(x + 12, y + 20 + k * (lh || 18), s, { cls: (fcls || 't-sm') + ' t-mono pre' + (k ? '' : ' t-b t-x') }, g));
+    return g;
+  }
+  /* 値の箱の横並び（リストのセルなど）。[{ g, r, t }] を返す */
+  function cells(parent, x, y, vals, o) {
+    o = o || {};
+    const w = o.w || 44, h = o.h || 40, gap = o.gap == null ? 6 : o.gap;
+    return vals.map((v, k) => {
+      const g = S.g({}, parent);
+      const r = S.rect(x + k * (w + gap), y, w, h, { rx: 4, cls: o.box || 'f-d-soft s-d w15' }, g);
+      const t = S.text(x + k * (w + gap) + w / 2, y + h / 2 + 5, String(v), { cls: 't-c t-mono t-b ' + (o.tcls || 't-lg') }, g);
+      return { g, r, t };
+    });
+  }
+  /* 折れ線 pts の上の、始点から長さの割合 f の点 */
+  function along(pts, f) {
+    const seg = [];
+    let L = 0;
+    for (let k = 1; k < pts.length; k++) { const d = Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); seg.push(d); L += d; }
+    let rest = U.clamp(f, 0, 1) * L;
+    for (let k = 0; k < seg.length; k++) {
+      if (rest <= seg[k] || k === seg.length - 1) {
+        const u = seg[k] ? Math.min(1, rest / seg[k]) : 0;
+        return [U.lerp(pts[k][0], pts[k + 1][0], u), U.lerp(pts[k][1], pts[k + 1][1], u)];
+      }
+      rest -= seg[k];
+    }
+    return pts[pts.length - 1];
+  }
+  /* 区切りの横線と、下の段の見出し */
+  function head(parent, x, y, a, b) {
+    S.text(x, y, a, { cls: 't-sm t-b' }, parent);
+    if (b) S.text(x + tw(a, 11) + 12, y, b, { cls: 't-xs t-dim' }, parent);
+  }
+
+  /* ================================================================
+     場面1 関数は値
+     出力は ghci（GHC 9.6.7）の map (*2) [3,2,1] ＝ [6,4,2]、filter odd [3,2,1] ＝ [3,1]、
+     map (\f -> f 3) [(*2), (+1), negate] ＝ [6,4,-3]。Node.js 24.22.1 の [3,2,1].map(x => x * 2) は [ 6, 4, 2 ]、
+     rustc 1.95.0 の vec![3, 2, 1].iter().map(|x| x * 2).collect::<Vec<i32>>() は [6, 4, 2]。
+     C は gcc 15.2.0（-O2 -Wall -Wextra）で xs が 6 4 2、sizeof(int (*)(int)) ＝ 8。入れ子の関数は -std=c17 -pedantic で
+     「warning: ISO C forbids nested functions [-Wpedantic]」。GCC の手引き（Nested Functions）は、外の関数から戻った後に
+     番地で呼ぶと「all hell breaks loose」と書く。ALGOL の手続きの扱いは Strachey の 1967 年の講義（HOSC 13, 2000）による（2026-11-22）
+     ================================================================ */
+  const S1_IN = [3, 2, 1], S1_OUT = [6, 4, 2];
+  const S1_X_IN = 48, S1_X_OUT = 760, S1_CY = 116, S1_TRACK = 170, S1_APPLY = 475;
+  const S1_PER = 3.6, S1_HOLD = 2.4, S1_CYCLE = S1_PER * 3 + S1_HOLD;
+  const s1 = {
+    steps: [
+      { title: '関数も値として扱う', text: '値としてできることは、引数に渡す、戻り値にする、名前やデータ構造にしまうの 3 つ。数でも関数でも 3 つともできる言語では、関数を**第一級**の値と呼ぶ。`x :: T` は「x の型は T」という Haskell の型の注釈で、`Int -> Int` は Int を受け取って Int を返す関数の型。' },
+      { title: '関数を受け取る関数', text: '関数を受け取るか返す関数を**高階関数**と呼ぶ。`map` は関数とリストを受け取り、各要素に関数を当てたリストを返す。`(*2)` は `\\x -> x * 2` の略記（演算子の切片）。型の `(a -> b)` が「関数を 1 つ受け取る」所で、a・b はどの型でもよいという印（[[41-inference.html#s3|第41章 場面3]]）。' },
+      { title: 'しまっておいて後で呼ぶ', text: '関数はリストの要素にもなる。`[(*2), (+1), negate]` の 3 つに同じ 3 を当てると `[6,4,-3]`。ブラウザのイベントも同じ形で、`addEventListener` は渡された関数をしまい、クリックの番が来るとメインスレッドがそれを呼ぶ（[[10-browser.html#s5.4|第10章 場面5]]）。' },
+      { title: 'JavaScript と Rust でも', text: 'JavaScript の配列の `map` と Rust の `Iterator` の `map` も高階関数で、答えは同じ 6・4・2。渡す `x => x * 2` と `|x| x * 2` は、`\\x -> x * 2` と同じ名前の無い関数（[[37-lambda.html#s6.5|第37章 場面6]]）。Rust の Option の map も同じ形（[[30-gbemu-desktop.html#s3|第30章 場面3]]）。' },
+      { title: 'C の関数ポインタ', text: 'C も関数を渡せる。渡るのは機械語の番地（8 バイト）だけで、`map(twice, xs, 3)` は xs を 6・4・2 にする。番地が指せるのはソースに書いた関数だけなので、呼ぶたびに違う n を足す関数は作れない。関数の中に関数を書くのは GNU C の拡張で、標準の C には無い。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      // ---- 上: map に関数とリストを渡す
+      S.text(40, 32, 'map (*2) [3,2,1]', { cls: 't-lg t-mono t-b pre' }, svg);
+      S.text(920, 32, 'ghci（GHC 9.6.7）の答えは [6,4,2]', { cls: 't-xs t-dim t-end' }, svg);
+      S.text(S1_X_IN, 86, '2 つ目の引数：リスト', { cls: 't-sm t-mid' }, svg);
+      cells(svg, S1_X_IN, S1_CY - 20, S1_IN);
+      S.rect(250, 62, 450, 136, { rx: 8, cls: 'f-sf s-mid w15' }, svg);
+      S.text(266, 88, 'map', { cls: 't-lg t-mono t-b' }, svg);
+      S.line(250, S1_TRACK, 700, S1_TRACK, { cls: 's-dim w1 dash2' }, svg);
+      S.line(S1_APPLY, 92, S1_APPLY, S1_TRACK - 22, { cls: 's-mid w15 dash', 'marker-end': mk('mid') }, svg);
+      S.text(S1_APPLY + 12, 132, '要素ごとに当てる', { cls: 't-xs t-mid' }, svg);
+      st.fn = S.g({}, svg);
+      S.rect(S1_APPLY - 58, 44, 116, 46, { rx: 6, cls: 'f-sf s-none' }, st.fn);   // 下地（map の枠の線を透かさない）
+      st.fnR = S.rect(S1_APPLY - 58, 44, 116, 46, { rx: 6, cls: 'f-d-soft s-d w2' }, st.fn);
+      S.text(S1_APPLY, 72, '(*2)', { cls: 't-c t-lg t-mono t-b t-d' }, st.fn);
+      st.fnLab = S.text(S1_APPLY + 70, 54, '1 つ目の引数：関数', { cls: 't-sm t-mid' }, svg);
+      S.text(S1_X_OUT, 86, '答え：新しいリスト', { cls: 't-sm t-mid' }, svg);
+      st.outBox = S1_OUT.map((v, k) => S.rect(S1_X_OUT + k * 50, S1_CY - 20, 44, 40, { rx: 4, cls: 'f-none s-d w1 dash2' }, svg));
+      st.out = cells(svg, S1_X_OUT, S1_CY - 20, S1_OUT);
+      // 動く札（要素 1 つ。動いている間だけ見せる）
+      st.tok = S.g({}, svg);
+      st.tokR = S.rect(-22, -20, 44, 40, { rx: 4, cls: 'f-sf s-d w2' }, st.tok);
+      st.tokT = S.text(0, 6, '3', { cls: 't-c t-lg t-mono t-b' }, st.tok);
+      op(st.tok, 0);
+      S.line(30, 214, 930, 214, { cls: 's-rule w1' }, svg);
+
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      // ---- 段階1: 型の注釈と、値としてできること
+      head(P[0], 40, 244, '値と型の注釈（Haskell）');
+      codeCol(P[0], 40, 258, 410, [
+        ['n :: Int', 'n の型は Int'], ['n = 3', ''],
+        ['xs :: [Int]', 'Int のリスト'], ['xs = [3, 2, 1]', ''],
+        ['double :: Int -> Int', 'Int を受け取り Int を返す', 1], ['double x = x * 2', '']
+      ], { nx: 210, lh: 26, cls: 't-md t-mono' });
+      S.lines(40, 456, ['型の注釈は書かなくても GHC が決める（第41章）。', 'この部では読みやすさのために書く'], { cls: 't-sm t-mid' }, P[0], 20);
+      head(P[0], 490, 244, '値としてできること');
+      const C1 = [700, 795, 880];
+      S.text(C1[0], 284, '数 n', { cls: 't-c t-sm t-b' }, P[0]);
+      S.text(C1[1], 284, '関数 double', { cls: 't-c t-sm t-b t-x' }, P[0]);
+      S.text(C1[2], 276, 'ALGOL 60', { cls: 't-c t-sm t-b' }, P[0]);
+      S.text(C1[2], 292, 'の手続き', { cls: 't-c t-xs' }, P[0]);
+      S.line(490, 302, 920, 302, { cls: 's-rule w1' }, P[0]);
+      [['引数に渡す', '○', '○', '○'], ['戻り値にする', '○', '○', '×'], ['名前やデータ構造にしまう', '○', '○', '×']].forEach(([a, b, c, d], j) => {
+        const y = 334 + j * 40;
+        S.text(490, y, a, { cls: 't-md' }, P[0]);
+        S.text(C1[0], y, b, { cls: 't-c t-lg t-b' }, P[0]);
+        S.text(C1[1], y, c, { cls: 't-c t-lg t-b t-x' }, P[0]);
+        S.text(C1[2], y, d, { cls: 't-c t-lg t-b' + (d === '×' ? ' t-dim' : '') }, P[0]);
+        S.line(490, y + 15, 920, y + 15, { cls: 's-soft w1' }, P[0]);
+      });
+      S.lines(490, 476, ['3 つとも ○ の値を第一級と呼ぶ。ALGOL 60 の手続きは、', 'ほかの手続きの引数に渡せるだけだった（Strachey、1967 年）'], { cls: 't-sm t-mid' }, P[0], 20);
+
+      // ---- 段階2: map の型と演算子の切片
+      head(P[1], 40, 244, 'map の型', 'ghci の :t map の答え');
+      S.text(60, 290, 'map :: (a -> b) -> [a] -> [b]', { cls: 't-xl t-mono t-b pre' }, P[1]);
+      // 型の部分の下に括弧の線と札（1 字 ＝ 19 × 0.6 ＝ 11.4px。(a -> b) は 7〜14 字目、[a] は 19〜21、[b] は 26〜28）
+      const CW = 11.4, sx = (n) => 60 + n * CW;
+      [[7, 15, '関数を 1 つ受け取る', 1], [19, 22, 'リスト', 0], [26, 29, '返すリスト', 0]].forEach(([a, b, s, hl]) => {
+        S.path(`M${sx(a) + 1},300 v6 H${sx(b) - 1} v-6`, { cls: 'f-none w15 ' + (hl ? 's-x' : 's-mid') }, P[1]);
+        S.text((sx(a) + sx(b)) / 2, 326, s, { cls: 't-c t-sm' + (hl ? ' t-x t-b' : ' t-mid') }, P[1]);
+      });
+      S.text(430, 290, 'a・b はどの型でもよいという印', { cls: 't-sm t-mid' }, P[1]);
+      codeCol(P[1], 40, 360, 440, [['map (*2) [3,2,1]', '[6,4,2]'], ['filter odd [3,2,1]', '[3,1]（奇数だけ残す）']], { nx: 220, lh: 28, cls: 't-md t-mono' });
+      S.text(40, 450, 'filter も関数（Bool を返す odd）を受け取る高階関数', { cls: 't-sm t-mid' }, P[1]);
+      head(P[1], 530, 372, '演算子の切片');
+      code(P[1], 530, 404, ['(*2)  ＝ \\x -> x * 2', '(+1)  ＝ \\x -> x + 1', '(2*)  ＝ \\x -> 2 * x'], 26, 't-md t-mono');
+      S.lines(530, 498, ['演算子と片側の引数だけを括弧に入れると、', '残りの引数を待つ関数になる'], { cls: 't-sm t-mid' }, P[1], 20);
+
+      // ---- 段階3: 関数のリスト
+      head(P[2], 40, 244, '関数をリストにしまう');
+      codeCol(P[2], 40, 258, 450, [['fs :: [Int -> Int]', '関数のリスト'], ['fs = [(*2), (+1), negate]', ''], ['map (\\f -> f 3) fs', '[6,4,-3]', 1]], { nx: 260, lh: 28, cls: 't-md t-mono' });
+      const FX = [600, 720, 840];
+      [['(*2)', '6'], ['(+1)', '4'], ['negate', '-3']].forEach(([f, v], j) => {
+        S.rect(FX[j] - 46, 258, 92, 34, { rx: 4, cls: 'f-sf s-none' }, P[2]);
+        box(P[2], FX[j], 275, f, { w: 92, h: 34, fs: 12.5, mono: true, cls: 't-md t-b t-d', box: 'f-d-soft s-d w15' });
+        S.arrow(P[2], FX[j], 296, FX[j], 328, 'mid', { cls: 's-mid w15' });
+        S.text(FX[j] + 8, 316, '3', { cls: 't-sm t-mono t-mid' }, P[2]);
+        box(P[2], FX[j], 350, v, { w: 54, h: 34, fs: 15, mono: true, cls: 't-lg t-b' });
+      });
+      S.text(554, 396, '同じ 3 を、しまった関数に 1 つずつ当てる', { cls: 't-sm t-mid' }, P[2]);
+      head(P[2], 40, 430, 'JavaScript のイベント');
+      code(P[2], 40, 462, ["button.addEventListener('click', onClick);"], 20, 't-md t-mono');
+      S.lines(40, 496, ['関数 onClick を値として渡してしまっておき、クリックの番が来たら呼ぶ。', '呼ぶ時と所を決めるのは、渡した側ではなくブラウザのイベントループ'], { cls: 't-sm t-mid' }, P[2], 20);
+
+      // ---- 段階4: 3 つの言語
+      head(P[3], 40, 244, '同じ map を 3 つの言語で', '出力は手元で動かしたもの');
+      S.text(40, 276, '言語', { cls: 't-xs t-dim' }, P[3]);
+      S.text(160, 276, '書き方', { cls: 't-xs t-dim' }, P[3]);
+      S.text(770, 276, '出力', { cls: 't-xs t-dim' }, P[3]);
+      S.line(40, 284, 920, 284, { cls: 's-rule w1' }, P[3]);
+      [['Haskell', 'map (*2) [3,2,1]', '[6,4,2]', 'GHC 9.6.7'],
+       ['JavaScript', '[3,2,1].map(x => x * 2)', '[ 6, 4, 2 ]', 'Node.js 24.22.1'],
+       ['Rust', 'vec![3, 2, 1].iter().map(|x| x * 2).collect::<Vec<i32>>()', '[6, 4, 2]', 'rustc 1.95.0']].forEach(([l, c, o, v], j) => {
+        const y = 314 + j * 48;
+        S.text(40, y, l, { cls: 't-md t-b' }, P[3]);
+        S.text(40, y + 18, v, { cls: 't-xs t-dim' }, P[3]);
+        S.text(160, y + 6, c, { cls: 't-md t-mono pre' }, P[3]);
+        S.text(770, y + 6, o, { cls: 't-md t-mono t-b t-d pre' }, P[3]);
+        S.line(40, y + 28, 920, y + 28, { cls: 's-soft w1' }, P[3]);
+      });
+      head(P[3], 40, 486, '名前の無い関数の書き方');
+      [['Haskell', '\\x -> x * 2'], ['JavaScript', 'x => x * 2'], ['Rust', '|x| x * 2']].forEach(([l, c], j) => {
+        S.text(220 + j * 240, 486, l, { cls: 't-xs t-dim' }, P[3]);
+        S.text(220 + j * 240, 512, c, { cls: 't-lg t-mono t-b pre' }, P[3]);
+      });
+
+      // ---- 段階5: C の関数ポインタ
+      head(P[4], 40, 244, 'C：関数の番地を渡す', 'gcc 15.2 -O2 -Wall -Wextra');
+      codeCol(P[4], 40, 258, 440, [
+        ['int twice(int x) { return x * 2; }', ''],
+        ['void map(int (*f)(int), int *xs, int n) {', ''],
+        ['  for (int i = 0; i < n; i++) xs[i] = f(xs[i]);', ''],
+        ['}', ''],
+        ['map(twice, xs, 3);   // xs は 6 4 2', '', 1]
+      ], { lh: 22, cls: 't-sm t-mono' });
+      S.text(40, 404, 'sizeof(int (*)(int)) ＝ 8', { cls: 't-md t-mono t-b' }, P[4]);
+      S.text(40, 426, '中身は twice の機械語の番地だけ', { cls: 't-sm t-mid' }, P[4]);
+      head(P[4], 510, 244, '呼ぶたびに違う n を足す関数は？', 'gcc -std=c17 -pedantic');
+      codeCol(P[4], 510, 258, 410, [
+        ['typedef int (*fn)(int);', ''],
+        ['fn add_n(int n) {', ''],
+        ['  int f(int x) { return x + n; }', ''],
+        ['  return f;', ''],
+        ['}', '']
+      ], { lh: 22, cls: 't-sm t-mono' });
+      errBox(P[4], 510, 386, 410, ['warning: ISO C forbids nested functions [-Wpedantic]', '    3 |   int f(int x) { return x + n; }', '      |   ^~~'], 17, 't-xs');
+      S.lines(510, 474, ['入れ子の関数は GNU C の拡張。GCC の手引きは、add_n から', '戻った後にその番地で呼ぶと何が起きるか分からない、と書く'], { cls: 't-xs t-mid' }, P[4], 17);
+      S.text(40, 524, 'f が使う n は add_n の呼び出しのもの。番地だけでは、どの n かを持ち歩けない（場面2）', { cls: 't-sm t-x t-b' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      st.fnR.setAttribute('class', i <= 1 ? 'f-d-soft s-x w2' : 'f-d-soft s-d w2');
+      st.fnLab.setAttribute('class', 't-sm ' + (i <= 1 ? 't-x t-b' : 't-mid'));
+    },
+    frame(ctx) {
+      const st = ctx.state, run = playing();
+      const c = run ? U.mod(ctx.ts, S1_CYCLE) : S1_CYCLE;
+      const k = Math.floor(c / S1_PER), f = c - k * S1_PER;
+      // 出力の箱は、運び終えた要素の分だけ埋まる（止めているときは全部）
+      st.out.forEach((o, j) => op(o.g, (!run || j < k || (j === k && f >= 3.1)) ? 1 : 0));
+      if (!run || k >= 3 || f < 0.3 || f >= 3.1) { op(st.tok, 0); return; }
+      // 入力の k 番目 → 下の線 → 当てる所 → 出口 → 出力の k 番目。入力のリストはそのまま残る
+      const pts = [[S1_X_IN + 22 + k * 50, S1_CY + 30], [S1_X_IN + 22 + k * 50, S1_TRACK], [S1_APPLY, S1_TRACK], [S1_X_OUT + 22 + k * 50, S1_TRACK], [S1_X_OUT + 22 + k * 50, S1_CY + 30]];
+      const u = U.ease.inOut(U.prog(f, 0.3, 2.8));
+      const [x, y] = along(pts, u);
+      st.tok.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+      op(st.tok, 1);
+      const past = x >= S1_APPLY;
+      st.tokT.textContent = String(past ? S1_OUT[k] : S1_IN[k]);
+      st.tokR.setAttribute('class', past && x < S1_APPLY + 40 ? 'f-x-soft s-x w2' : 'f-sf s-d w2');
+    }
+  };
+
+  /* ================================================================
+     場面2 クロージャ
+     簡約の列の各式は ghci（GHC 9.6.7）でどれも 5、add5 2 は 7。
+     rustc 1.95.0（edition 2021 と 2024 で同じ）: |x| x + n を返すと E0373。size_of_val は move で i32 を写すと 4、
+     何も捕まえないと 0、借りると 8、Box<dyn Fn(i32) -> i32> は 16。Box の 2 語を transmute_copy で読むと、
+     1 語目の先に 3、2 語目の先の表は [0, 4, 4, 番地, 番地, 番地]（4 番目と 5 番目は同じ番地）。
+     GHC 9.6.7 -O0 の -ddump-stg-final: use = {} \r [n xs] let { sat = {n} \r [x] + $fNumInt x n; } in  map sat xs;
+     Node.js 24.22.1（V8 13.6）: --print-bytecode の addN は CreateFunctionContext [0], [1] / PushContext r0 / Ldar a0 /
+     StaCurrentContextSlot [2] / CreateClosure [1], [0], #2 / Return、inner は LdaImmutableCurrentContextSlot [2] / Add a0, [0] / Return。
+     --allow-natives-syntax の %DebugPrint: add3 と add5 の shared_info は同じ 0x16a8d20f53c9 <SharedFunctionInfo inner>、
+     context は 0x3f84920ec1d1 と 0x3f84920ec239（どちらも <FunctionContext[3]>）。n と m を捕まえると <FunctionContext[4]>、
+     何も捕まえない twice は <NativeContext[302]>。番地は実行ごとに変わる。
+     スコープの例は Node.js で 5。f を作った後に n = 10 とすると addN(3)(2) は 12。
+     Landin の定義は The Computer Journal 6(4)（1964）の本文で確かめた（2026-11-22）
+     ================================================================ */
+  const CW2 = 7.5, X2 = 44;              // t-md の等幅 1 字の幅、コードの左端
+  const cc2 = (c) => X2 + c * CW2 + CW2 / 2;   // c 字目の中央
+  const s2 = {
+    steps: [
+      { title: '自由変数', text: '`\\x -> x + n` の本体で、x は λ 自身の引数（束縛変数）、n は外側の addN の引数（**自由変数**）。式の上では、`addN 3` は n を 3 に置き換えた `\\x -> x + 3` に簡約され（[[37-lambda.html#s3|第37章 場面3]]）、`add3 2` は 5 になる。n の値ごとに、新しい関数の式ができる。' },
+      { title: 'コードは 1 つ、枠は消える', text: '機械の上では、`\\x -> x + n` の機械語はプログラムに 1 つで、呼ぶたびに 3 や 5 を書き込みはしない。n は実行時にどこかから読む。呼び出しごとに引数を置くスタックの区画（**枠**）は、戻ると消える（[[27-algorithm.html#s5.5|第27章 場面5]]）。Rust は、消える n を借りたまま返すクロージャを E0373 で止める。' },
+      { title: 'コードと環境の組', text: '関数の値を、コードの番地と、自由変数の値を入れた**環境**の組にする。これが**クロージャ**（Landin、1964 年）。環境は addN の枠の外（ヒープなど）に置くので、addN から戻っても n ＝ 3 が残る。`add5 = addN 5` は、同じコードの番地と、n ＝ 5 の環境の組になる。' },
+      { title: 'Rust：捕まえた変数を欄に持つ構造体', text: 'Rust のクロージャは、捕まえた変数を欄に持つ構造体になる。`move` で n を写すと 4 バイト、何も捕まえないと 0、n を借りると番地の 8。コードは型ごとに 1 つに決まるので、値に番地を持たない。`Box<dyn Fn(i32) -> i32>` は、中身への番地とコードの番地の表への番地で 16 バイト。' },
+      { title: 'V8：関数の物が Context を指す', text: 'V8 は addN を呼ぶたびに Context（環境）を作って n を書き、それを指す関数の物を作る。inner のコードは n を Context から読む。`%DebugPrint` で見ると、add3 と add5 はコードの情報（SharedFunctionInfo）が同じで、Context は別の物だった。' },
+      { title: '字句的スコープ', text: 'ECMAScript の関数は、定義した場所の環境を持つ（**字句的スコープ**）。add の n は定義した所の n ＝ 3 で、`g()` は 5。呼び出した側の環境をたどる saba の規則（[[36-saba-js.html#s4.6|第36章 場面4]]）で読むと、g の n ＝ 10 が見えて 12。返した関数が後で定義した所の n を使えるのは、環境を持ち歩くから。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      // ---- 上の左: 例のコード
+      S.rect(30, 20, 300, 228, { rx: 6, cls: 'f-in s-rule w1' }, svg);
+      S.text(X2, 46, 'addN :: Int -> (Int -> Int)', { cls: 't-md t-mono pre' }, svg);
+      const t1 = S.text(X2, 102, '', { cls: 't-md t-mono pre' }, svg);
+      const part = (s) => S.el('tspan', { text: s }, t1);
+      part('addN '); st.pN = part('n'); part(' = \\'); st.pX = part('x'); part(' -> '); st.bX = part('x'); part(' + '); st.bN = part('n');
+      // 使う所から束縛する所への線: x は下側、n は上側（どちらも使う所から引数の所へ）
+      st.arcs = S.g({ cls: 'fade hide' }, svg);
+      S.path(`M${cc2(15)},108 C${cc2(15)},122 ${cc2(10)},122 ${cc2(10)},110`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, st.arcs);
+      S.path(`M${cc2(19)},88 C${cc2(19)},60 ${cc2(5)},60 ${cc2(5)},86`, { cls: 'f-none s-x w15', 'marker-end': mk('x') }, st.arcs);
+      S.text(X2, 142, 'x：λ 自身の引数（束縛変数）', { cls: 't-xs t-mid' }, st.arcs);
+      S.text(X2, 158, 'n：外側の addN の引数（自由変数）', { cls: 't-xs t-x t-b' }, st.arcs);
+      code(svg, X2, 186, ['add3 = addN 3', 'add5 = addN 5'], 22, 't-md t-mono');
+      S.text(X2, 236, 'add3 2        -- 5', { cls: 't-md t-mono pre' }, svg);
+
+      // ---- 上の右: メモリの模式図（スタック・ヒープ・機械語）
+      const M = st.mem = S.g({}, svg);
+      [['スタック', 440, 360, 160], ['ヒープ', 655, 560, 190], ['機械語', 855, 780, 150]].forEach(([s, x, x0, w]) => {
+        S.text(x, 36, s, { cls: 't-c t-xs t-b t-mid' }, M);
+        S.rect(x0, 44, w, 204, { rx: 6, cls: 'f-none s-soft w1' }, M);
+      });
+      // 機械語: \x -> x + n のコードは 1 つ
+      st.codeR = S.rect(792, 96, 128, 96, { rx: 6, cls: 'f-in s-mid w15' }, M);
+      S.text(856, 128, '\\x -> x + n', { cls: 't-c t-sm t-mono t-b pre' }, M);
+      S.text(856, 148, 'の機械語', { cls: 't-c t-xs' }, M);
+      S.text(856, 176, 'プログラムに 1 つ', { cls: 't-c t-xs t-dim' }, M);
+      // main の枠
+      S.rect(368, 172, 144, 66, { rx: 4, cls: 'f-sf s-mid w1' }, M);
+      S.text(376, 188, 'main の枠', { cls: 't-xs t-dim' }, M);
+      st.v3 = S.g({}, M);
+      S.text(376, 210, 'add3', { cls: 't-sm t-mono' }, st.v3);
+      S.circle(500, 206, 3.5, { cls: 'f-fg' }, st.v3);
+      st.v5 = S.g({ cls: 'fade hide' }, M);
+      S.text(376, 230, 'add5', { cls: 't-sm t-mono' }, st.v5);
+      S.circle(500, 226, 3.5, { cls: 'f-fg' }, st.v5);
+      // addN 3 の枠（段階2: 戻ると消える）。外の g で出し入れし、中の g の濃さを frame が変える
+      st.fA = S.g({ cls: 'fade hide' }, M);
+      st.fAi = S.g({}, st.fA);
+      st.fAr = S.rect(368, 100, 144, 60, { rx: 4, cls: 'f-sf s-x w15' }, st.fAi);
+      S.text(376, 116, 'addN 3 の枠', { cls: 't-xs t-dim' }, st.fAi);
+      S.text(376, 142, 'n = 3', { cls: 't-md t-mono t-b' }, st.fAi);
+      st.fAgone = S.g({}, st.fA);
+      S.text(440, 90, '戻ると消える', { cls: 't-c t-xs t-x t-b' }, st.fAgone);
+      // 段階2: 番地だけの関数の値（n が無い）
+      st.direct = S.g({ cls: 'fade hide' }, M);
+      S.path('M504,206 C620,250 740,230 790,178', { cls: 'f-none s-mid w15 dash', 'marker-end': mk('mid') }, st.direct);
+      S.text(856, 214, 'n はどこから？', { cls: 't-c t-sm t-x t-b' }, st.direct);
+      S.text(640, 214, '番地だけ', { cls: 't-c t-xs t-mid' }, st.direct);
+      // 段階3〜: ヒープのクロージャ 2 つと、add3 2 の枠
+      st.heap = S.g({ cls: 'fade hide' }, M);
+      [[84, '3', 'add3 の値'], [170, '5', 'add5 の値']].forEach(([y, v, s]) => {
+        S.text(572, y - 6, s, { cls: 't-xs t-dim' }, st.heap);
+        S.rect(572, y, 92, 44, { rx: 4, cls: 'f-d-soft s-d w15' }, st.heap);
+        S.text(618, y + 27, 'n = ' + v, { cls: 't-c t-md t-mono t-b' }, st.heap);
+        S.rect(664, y, 76, 44, { rx: 4, cls: 'f-sf s-d w15' }, st.heap);
+        S.text(694, y + 26, 'コード', { cls: 't-c t-xs' }, st.heap);
+        S.circle(726, y + 22, 3.5, { cls: 'f-fg' }, st.heap);
+      });
+      S.text(618, 76 - 18, '環境', { cls: 't-c t-xs t-d t-b' }, st.heap);
+      S.path('M504,206 C548,206 532,106 568,106', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, st.heap);
+      S.path('M504,226 C540,226 540,192 568,192', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, st.heap);
+      S.path('M730,106 C766,106 760,132 790,132', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, st.heap);
+      S.path('M730,192 C766,192 760,164 790,164', { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, st.heap);
+      st.fB = S.g({ cls: 'fade hide' }, M);
+      S.rect(368, 100, 144, 60, { rx: 4, cls: 'f-sf s-x w15' }, st.fB);
+      S.text(376, 116, 'add3 2 の枠', { cls: 't-xs t-dim' }, st.fB);
+      S.text(376, 138, 'x = 2', { cls: 't-md t-mono t-b' }, st.fB);
+      st.fBres = S.g({}, st.fB);
+      S.text(376, 154, 'x + n ＝ 5', { cls: 't-xs t-mono t-b t-x' }, st.fBres);
+      S.path('M512,140 C560,152 604,152 616,132', { cls: 'f-none s-x w15', 'marker-end': mk('x') }, st.fB);
+      S.text(640, 148, 'n を読む', { cls: 't-xs t-x t-b' }, st.fB);
+      S.line(30, 258, 930, 258, { cls: 's-rule w1' }, svg);
+
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+      // ---- 段階1: 式の上での簡約
+      head(P[0], 40, 284, '式の上では、引数を置き換える', '第37章 場面3 のβ簡約');
+      [['  add3 2', ''], ['= addN 3 2', 'add3 の定義'], ['= (\\x -> x + 3) 2', 'addN の本体の n を 3 に置き換える', 1], ['= 2 + 3', 'x を 2 に置き換える'], ['= 5', '']].forEach(([s, n, hl], j) => {
+        const y = 318 + j * 30;
+        S.text(60, y, s, { cls: 't-md t-mono pre' + (hl ? ' t-b' : '') }, P[0]);
+        if (n) S.text(260, y, n, { cls: 't-sm' + (hl ? ' t-x t-b' : ' t-mid') }, P[0]);
+      });
+      S.rect(600, 300, 320, 120, { rx: 6, cls: 'f-sf s-rule w1' }, P[0]);
+      S.text(616, 326, 'add5 = addN 5 なら', { cls: 't-sm t-mono pre' }, P[0]);
+      S.text(616, 356, '\\x -> x + 5', { cls: 't-lg t-mono t-b t-d pre' }, P[0]);
+      S.text(616, 384, 'n の値ごとに、別の関数の式ができる', { cls: 't-sm t-mid' }, P[0]);
+      S.text(616, 406, 'ghci の答え：add3 2 は 5、add5 2 は 7', { cls: 't-xs t-dim' }, P[0]);
+      S.text(60, 488, '機械は式を置き換えて新しいコードを作るのではなく、決まったコードを走らせる（段階2）', { cls: 't-sm t-x t-b' }, P[0]);
+
+      // ---- 段階2: Rust の E0373
+      head(P[1], 40, 284, 'Rust：消える n を借りたまま返すと止まる', 'rustc 1.95.0');
+      codeCol(P[1], 40, 296, 440, [['fn add_n(n: i32) -> impl Fn(i32) -> i32 {', ''], ['    |x| x + n', '', 1], ['}', '']], { lh: 22, cls: 't-sm t-mono' });
+      S.lines(510, 318, ['n は add_n の枠にある。move の無い |x| x + n は', 'n を借りる（n の番地を持つ）。add_n から戻ると', '枠が消え、番地の先が無くなる'], { cls: 't-sm t-mid' }, P[1], 20);
+      errBox(P[1], 40, 392, 880, [
+        'error[E0373]: closure may outlive the current function, but it borrows `n`, which is owned by the current function',
+        '2 |     |x| x + n',
+        '  |     ^^^     - `n` is borrowed here',
+        'help: to force the closure to take ownership of `n` (and any other referenced variables), use the `move` keyword'
+      ], 18, 't-xs');
+      S.text(40, 512, 'move |x| x + n と書くと n の値を写して持ち、add_n(3)(2) は 5 を返す', { cls: 't-sm t-b' }, P[1]);
+
+      // ---- 段階3: Landin の定義と、GHC の中間表現
+      head(P[2], 40, 284, 'クロージャの名付け');
+      S.lines(40, 314, ['Landin は 1964 年の論文「The mechanical evaluation of', 'expressions」で、λ式の値を「λ式と、それを評価した', 'ときの環境」の組で表し、closure と呼んだ。'], { cls: 't-sm' }, P[2], 22);
+      S.text(40, 396, '環境の部分を持つので、関数の値が作られた所の外でも、', { cls: 't-sm t-mid' }, P[2]);
+      S.text(40, 418, '自由変数の値が分かる', { cls: 't-sm t-mid' }, P[2]);
+      head(P[2], 480, 284, 'GHC の中間表現（STG）', 'ghc -O0 -ddump-stg-final');
+      S.text(480, 314, 'use n xs = map (\\x -> x + n) xs', { cls: 't-sm t-mono pre' }, P[2]);
+      codeCol(P[2], 480, 326, 440, [['use = {} \\r [n xs]', ''], ['  let { sat = {n} \\r [x] + $fNumInt x n; }', '', 1], ['  in  map sat xs;', '']], { lh: 22, cls: 't-sm t-mono' });
+      [['{n}', '自由変数の組（環境に入れる物）'], ['\\r [x]', '引数 x を受け取る関数'], ['let { sat = … }', 'ヒープにクロージャを作り、sat と名付ける'], ['+ $fNumInt x n', 'Int の足し算 x + n']].forEach(([a, b], j) => {
+        const y = 436 + j * 24;
+        S.text(480, y, a, { cls: 't-sm t-mono t-b pre' }, P[2]);
+        S.text(620, y, b, { cls: 't-sm t-mid' }, P[2]);
+      });
+
+      // ---- 段階4: Rust の大きさ
+      head(P[3], 40, 284, 'クロージャの値の中身', 'size_of_val・sizeof。1 マス ＝ 1 バイト。rustc 1.95.0（-O でも debug でも同じ）');
+      const BX = 360, BW = 13;
+      // n バイトの欄。バイトの区切りは上下の縁の短い刻みだけ（札の文字を線が横切らないように）
+      const bytes = (g, x, y, n, cls, label) => {
+        S.rect(x, y, n * BW - 1, 24, { rx: 3, cls }, g);
+        for (let k = 1; k < n; k++) {
+          S.line(x + k * BW - 0.5, y, x + k * BW - 0.5, y + 4, { cls: 's-d w1' }, g);
+          S.line(x + k * BW - 0.5, y + 20, x + k * BW - 0.5, y + 24, { cls: 's-d w1' }, g);
+        }
+        if (label) S.text(x + (n * BW - 1) / 2, y + 16, label, { cls: 't-c t-xs t-b' }, g);
+      };
+      [['C の int (*)(int)', 8, 'f-sf s-mid w1', 'コードの番地', '8 バイト', 'コードの番地だけ（場面1）'],
+       ['move |x| x + n', 4, 'f-d-soft s-d w1', 'n', '4 バイト', 'n の値の写しだけ'],
+       ['|x| x * 2', 0, '', '', '0 バイト', '捕まえる物が無い'],
+       ['|x| x + n（n を借りる）', 8, 'f-in s-d w1', '&n', '8 バイト', 'n の番地'],
+       ['Box<dyn Fn(i32) -> i32>', 16, '', '', '16 バイト', '中身への番地 ＋ 表への番地']].forEach(([c, n, cls, lab, sz, note], j) => {
+        const y = 304 + j * 34;
+        S.text(40, y + 16, c, { cls: 't-sm t-mono pre' + (j ? '' : ' t-mid') }, P[3]);
+        if (n && cls) bytes(P[3], BX, y, n, cls, lab);
+        if (!n) S.text(BX, y + 16, '（欄が無い）', { cls: 't-xs t-dim' }, P[3]);
+        S.text(600, y + 16, sz, { cls: 't-sm t-b' }, P[3]);
+        S.text(680, y + 16, note, { cls: 't-xs t-mid' }, P[3]);
+      });
+      const yb = 304 + 4 * 34;
+      bytes(P[3], BX, yb, 8, 'f-in s-d w1', '中身への番地');
+      bytes(P[3], BX + 8 * BW, yb, 8, 'f-in s-d w1', '表への番地');
+      S.path(`M${BX + 52},${yb + 24} V${yb + 46}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, P[3]);
+      bytes(P[3], BX + 26, yb + 50, 4, 'f-d-soft s-d w1', '3');
+      S.text(BX + 26 + 4 * BW + 8, yb + 66, 'ヒープの n', { cls: 't-xs t-mid' }, P[3]);
+      S.path(`M${BX + 156},${yb + 24} C${BX + 156},${yb + 38} ${BX + 290},${yb + 34} ${BX + 290},${yb + 46}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, P[3]);
+      const VT = [['0', 'drop'], ['4', '大きさ'], ['4', '揃え'], ['●', ''], ['●', ''], ['●', '']];
+      VT.forEach(([v, s], k) => {
+        const x = BX + 230 + k * 50;
+        S.rect(x, yb + 50, 48, 24, { rx: 3, cls: 'f-sf s-mid w1' }, P[3]);
+        S.text(x + 24, yb + 66, v, { cls: 't-c t-xs t-mono t-b' }, P[3]);
+        if (s) S.text(x + 24, yb + 90, s, { cls: 't-c t-xs t-dim' }, P[3]);
+      });
+      S.text(BX + 230 + 4 * 50, yb + 90, '呼ぶ関数の番地 3 つ', { cls: 't-c t-xs t-dim' }, P[3]);
+      S.text(40, yb + 66, '表は rustc 1.95 で読んだ値', { cls: 't-xs t-dim' }, P[3]);
+
+      // ---- 段階5: V8 のバイトコードと %DebugPrint
+      head(P[4], 40, 284, 'V8 のバイトコード', 'node --print-bytecode（Node.js 24.22.1）');
+      S.text(40, 306, 'function addN(n) { return function inner(x) { return x + n; }; }', { cls: 't-sm t-mono pre' }, P[4]);
+      S.text(40, 326, 'addN', { cls: 't-xs t-b' }, P[4]);
+      codeCol(P[4], 40, 332, 430, [['CreateFunctionContext [0], [1]', 'Context を作る'], ['PushContext r0', ''], ['Ldar a0', '引数 n'], ['StaCurrentContextSlot [2]', 'n を欄 2 へ書く', 1], ['CreateClosure [1], [0], #2', 'inner の関数の物を作る', 1], ['Return', '']], { lh: 17, cls: 't-xs t-mono', nx: 250 });
+      S.text(490, 326, 'inner', { cls: 't-xs t-b' }, P[4]);
+      codeCol(P[4], 490, 332, 430, [['LdaImmutableCurrentContextSlot [2]', 'n を欄 2 から読む', 1], ['Add a0, [0]', 'x（a0）を足す'], ['Return', '']], { lh: 17, cls: 't-xs t-mono', nx: 270 });
+      S.text(490, 428, 'Context の欄 0・1 は V8 が使い、変数は欄 2 から入る（と読める）', { cls: 't-xs t-mid' }, P[4]);
+      head(P[4], 40, 466, '%DebugPrint', '--allow-natives-syntax。番地は実行ごとに変わる');
+      [['add3', '0x16a8d20f53c9 <SharedFunctionInfo inner>', '0x3f84920ec1d1 <FunctionContext[3]>'],
+       ['add5', '0x16a8d20f53c9 <SharedFunctionInfo inner>', '0x3f84920ec239 <FunctionContext[3]>']].forEach(([a, b, c], j) => {
+        const y = 490 + j * 20;
+        S.text(40, y, a, { cls: 't-xs t-mono t-b' }, P[4]);
+        S.text(90, y, 'shared_info: ' + b, { cls: 't-xs t-mono pre' }, P[4]);
+        S.text(500, y, 'context: ' + c, { cls: 't-xs t-mono pre t-x' }, P[4]);
+      });
+      S.text(432, 500, '同じ', { cls: 't-xs t-b' }, P[4]);
+      S.text(800, 500, '別の物', { cls: 't-xs t-b t-x' }, P[4]);
+      S.text(40, 534, 'n と m を捕まえる関数は FunctionContext[4]、何も捕まえない関数は自分の Context を持たない（NativeContext を指す）', { cls: 't-xs t-mid' }, P[4]);
+
+      // ---- 段階6: 字句的スコープと、呼び出した側をたどる規則
+      head(P[5], 40, 284, '同じコードを 2 つの規則で読む');
+      codeCol(P[5], 40, 296, 420, [['var n = 3;', ''], ['function add(x) { return x + n; }', ''], ['function g() { var n = 10; return add(2); }', ''], ['g();', '']], { lh: 22, cls: 't-sm t-mono' });
+      S.text(40, 424, 'Node.js 24.22.1 の答え：5', { cls: 't-md t-b t-d' }, P[5]);
+      const env = (g, x, y, a, b, hl) => {
+        S.rect(x, y, 110, 42, { rx: 4, cls: hl ? 'f-d-soft s-x w15' : 'f-sf s-mid w1' }, g);
+        S.text(x + 8, y + 16, a, { cls: 't-xs t-dim' }, g);
+        S.text(x + 8, y + 34, b, { cls: 't-sm t-mono t-b' + (hl ? ' t-x' : '') }, g);
+      };
+      S.text(490, 304, '字句的スコープ（ECMAScript）：定義した場所の環境をたどる', { cls: 't-xs t-b' }, P[5]);
+      env(P[5], 490, 314, 'add の環境', 'x = 2');
+      S.arrow(P[5], 602, 335, 646, 335, 'mid', { cls: 's-mid w15' });
+      env(P[5], 650, 314, '大域', 'n = 3', 1);
+      S.text(780, 340, 'x + n ＝ 5', { cls: 't-sm t-mono t-b' }, P[5]);
+      S.text(490, 404, '呼び出した側をたどる（第36章 場面4 の saba の規則で読む）', { cls: 't-xs t-b' }, P[5]);
+      env(P[5], 490, 414, 'add の環境', 'x = 2');
+      S.arrow(P[5], 602, 435, 640, 435, 'mid', { cls: 's-mid w15' });
+      env(P[5], 644, 414, 'g の環境', 'n = 10', 1);
+      S.arrow(P[5], 756, 435, 794, 435, 'mid', { cls: 's-mid w15' });
+      env(P[5], 798, 414, '大域', 'n = 3');
+      S.text(490, 480, 'x + n ＝ 12', { cls: 't-sm t-mono t-b' }, P[5]);
+      S.text(40, 508, '矢印は環境の外側（outer）。見つからない名前は矢印の先で探す', { cls: 't-xs t-mid' }, P[5]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      // 上の左: 自由変数の色は段階1 で
+      st.pN.setAttribute('class', i === 0 ? 't-x t-b' : '');
+      st.bN.setAttribute('class', i === 0 ? 't-x t-b' : '');
+      st.pX.setAttribute('class', i === 0 ? 't-b' : '');
+      st.bX.setAttribute('class', i === 0 ? 't-b' : '');
+      S.fade(st.arcs, i === 0);
+      // 上の右: メモリ
+      op(st.mem, i === 0 ? 0.45 : i >= 3 ? 0.4 : '');
+      S.fade(st.fA, i === 1);
+      S.fade(st.direct, i === 1);
+      S.fade(st.heap, i >= 2);
+      S.fade(st.v5, i >= 2);
+      S.fade(st.fB, i >= 2);
+      st.codeR.setAttribute('class', i === 1 ? 'f-in s-x w2' : 'f-in s-mid w15');
+      op(st.fAi, '');
+      op(st.fAgone, '');
+      op(st.fBres, '');
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      if (i === 1) {
+        // addN 3 の枠が積まれ、戻ると消える（6 秒ごと）。止めているときは消えた後の姿
+        const c = run ? U.mod(ctx.ts, 6) : 6;
+        const f = U.prog(c, 2.2, 0.8);
+        op(st.fAi, (1 - 0.8 * f).toFixed(2));
+        st.fAr.setAttribute('class', f > 0 ? 'f-sf s-x w15 dash' : 'f-sf s-x w15');
+        op(st.fAgone, f >= 1 ? 1 : 0);
+      } else if (i === 2) {
+        const c = run ? U.mod(ctx.ts, 6) : 6;
+        op(st.fBres, c >= 1.2 ? 1 : 0);
+      }
+    }
+  };
+
+  /* ================================================================
+     場面3 カリー化と部分適用
+     ghci（GHC 9.6.7）: :t add は add :: Int -> Int -> Int、:t add 3 は add 3 :: Int -> Int、map (add 3) [3,2,1] は [6,5,4]、
+     :t applyTo3 は applyTo3 :: (Int -> Int) -> Int、applyTo3 (add 3) は 6、:t curry addPair は curry addPair :: Int -> Int -> Int、
+     curry addPair 3 2 と uncurry add (3, 2) は 5。Node.js 24.22.1: add(3)(2) と addPair.bind(null, 3)(2) は 5。
+     STG は ghc -O0 -ddump-stg-final -dsuppress-uniques -dsuppress-module-prefixes -dsuppress-type-signatures -dsuppress-idinfo の出力
+     （sat = I#! [3#] と sat = I#! [2#] の行は図では注記にした）。NOINLINE を外すと two = {} \u [] + $fNumInt sat sat; になった（2026-11-22）
+     ================================================================ */
+  const s3 = {
+    steps: [
+      { title: '-> は右に結合する', text: '`Int -> Int -> Int` は `Int -> (Int -> Int)` と読む（`->` は右に結合する）。add は Int を受け取り、「Int を受け取って Int を返す関数」を返す。適用は左に結合し、`add 3 2` は `(add 3) 2`。2 引数の関数を、1 引数の関数の 2 回の適用で表す。' },
+      { title: '部分適用', text: '引数を一部だけ渡すことを**部分適用**と呼ぶ。`add 3` は 3 を環境に持つ `Int -> Int` の関数で、場面2 のクロージャと同じ形。`map (add 3) [3,2,1]` は `[6,5,4]`。場面2 の addN も同じ型で、λ を本体に書くか、引数の側に書くかの違いしかない。' },
+      { title: 'カリー化は形を変えること', text: '組 `(Int, Int)` を受け取る `addPair` を、1 つずつ受け取る形に変えるのが**カリー化**（`curry`。逆は `uncurry`）。部分適用は引数を一部だけ渡すことで、別の語。JavaScript の `(x, y) => x + y` はカリー化していないが、`bind` で部分適用できる。' },
+      { title: '毎回は作らない', text: 'GHC は addN の `\\x` を引数の側へ移し、2 つ受け取る関数にした（STG の `[n x]`）。2 つそろった `addN 3 2` は addN を直接呼び、クロージャを作らない。`map (addN n) xs` のように 1 つだけ渡す所では、残りを待つクロージャを作った（GHC 9.6.7 の -O0）。' },
+      { title: '部品を作る', text: '`filter odd` と `map (*2)` も部分適用で、リストを受け取る関数になる。Haskell の map と filter は関数を先、リストを後に取るので、データを渡す前の部品に名前を付けられる。JavaScript の `xs.map(f)` はデータが先に来る形。部品のつなぎ方は次の場面。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      // ---- 上の左: 型と適用の読み方
+      S.text(40, 52, 'add :: Int -> Int -> Int', { cls: 't-xl t-mono t-b pre' }, svg);
+      const t2 = S.text(40, 100, '', { cls: 't-xl t-mono pre' }, svg);
+      const part = (s) => S.el('tspan', { text: s }, t2);
+      part('add :: Int -> '); st.pa = part('('); part('Int -> Int'); st.pb = part(')');
+      S.text(40, 124, '-> は右に結合する', { cls: 't-sm t-mid' }, svg);
+      S.text(40, 162, 'add 3 2  ＝  (add 3) 2', { cls: 't-lg t-mono t-b pre' }, svg);
+      S.text(300, 162, '適用は左に結合する', { cls: 't-sm t-mid' }, svg);
+      // ---- 上の右: 引数を 1 つずつ受け取る
+      const slot = (g, x, y, s) => { const r = S.rect(x, y, 40, 32, { rx: 4, cls: 'f-sf s-mid w1 dash2' }, g); const t = S.text(x + 20, y + 21, s, { cls: 't-c t-md t-mono t-dim' }, g); return { r, t }; };
+      st.mA = S.g({}, svg);
+      S.rect(500, 44, 124, 96, { rx: 8, cls: 'f-sf s-mid w15' }, st.mA);
+      S.text(514, 68, 'add', { cls: 't-lg t-mono t-b' }, st.mA);
+      st.sAx = slot(st.mA, 514, 92, 'x');
+      st.sAy = slot(st.mA, 568, 92, 'y');
+      S.text(562, 160, '引数を 2 つ待つ', { cls: 't-c t-xs t-mid' }, st.mA);
+      S.arrow(svg, 628, 108, 664, 108, 'mid', { cls: 's-mid w15' });
+      st.mB = S.g({}, svg);
+      S.rect(668, 44, 144, 96, { rx: 8, cls: 'f-sf s-x w15' }, st.mB);
+      S.text(682, 68, 'add 3', { cls: 't-lg t-mono t-b' }, st.mB);
+      S.rect(682, 92, 62, 32, { rx: 4, cls: 'f-d-soft s-d w15' }, st.mB);
+      S.text(713, 113, 'x = 3', { cls: 't-c t-sm t-mono t-b' }, st.mB);
+      st.sBy = slot(st.mB, 756, 92, 'y');
+      S.text(740, 160, '残り 1 つを待つ関数', { cls: 't-c t-xs t-x t-b' }, st.mB);
+      S.arrow(svg, 816, 108, 852, 108, 'mid', { cls: 's-mid w15' });
+      st.mC = S.g({}, svg);
+      S.rect(856, 80, 64, 56, { rx: 8, cls: 'f-d-soft s-d w15' }, st.mC);
+      S.text(888, 116, '5', { cls: 't-c t-xl t-mono t-b' }, st.mC);
+      S.text(888, 160, '答え', { cls: 't-c t-xs t-mid' }, st.mC);
+      S.text(646, 98, '3', { cls: 't-c t-sm t-mono t-b' }, svg);
+      S.text(834, 98, '2', { cls: 't-c t-sm t-mono t-b' }, svg);
+      S.line(30, 186, 930, 186, { cls: 's-rule w1' }, svg);
+
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      // ---- 段階1: 括弧の位置で型が変わる
+      head(P[0], 40, 214, '括弧の位置で、別の型になる');
+      [['Int -> (Int -> Int)', 'Int を受け取り、Int -> Int の関数を返す', 'add の型（括弧は省ける）', 1],
+       ['(Int -> Int) -> Int', 'Int -> Int の関数を受け取り、Int を返す', '別の型（括弧は省けない）', 0]].forEach(([a, b, c, hl], j) => {
+        const y = 250 + j * 40;
+        S.text(40, y, a, { cls: 't-md t-mono t-b pre' + (hl ? ' t-x' : '') }, P[0]);
+        S.text(240, y, b, { cls: 't-sm' }, P[0]);
+        S.text(560, y, c, { cls: 't-sm t-mid' }, P[0]);
+        S.line(40, y + 14, 920, y + 14, { cls: 's-soft w1' }, P[0]);
+      });
+      head(P[0], 40, 356, 'ghci で確かめる');
+      codeCol(P[0], 40, 368, 560, [['applyTo3 :: (Int -> Int) -> Int', ''], ['applyTo3 f = f 3', '関数を受け取る関数'], ['applyTo3 (add 3)', '6（add 3 に 3 を当てる）', 1], [':t add', 'add :: Int -> Int -> Int'], [':t add 3', 'add 3 :: Int -> Int']], { lh: 26, cls: 't-md t-mono', nx: 300 });
+      S.text(640, 400, 'ghci は右の括弧を省いて表示する', { cls: 't-sm t-mid' }, P[0]);
+
+      // ---- 段階2: 部分適用と map
+      head(P[1], 40, 214, '部分適用で作った関数を map に渡す', 'ghci');
+      S.text(40, 246, 'map (add 3) [3,2,1]', { cls: 't-lg t-mono t-b pre' }, P[1]);
+      cells(P[1], 40, 270, [3, 2, 1]);
+      S.arrow(P[1], 196, 290, 300, 290, 'mid', { cls: 's-mid w15' });
+      S.rect(304, 272, 120, 36, { rx: 6, cls: 'f-sf s-x w15' }, P[1]);
+      S.text(364, 296, 'add 3', { cls: 't-c t-md t-mono t-b' }, P[1]);
+      S.text(364, 326, '各要素に当てる', { cls: 't-c t-xs t-mid' }, P[1]);
+      S.arrow(P[1], 428, 290, 520, 290, 'mid', { cls: 's-mid w15' });
+      cells(P[1], 524, 270, [6, 5, 4]);
+      S.text(680, 296, '[6,5,4]', { cls: 't-md t-mono t-b t-d' }, P[1]);
+      head(P[1], 40, 376, '同じ型の 2 つの書き方');
+      codeCol(P[1], 40, 388, 600, [['add  :: Int -> Int -> Int', ''], ['add x y = x + y', '引数の側に x と y'], ['addN :: Int -> (Int -> Int)', ''], ['addN n = \\x -> x + n', '本体に \\x（場面2）']], { lh: 26, cls: 't-md t-mono', nx: 330 });
+      S.lines(680, 410, ['どちらも、1 つ渡すと', '関数が返る'], { cls: 't-sm t-mid' }, P[1], 20);
+
+      // ---- 段階3: カリー化と部分適用は別の語
+      head(P[2], 40, 214, 'Haskell', 'ghci');
+      codeCol(P[2], 40, 226, 430, [['addPair :: (Int, Int) -> Int', '組を 1 つ受け取る'], ['addPair (x, y) = x + y', ''], [':t curry addPair', 'Int -> Int -> Int', 1], ['curry addPair 3 2', '5'], ['uncurry add (3, 2)', '5']], { lh: 26, cls: 't-sm t-mono', nx: 250 });
+      head(P[2], 500, 214, 'JavaScript', 'Node.js 24.22.1');
+      codeCol(P[2], 500, 226, 420, [['const addPair = (x, y) => x + y;', '2 つを一度に'], ['const add = (x) => (y) => x + y;', 'カリー化した形', 1], ['add(3)(2)', '5'], ['addPair.bind(null, 3)(2)', '5：部分適用だけ']], { lh: 26, cls: 't-sm t-mono', nx: 270 });
+      [['カリー化', '関数の形を変える：組を受け取る関数 ⇄ 1 つずつ受け取る関数（curry・uncurry）'],
+       ['部分適用', '引数を一部だけ渡し、残りを待つ関数を得る（add 3、bind(null, 3)）']].forEach(([a, b], j) => {
+        const y = 420 + j * 40;
+        S.rect(40, y - 22, 880, 32, { rx: 4, cls: j ? 'f-sf s-rule w1' : 'f-x-soft s-x w1' }, P[2]);
+        S.text(56, y, a, { cls: 't-md t-b' + (j ? '' : ' t-x') }, P[2]);
+        S.text(160, y, b, { cls: 't-sm' }, P[2]);
+      });
+      S.text(40, 518, 'Haskell では、add x y = … と書いた関数が、はじめからカリー化した形（Int -> Int -> Int）になる', { cls: 't-sm t-mid' }, P[2]);
+
+      // ---- 段階4: GHC の STG
+      head(P[3], 40, 214, '例のコード');
+      codeCol(P[3], 40, 226, 330, [['addN :: Int -> (Int -> Int)', ''], ['addN n = \\x -> x + n', ''], ['{-# NOINLINE addN #-}', ''], ['two = addN 3 2', ''], ['use2 n xs = map (addN n) xs', '']], { lh: 24, cls: 't-sm t-mono' });
+      S.lines(40, 384, ['NOINLINE は、addN を呼び出しの場所に', '展開しない指示（展開の話は場面4）'], { cls: 't-xs t-mid' }, P[3], 17);
+      head(P[3], 400, 214, 'STG', 'ghc -O0 -ddump-stg-final（型などの印を省く設定）');
+      const STG3 = [
+        ['addN = {} \\r [n x] + $fNumInt x n;', '引数を 2 つ受け取る関数になった', 0],
+        ['two = {} \\u [] addN sat sat;', '3 と 2 をそろえて addN を直接呼ぶ', 1],
+        ['use2 = {} \\r [n xs]', '', 0],
+        ['  let { sat = {n} \\r [eta] addN n eta; }', '残りの eta を待つクロージャ', 1],
+        ['  in  map sat xs;', '', 0]
+      ];
+      STG3.forEach(([a, b, hl], j) => {
+        const y = 246 + j * 46;
+        if (hl) S.rect(400, y - 16, 520, 24, { rx: 3, cls: 'f-x-soft s-none' }, P[3]);
+        S.text(410, y, a, { cls: 't-sm t-mono pre' }, P[3]);
+        if (b) S.text(410, y + 20, '↑ ' + b, { cls: 't-xs' + (hl ? ' t-x t-b' : ' t-mid') }, P[3]);
+      });
+      S.text(400, 494, 'two の sat は、3 と 2 を入れた Int の値（I#! [3#]・I#! [2#]）', { cls: 't-xs t-mid' }, P[3]);
+      S.text(400, 516, 'NOINLINE を外すと two は + $fNumInt sat sat になった（addN を展開した形）', { cls: 't-xs t-mid' }, P[3]);
+
+      // ---- 段階5: 部分適用で部品を作る
+      head(P[4], 40, 214, '部分適用で作った部品');
+      codeCol(P[4], 40, 226, 400, [['odds :: [Int] -> [Int]', ''], ['odds = filter odd', '奇数を残す'], ['doubles :: [Int] -> [Int]', ''], ['doubles = map (*2)', '2 倍にする'], ['total :: [Int] -> Int', ''], ['total = sum', '足す']], { lh: 26, cls: 't-md t-mono', nx: 260 });
+      [['odds', '[Int]', '[Int]'], ['doubles', '[Int]', '[Int]'], ['total', '[Int]', 'Int']].forEach(([f, a, b], j) => {
+        const y = 250 + j * 66;
+        S.text(560, y + 4, a, { cls: 't-sm t-mono t-end' }, P[4]);
+        S.arrow(P[4], 568, y, 606, y, 'mid', { cls: 's-mid w15' });
+        S.rect(610, y - 20, 140, 40, { rx: 6, cls: 'f-sf s-d w15' }, P[4]);
+        S.text(680, y + 5, f, { cls: 't-c t-md t-mono t-b' }, P[4]);
+        S.arrow(P[4], 754, y, 792, y, 'mid', { cls: 's-mid w15' });
+        S.text(800, y + 4, b, { cls: 't-sm t-mono' }, P[4]);
+      });
+      S.text(560, 470, 'それぞれが、まだリストを受け取っていない関数', { cls: 't-sm t-mid' }, P[4]);
+      head(P[4], 40, 420, 'JavaScript では');
+      code(P[4], 40, 450, ['[3,2,1].filter((x) => x % 2 !== 0)'], 20, 't-md t-mono');
+      S.lines(40, 482, ['データ（配列）が先に来る形で、部品にするには', 'xs => xs.filter(...) と関数を書き足す'], { cls: 't-sm t-mid' }, P[4], 20);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      st.pa.setAttribute('class', i === 0 ? 't-x t-b' : 't-b');
+      st.pb.setAttribute('class', i === 0 ? 't-x t-b' : 't-b');
+      op(st.mA, i >= 2 ? 0.45 : '');
+      op(st.mB, i >= 2 && i !== 3 ? 0.45 : '');
+      op(st.mC, i >= 2 ? 0.45 : '');
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // 3 を受け取る → add 3 ができる → 2 を受け取る → 5。7 秒ごと（止めているときは最後の姿）
+      const c = (run && i <= 1) ? U.mod(ctx.ts, 7) : 7;
+      const fillX = c >= 0.8, b = c >= 1.6, fillY = c >= 3.0, done = c >= 3.8;
+      st.sAx.t.textContent = fillX ? '3' : 'x';
+      st.sAx.t.setAttribute('class', 't-c t-md t-mono ' + (fillX ? 't-b t-x' : 't-dim'));
+      st.sAx.r.setAttribute('class', fillX ? 'f-x-soft s-x w15' : 'f-sf s-mid w1 dash2');
+      st.sBy.t.textContent = fillY ? '2' : 'y';
+      st.sBy.t.setAttribute('class', 't-c t-md t-mono ' + (fillY ? 't-b t-x' : 't-dim'));
+      st.sBy.r.setAttribute('class', fillY ? 'f-x-soft s-x w15' : 'f-sf s-mid w1 dash2');
+      if (i <= 1) { op(st.mB, b ? '' : 0.2); op(st.mC, done ? '' : 0.2); }
+    }
+  };
+
+  /* ================================================================
+     場面4 合成
+     ghci（GHC 9.6.7）: :t (.) は (.) :: (b -> c) -> (a -> b) -> a -> c、(sum . map (*2) . filter odd) [3,2,1] は 8、
+     filter odd [3,2,1] は [3,1]、map (*2) [3,1] は [6,2]、sum [6,2] は 8。odds . total はファイルで GHC-83865 の誤り 2 つ
+     （図はその 2 つめ。total の側）。for の s は Node.js 24.22.1 で 0 → 6 → 6 → 8、配列の filter と map は新しい配列を返した。
+     Rust は rustc 1.95.0 -O --emit=asm の pipeline（&[i64]）の 1 要素ずつのループ。前に 4 要素ずつの SIMD のループ（movdqu … paddq）が付き、
+     for で書いた by_loop も同じ SIMD の本体になった。GHC は -O2 -ddump-simpl -dsuppress-all -dsuppress-uniques の Core（2026-11-22）
+     ================================================================ */
+  const S4 = { y: 92, h: 40 };
+  const s4 = {
+    steps: [
+      { title: '合成の定義', text:'`(f . g) x = f (g x)` が合成の定義で、`.` の右の g を先に当て、その結果に f を当てる。`(.)` 自身も、関数を 2 つ受け取って関数を返す高階関数。型 `(b -> c) -> (a -> b) -> a -> c` のとおり、g の出力の型 b が f の入力の型と同じときだけつながる。' },
+      { title: '値が流れる', text: '`sum . map (*2) . filter odd` に `[3,2,1]` を渡すと、`[3,1]`、`[6,2]` と変わって 8 になる。途中の `[3,1]` と `[6,2]` には名前が無く、書き換える変数も無い。合成した全体も 1 つの関数なので、`pipeline` と名前を付けて使い回せる。' },
+      { title: '型が合えばつながる', text: '部品の型は `[Int] -> [Int]`、`[Int] -> [Int]`、`[Int] -> Int` で、前の出力と次の入力が同じ型なのでつながる。順を間違えた `odds . total` は、total の出力 Int を odds が受け取れず、GHC が型の誤り（GHC-83865）で止める。実行の前に分かる。' },
+      { title: '命令型のループ', text: '同じ計算を for で書くと、選ぶ（`if`）、変える（`* 2`）、足す（`+=`）が 1 つの本体に混ざり、変数 s が要素ごとに書き換わる。合成では 3 つが別々の部品なので、1 つだけ差し替えたり、別の組み合わせに使ったりできる。' },
+      { title: '機械の上では 1 つのループ', text: 'Rust の Iterator の filter と map は、途中の配列を作らずに要素を 1 つずつ次へ渡す。-O で作ると 3 つの呼び出しも展開されて消え（[[28-compiler.html#s4.2|第28章 場面4]]）、for で書いた版と同じ 1 つのループになった。GHC も -O2 で 3 つを 1 つの再帰にまとめ、途中のリストを作らなかった。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const mk = S.markers(svg);
+      // ---- 上: 値の流れ（. の右の部品から当たるので、右から左へ流れる）
+      S.text(40, 46, '(sum . map (*2) . filter odd) [3,2,1]', { cls: 't-lg t-mono t-b pre' }, svg);
+      S.text(920, 46, 'ghci（GHC 9.6.7）の答えは 8', { cls: 't-xs t-dim t-end' }, svg);
+      const Y = S4.y, H = S4.h;
+      const stage = (x, w, s) => {
+        const g = S.g({}, svg);
+        const r = S.rect(x, Y - 2, w, H + 4, { rx: 6, cls: 'f-sf s-mid w15' }, g);
+        S.text(x + w / 2, Y + H / 2 + 5, s, { cls: 't-c t-md t-mono t-b' }, g);
+        return { g, r };
+      };
+      const vals = (x, vs, s) => {
+        const g = S.g({}, svg);
+        cells(g, x, Y, vs, { w: 40, h: H, gap: 5 });
+        if (s) S.text(x + (vs.length * 45 - 5) / 2, Y + H + 26, s, { cls: 't-c t-sm t-mono t-d' }, g);
+        return g;
+      };
+      st.vIn = vals(770, [3, 2, 1], '[3,2,1]');
+      st.bF = stage(620, 120, 'filter odd');
+      st.v1 = vals(510, [3, 1], '[3,1]');
+      st.bM = stage(360, 120, 'map (*2)');
+      st.v2 = vals(250, [6, 2], '[6,2]');
+      st.bS = stage(130, 90, 'sum');
+      st.vOut = vals(50, [8], '');
+      [[766, 744], [616, 599], [506, 484], [356, 339], [246, 224], [126, 104]].forEach(([a, b]) => S.arrow(svg, a, Y + H / 2, b, Y + H / 2, 'mid', { cls: 's-mid w15' }));
+      S.text(40, 196, '. の右の部品から順に当たるので、値は右から左へ流れる', { cls: 't-sm t-mid' }, svg);
+      S.line(30, 212, 930, 212, { cls: 's-rule w1' }, svg);
+
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      // ---- 段階1: 合成の定義と型
+      head(P[0], 40, 238, '合成の定義');
+      S.text(60, 282, '(f . g) x = f (g x)', { cls: 't-xl t-mono t-b pre' }, P[0]);
+      S.rect(56, 318, 352, 78, { rx: 8, cls: 'f-none s-x w15 dash' }, P[0]);
+      S.text(232, 412, 'f . g も関数（a を受け取って c を返す）', { cls: 't-c t-xs t-x t-b' }, P[0]);
+      [['a', 80], ['b', 232], ['c', 384]].forEach(([s, x]) => S.text(x, 362, s, { cls: 't-c t-lg t-mono t-b t-d' }, P[0]));
+      [['g', 156], ['f', 308]].forEach(([s, x]) => {
+        S.rect(x - 34, 336, 68, 40, { rx: 6, cls: 'f-sf s-mid w15' }, P[0]);
+        S.text(x, 362, s, { cls: 't-c t-lg t-mono t-b' }, P[0]);
+      });
+      [[92, 120], [192, 220], [244, 272], [344, 372]].forEach(([a, b]) => S.arrow(P[0], a, 356, b, 356, 'mid', { cls: 's-mid w15' }));
+      head(P[0], 480, 238, '(.) の型', 'ghci の :t (.)');
+      S.text(480, 282, '(.) :: (b -> c) -> (a -> b) -> a -> c', { cls: 't-lg t-mono t-b pre' }, P[0]);
+      const sx4 = (n) => 480 + n * 9;
+      [[7, 15, 'f の型', 0], [19, 27, 'g の型', 0], [31, 37, '合成した関数の型', 1]].forEach(([a, b, s, hl]) => {
+        S.path(`M${sx4(a) + 1},292 v6 H${sx4(b) - 1} v-6`, { cls: 'f-none w15 ' + (hl ? 's-x' : 's-mid') }, P[0]);
+        S.text((sx4(a) + sx4(b)) / 2, 318, s, { cls: 't-c t-sm' + (hl ? ' t-x t-b' : ' t-mid') }, P[0]);
+      });
+      S.lines(480, 368, ['(.) も、関数を 2 つ受け取って関数を返す高階関数。', 'g の出力の型と f の入力の型が、同じ b でつながる'], { cls: 't-sm t-mid' }, P[0], 22);
+      S.text(40, 470, '合成の結果は値なので、さらに合成できる：sum . (map (*2) . filter odd)', { cls: 't-sm t-mono pre' }, P[0]);
+      S.text(40, 494, '括弧の付け方によらず同じ関数になる（(f . g) . h ＝ f . (g . h)）', { cls: 't-sm t-mid' }, P[0]);
+
+      // ---- 段階2: 部品ごとの出力と、名前を付けた全体
+      head(P[1], 40, 238, '部品ごとの出力', 'ghci');
+      codeCol(P[1], 40, 250, 420, [['filter odd [3,2,1]', '[3,1]'], ['map (*2) [3,1]', '[6,2]'], ['sum [6,2]', '8', 1]], { lh: 30, cls: 't-md t-mono', nx: 250 });
+      head(P[1], 500, 238, '全体に名前を付ける');
+      codeCol(P[1], 500, 250, 420, [['pipeline :: [Int] -> Int', ''], ['pipeline = sum . map (*2) . filter odd', ''], ['pipeline [3,2,1]', '8', 1]], { lh: 30, cls: 't-sm t-mono', nx: 300 });
+      S.lines(500, 380, ['pipeline の定義には、リストの引数が出てこない。', '部品をつないだ関数そのものに名前を付けている'], { cls: 't-sm t-mid' }, P[1], 22);
+      S.text(40, 384, '. の定義どおりに書き直すと', { cls: 't-sm t-mid' }, P[1]);
+      S.text(40, 410, 'sum (map (*2) (filter odd [3,2,1]))', { cls: 't-md t-mono t-b pre' }, P[1]);
+      S.text(40, 434, 'これも ghci で 8', { cls: 't-sm t-mid' }, P[1]);
+
+      // ---- 段階3: 型が合えばつながる
+      head(P[2], 40, 238, '部品の型がつながる', '値の流れと同じ向き（右から左）');
+      [['Int', 60], ['total', 170, 1], ['[Int]', 280], ['doubles', 390, 1], ['[Int]', 500], ['odds', 610, 1], ['[Int]', 720]].forEach(([s, x, f]) => {
+        if (f) { S.rect(x - 50, 254, 100, 36, { rx: 6, cls: 'f-sf s-d w15' }, P[2]); S.text(x, 277, s, { cls: 't-c t-md t-mono t-b' }, P[2]); }
+        else S.text(x, 277, s, { cls: 't-c t-md t-mono t-d t-b' }, P[2]);
+      });
+      [[116, 80], [256, 224], [336, 304], [476, 444], [556, 524], [696, 664]].forEach(([a, b]) => S.arrow(P[2], a, 272, b, 272, 'mid', { cls: 's-mid w15' }));
+      S.text(760, 277, '前の出力 ＝ 次の入力', { cls: 't-sm t-mid' }, P[2]);
+      head(P[2], 40, 330, '順を間違えた合成', 'ghc 9.6.7 でコンパイル');
+      code(P[2], 40, 360, ['bad :: [Int] -> Int', 'bad = odds . total'], 22, 't-md t-mono');
+      errBox(P[2], 300, 336, 620, [
+        'error: [GHC-83865]',
+        "    • Couldn't match type ‘Int’ with ‘[Int]’",
+        '      Expected: [Int] -> [Int]',
+        '        Actual: [Int] -> Int',
+        "    • In the second argument of ‘(.)’, namely ‘total’"
+      ], 20, 't-sm');
+      S.lines(40, 420, ['total の出力 Int を、', 'リストを待つ odds に渡せない'], { cls: 't-sm t-x t-b' }, P[2], 20);
+      S.text(300, 470, '同じ式の 1 つめの誤りは、odds の側から同じ食い違いを言う（[Int] と Int）', { cls: 't-xs t-mid' }, P[2]);
+
+      // ---- 段階4: for のループ
+      head(P[3], 40, 238, 'for で書いた同じ計算', 'JavaScript（Node.js 24.22.1）');
+      codeCol(P[3], 40, 250, 420, [['let s = 0;', ''], ['for (const x of [3, 2, 1]) {', ''], ['  if (x % 2 !== 0) s += x * 2;', '選ぶ・変える・足す', 1], ['}', '']], { lh: 26, cls: 't-md t-mono', nx: 270 });
+      S.text(40, 400, 'x', { cls: 't-xs t-dim' }, P[3]);
+      S.text(110, 400, '奇数か', { cls: 't-xs t-dim' }, P[3]);
+      S.text(200, 400, 's', { cls: 't-xs t-dim' }, P[3]);
+      S.line(40, 408, 420, 408, { cls: 's-rule w1' }, P[3]);
+      [['3', '○', '0 → 6'], ['2', '×', '6'], ['1', '○', '6 → 8']].forEach(([a, b, c], j) => {
+        const y = 432 + j * 26;
+        S.text(40, y, a, { cls: 't-md t-mono t-b' }, P[3]);
+        S.text(110, y, b, { cls: 't-md' }, P[3]);
+        S.text(200, y, c, { cls: 't-md t-mono t-b t-x pre' }, P[3]);
+      });
+      head(P[3], 500, 238, '比べる');
+      S.text(640, 266, '合成', { cls: 't-c t-sm t-b' }, P[3]);
+      S.text(820, 266, 'for のループ', { cls: 't-c t-sm t-b' }, P[3]);
+      S.line(500, 276, 920, 276, { cls: 's-rule w1' }, P[3]);
+      [['部品', '3 つの関数', '1 つの本体'], ['途中の値', '名前が無い', 's を書き換える'], ['1 つを替える', '部品を差し替える', '本体を書き直す'], ['読む人に要るもの', '部品の名前と型', '変数の移り変わり']].forEach(([a, b, c], j) => {
+        const y = 304 + j * 34;
+        S.text(500, y, a, { cls: 't-sm t-mid' }, P[3]);
+        S.text(640, y, b, { cls: 't-c t-sm' }, P[3]);
+        S.text(820, y, c, { cls: 't-c t-sm' }, P[3]);
+        S.line(500, y + 12, 920, y + 12, { cls: 's-soft w1' }, P[3]);
+      });
+
+      // ---- 段階5: 機械語と Core
+      head(P[4], 40, 238, 'Rust の機械語', 'rustc 1.95.0 -O。1 要素ずつのループの部分');
+      S.text(40, 262, 'xs.iter().filter(|&&x| x % 2 != 0).map(|&x| x * 2).sum()', { cls: 't-xs t-mono pre' }, P[4]);
+      codeCol(P[4], 40, 272, 440, [
+        ['.LBB1_4:', ''], ['  mov  rdx, qword ptr [rdi + 8*rcx]', 'x を読む'], ['  mov  r8d, edx', ''], ['  and  r8d, 1', '奇数か（filter）', 1], ['  neg  r8', '奇数なら全部のビットが 1'],
+        ['  add  rdx, rdx', 'x * 2（map）', 1], ['  and  rdx, r8', '偶数なら 0 にする'], ['  add  rax, rdx', '足す（sum）', 1], ['  inc  rcx', ''], ['.LBB1_8:', ''], ['  cmp  rsi, rcx', ''], ['  jne  .LBB1_4', '先頭へ戻る']
+      ], { lh: 19, cls: 't-xs t-mono', nx: 260 });
+      S.lines(40, 528, ['前に 4 要素ずつの SIMD のループが付く。for で書いた版も同じ本体になった'], { cls: 't-xs t-mid' }, P[4], 16);
+      head(P[4], 510, 238, 'GHC の Core', 'ghc -O2 -ddump-simpl。空白を詰めた');
+      codeCol(P[4], 510, 250, 410, [
+        ['$wgo1 = \\ ds ww ->', ''], ['  case ds of {', ''], ['    [] -> I# ww;', '終わりなら合計'], [': y ys -> case y of { I# ipv ->', ''],
+        ['  case remInt# ipv 2# of {', '奇数か'], ['    __DEFAULT -> $wgo1 ys (+# ww (*# ipv 2#));', '', 1], ['    0# -> $wgo1 ys ww } } }', ''], ['pipeline = \\ x -> $wgo1 x 0#', '合計 0 から']
+      ], { lh: 22, cls: 't-xs t-mono', nx: 280 });
+      S.lines(510, 464, ['3 つの部品が 1 つの再帰になり、途中のリストを作らない。', 'ww が合計を持って次の呼び出しへ渡る（場面6 の累積引数）'], { cls: 't-xs t-mid' }, P[4], 17);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // filter → map → sum の順に部品が働き、値が右から左へできていく（6.5 秒ごと。止めているときは全部）
+      const c = (run && i <= 1) ? U.mod(ctx.ts, 6.5) : 6.5;
+      op(st.v1, c >= 1.4 ? '' : 0.15);
+      op(st.v2, c >= 2.2 ? '' : 0.15);
+      op(st.vOut, c >= 3.0 ? '' : 0.15);
+      [[st.bF, 0.6, 1.4], [st.bM, 1.4, 2.2], [st.bS, 2.2, 3.0]].forEach(([b, a, z]) => b.r.setAttribute('class', c >= a && c < z ? 'f-x-soft s-x w2' : 'f-sf s-mid w15'));
+    }
+  };
+
+  /* ================================================================
+     場面5 再帰と畳み込み
+     ghci（GHC 9.6.7）: 3 : 2 : 1 : [] と 3 : (2 : (1 : [])) は [3,2,1]、:t (:) は (:) :: a -> [a] -> [a]。
+     Prelude の sum・length・map・filter・foldr を隠して図の定義を書き、sum [3,2,1] は 6、sum [2,1] は 3、sum [1] は 1、sum [] は 0、
+     foldr (+) 0 [3,2,1] は 6、:t foldr は foldr :: (a -> b -> b) -> b -> [a] -> b、length [3,2,1] は 3、foldr (\x n -> 1 + n) 0 [3,2,1] は 3、
+     foldr で書いた map (*2) [3,2,1] は [6,4,2]、filter odd [3,2,1] は [3,1]、foldr (:) [] [3,2,1] は [3,2,1]。
+     foldr (-) 0 [3,2,1] は 2、foldl (-) 0 [3,2,1] は -6（2026-11-22）
+     ================================================================ */
+  const T5 = { n0: [200, 56], n1: [290, 112], n2: [380, 168], l3: [140, 112], l2: [230, 168], l1: [320, 224], nil: [470, 224] };
+  const s5 = {
+    steps: [
+      { title: 'リストは 2 つの形', text: 'リストは、空の `[]` か、先頭の値と残りのリストの組 `x : xs` のどちらか（直和と直積。[[29-imi.html#s2.3|第29章 場面2]]）。`[3,2,1]` は `3 : (2 : (1 : []))` の略記で、`:` は右に結合する。`:` 1 つが連結リストのセル 1 つに当たる（[[27-algorithm.html#s1.3|第27章 場面1]]）。' },
+      { title: '場合ごとに定義する', text: '関数は、リストの 2 つの形ごとに式を書いて定義できる（**パターンマッチ**）。`sum [] = 0`、`sum (x:xs) = x + sum xs`。呼ぶと引数の形に合う式が選ばれ、x と xs に先頭と残りが入る。`sum [3,2,1]` は、第37章の sumTo と同じ形の列をたどって 6 になる。' },
+      { title: '同じ形がくり返す', text: 'sum・length・map を並べると、違うのは「`[]` のときの値」と「先頭と、残りの結果のまとめ方」の 2 つだけで、再帰の骨組みは同じ。この骨組みを 1 つの関数にし、違う 2 つを引数で受け取れば、どれも同じ高階関数で書ける。' },
+      { title: 'foldr は構築子を置き換える', text: '`foldr f z` は、リストの `:` を f に、`[]` を z に置き換えた式を計算する。`foldr (+) 0 [3,2,1]` は `3 + (2 + (1 + 0))` で 6 になり、sum は `foldr (+) 0` と書ける。リストを畳むので**畳み込み**（fold）と呼ぶ。' },
+      { title: 'map も filter も foldr で', text: '`:` を「f を当ててから `:` でつなぐ」に替えれば map、「条件に合うときだけ `:` でつなぐ」に替えれば filter になる。`:` を `:` のまま、`[]` を `[]` のままにすると、元のリストが返る。場面4 の 3 つの部品は、どれも foldr 1 つで書ける。' },
+      { title: 'データの形に沿うと止まる', text: '`sum (x:xs)` は、1 つ短い xs で自分を呼ぶ。有限のリストなら、呼ぶたびに短くなって `[]` に着くので、再帰は必ず止まる。foldr で書いた関数も、f が止まる限り止まる。終わりの無いリストを畳むと止まらないことがある（[[40-lazy.html#s4|第40章 場面4]]）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      // ---- 上の左: リストの木（: の節と、先頭の値の葉）
+      const E = [['n0', 'l3'], ['n0', 'n1'], ['n1', 'l2'], ['n1', 'n2'], ['n2', 'l1'], ['n2', 'nil']];
+      E.forEach(([a, b]) => S.line(T5[a][0], T5[a][1], T5[b][0], T5[b][1], { cls: 's-mid w15' }, svg));
+      st.node = {};
+      // 薄い塗り（f-*-soft）は透けるので、線の上に置く物には不透明な下地を敷く
+      ['n0', 'n1', 'n2'].forEach((k) => {
+        const [x, y] = T5[k];
+        S.circle(x, y, 17, { cls: 'f-sf s-none' }, svg);
+        const c = S.circle(x, y, 17, { cls: 'f-sf s-mid w15' }, svg);
+        const t = S.text(x, y + 6, ':', { cls: 't-c t-lg t-mono t-b' }, svg);
+        st.node[k] = { c, t };
+      });
+      [['l3', '3'], ['l2', '2'], ['l1', '1']].forEach(([k, v]) => {
+        const [x, y] = T5[k];
+        S.rect(x - 18, y - 16, 36, 32, { rx: 4, cls: 'f-sf s-none' }, svg);
+        S.rect(x - 18, y - 16, 36, 32, { rx: 4, cls: 'f-d-soft s-d w15' }, svg);
+        S.text(x, y + 6, v, { cls: 't-c t-lg t-mono t-b' }, svg);
+      });
+      {
+        const [x, y] = T5.nil;
+        S.rect(x - 22, y - 16, 44, 32, { rx: 4, cls: 'f-sf s-none' }, svg);
+        st.nilR = S.rect(x - 22, y - 16, 44, 32, { rx: 4, cls: 'f-sf s-mid w15' }, svg);
+        st.nilT = S.text(x, y + 6, '[]', { cls: 't-c t-lg t-mono t-b' }, svg);
+      }
+      // 段階1・2: x と xs の札
+      st.xs = S.g({ cls: 'fade hide' }, svg);
+      S.text(T5.l3[0] - 26, T5.l3[1] + 5, 'x（先頭）', { cls: 't-xs t-x t-b t-end' }, st.xs);
+      S.text(T5.n1[0] + 26, T5.n1[1] - 10, 'xs（残り）', { cls: 't-xs t-x t-b' }, st.xs);
+      // 段階4: 下から計算した値
+      st.vals = ['n2', 'n1', 'n0'].map((k, j) => S.text(T5[k][0] + 24, T5[k][1] - 14, ['＝ 1', '＝ 3', '＝ 6'][j], { cls: 't-sm t-mono t-b t-x' }, svg));
+      // 段階6: 残りの長さ
+      st.lens = S.g({ cls: 'fade hide' }, svg);
+      [['n0', '3 個'], ['n1', '2 個'], ['n2', '1 個']].forEach(([k, s]) => S.text(T5[k][0] + 24, T5[k][1] - 14, s, { cls: 't-xs t-b t-x' }, st.lens));
+      S.text(T5.nil[0], T5.nil[1] + 34, '0 個', { cls: 't-c t-xs t-b t-x' }, st.lens);
+      // ---- 上の右: 式
+      S.text(560, 56, '[3,2,1]', { cls: 't-lg t-mono t-b' }, svg);
+      S.text(560, 86, '＝ 3 : (2 : (1 : []))', { cls: 't-md t-mono pre' }, svg);
+      st.f4 = S.g({ cls: 'fade hide' }, svg);
+      S.text(560, 138, 'foldr (+) 0 [3,2,1]', { cls: 't-lg t-mono t-b pre' }, st.f4);
+      st.f4a = S.text(560, 168, '＝ 3 + (2 + (1 + 0))', { cls: 't-md t-mono t-x t-b pre' }, st.f4);
+      st.f4b = S.text(560, 196, '＝ 6', { cls: 't-md t-mono t-b pre' }, st.f4);
+      S.text(560, 230, ': を + に、[] を 0 に置き換える', { cls: 't-sm t-mid' }, st.f4);
+      S.line(30, 262, 930, 262, { cls: 's-rule w1' }, svg);
+
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+      // ---- 段階1: 2 つの形
+      head(P[0], 40, 288, 'リストの 2 つの形');
+      [['[]', '空のリスト'], ['x : xs', '先頭の値 x と、残りのリスト xs の組']].forEach(([a, b], j) => {
+        const y = 300 + j * 50;
+        S.rect(40, y, 400, 40, { rx: 6, cls: 'f-sf s-d w15' }, P[0]);
+        S.text(56, y + 26, a, { cls: 't-lg t-mono t-b pre' }, P[0]);
+        S.text(160, y + 25, b, { cls: 't-sm' }, P[0]);
+      });
+      S.text(40, 424, 'どちらか一方（直和）。x : xs は 2 つの欄の組（直積）', { cls: 't-sm t-mid' }, P[0]);
+      head(P[0], 500, 288, 'ghci で確かめる');
+      codeCol(P[0], 500, 300, 420, [['3 : 2 : 1 : []', '[3,2,1]'], ['3 : (2 : (1 : []))', '[3,2,1]'], [':t (:)', '(:) :: a -> [a] -> [a]']], { lh: 28, cls: 't-md t-mono', nx: 200 });
+      S.lines(500, 424, [': は値とリストを受け取って、1 つ長いリストを作る。', 'a は要素の型（どの型でもよい）'], { cls: 't-sm t-mid' }, P[0], 20);
+
+      // ---- 段階2: パターンマッチで sum を定義する
+      head(P[1], 40, 288, '2 つの形ごとに式を書く', 'Prelude の sum を隠して定義した');
+      codeCol(P[1], 40, 300, 400, [['sum :: [Int] -> Int', ''], ['sum []     = 0', '空のとき', 1], ['sum (x:xs) = x + sum xs', '先頭と残りのとき', 1]], { lh: 28, cls: 't-md t-mono', nx: 250 });
+      S.text(40, 424, '上の式から順に、引数の形と照らし合わせる', { cls: 't-sm t-mid' }, P[1]);
+      head(P[1], 500, 288, 'sum [3,2,1] の簡約');
+      [['  sum [3,2,1]', 0], ['= 3 + sum [2,1]', 0], ['= 3 + (2 + sum [1])', 0], ['= 3 + (2 + (1 + sum []))', 0], ['= 3 + (2 + (1 + 0))', 1], ['= 6', 0]].forEach(([s, hl], j) => {
+        S.text(510, 318 + j * 26, s, { cls: 't-md t-mono pre' + (hl ? ' t-x t-b' : '') }, P[1]);
+      });
+      S.text(500, 488, 'sum [] ＝ 0 に着いて止まる。第37章の sumTo 3 と同じ形の列', { cls: 't-sm t-mid' }, P[1]);
+
+      // ---- 段階3: 同じ形の再帰
+      head(P[2], 40, 288, '3 つの再帰を並べる');
+      S.text(40, 318, '関数', { cls: 't-xs t-dim' }, P[2]);
+      S.text(170, 318, '[] のとき', { cls: 't-xs t-dim' }, P[2]);
+      S.text(330, 318, 'x : xs のとき', { cls: 't-xs t-dim' }, P[2]);
+      S.line(40, 326, 920, 326, { cls: 's-rule w1' }, P[2]);
+      [['sum', '0', 'x', ' + ', 'sum xs'], ['length', '0', '1', ' + ', 'length xs'], ['map f', '[]', 'f x', ' : ', 'map f xs']].forEach(([f, z, a, op2, b], j) => {
+        const y = 356 + j * 38;
+        S.text(40, y, f, { cls: 't-md t-mono t-b' }, P[2]);
+        S.text(170, y, z, { cls: 't-md t-mono t-b t-x' }, P[2]);
+        const t = S.text(330, y, '', { cls: 't-md t-mono pre' }, P[2]);
+        S.el('tspan', { text: a }, t);
+        S.el('tspan', { text: op2, cls: 't-x t-b' }, t);
+        S.el('tspan', { text: b }, t);
+        S.line(40, y + 14, 920, y + 14, { cls: 's-soft w1' }, P[2]);
+      });
+      S.text(40, 478, '色を付けた 2 か所（[] のときの値と、まとめ方の演算）だけが違い、ほかは同じ形', { cls: 't-sm t-x t-b' }, P[2]);
+      S.text(40, 502, '残りの結果（sum xs、length xs、map f xs）は、どれも同じ関数を残りのリストに当てたもの', { cls: 't-sm t-mid' }, P[2]);
+
+      // ---- 段階4: foldr の定義
+      head(P[3], 40, 288, 'foldr の定義', 'リストに限った形。Prelude の foldr を隠して書いた');
+      codeCol(P[3], 40, 300, 460, [['foldr :: (a -> b -> b) -> b -> [a] -> b', ''], ['foldr f z []     = z', '[] を z に', 1], ['foldr f z (x:xs) = f x (foldr f z xs)', ': を f に', 1]], { lh: 28, cls: 't-sm t-mono', nx: 330 });
+      head(P[3], 540, 288, 'foldr で書く', 'ghci');
+      codeCol(P[3], 540, 300, 380, [['foldr (+) 0 [3,2,1]', '6'], ['foldr (\\x n -> 1 + n) 0 [3,2,1]', '3（length）']], { lh: 28, cls: 't-sm t-mono', nx: 260 });
+      S.lines(540, 404, ['sum ＝ foldr (+) 0', 'length ＝ foldr (\\x n -> 1 + n) 0'], { cls: 't-md t-mono pre' }, P[3], 24);
+      S.lines(40, 424, ['f は先頭 x と「残りを畳んだ結果」を受け取る。', '関数を受け取る高階関数なので、sum も length も 1 行になる'], { cls: 't-sm t-mid' }, P[3], 22);
+
+      // ---- 段階5: map と filter も foldr で
+      head(P[4], 40, 288, 'foldr で書いた map と filter', 'ghci');
+      codeCol(P[4], 40, 300, 880, [
+        ['map f    = foldr (\\x acc -> f x : acc) []', 'f を当ててからつなぐ'],
+        ['filter p = foldr (\\x acc -> if p x then x : acc else acc) []', '合うときだけつなぐ'],
+        ['map (*2) [3,2,1]', '[6,4,2]', 1], ['filter odd [3,2,1]', '[3,1]', 1], ['foldr (:) [] [3,2,1]', '[3,2,1]（元のリスト）', 1]
+      ], { lh: 28, cls: 't-md t-mono', nx: 560 });
+      S.text(40, 478, 'acc は「残りを畳んだ結果」。場面4 の filter odd・map (*2)・sum は、どれも foldr 1 つで書ける', { cls: 't-sm t-mid' }, P[4]);
+
+      // ---- 段階6: 止まること
+      head(P[5], 40, 288, '呼ぶたびに 1 つ短くなる');
+      [['sum [3,2,1]', 3], ['sum [2,1]', 2], ['sum [1]', 1], ['sum []', 0]].forEach(([s, n], j) => {
+        const y = 320 + j * 34;
+        S.text(40, y, s, { cls: 't-md t-mono pre' }, P[5]);
+        for (let k = 0; k < n; k++) S.rect(180 + k * 26, y - 14, 22, 18, { rx: 3, cls: 'f-d-soft s-d w1' }, P[5]);
+        S.text(270, y, n + ' 個' + (n ? '' : ' → 止まる'), { cls: 't-sm' + (n ? ' t-mid' : ' t-x t-b') }, P[5]);
+      });
+      S.lines(500, 314, ['リストの長さは、呼ぶたびに 1 つ減るので、', '有限のリストなら [] に着いて止まる'], { cls: 't-sm' }, P[5], 22);
+      S.lines(500, 380, ['終わりの無いリスト [1..] には [] が無い。', 'sum [1..] は止まらない（第40章）'], { cls: 't-sm t-mid' }, P[5], 22);
+      S.text(40, 494, 'データの形に沿った再帰（構造的再帰）を 1 つにまとめたのが foldr', { cls: 't-sm t-b' }, P[5]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      S.fade(st.xs, i <= 1);
+      S.fade(st.f4, i === 3);
+      S.fade(st.lens, i === 5);
+      st.nilR.setAttribute('class', i === 1 || i === 5 ? 'f-x-soft s-x w2' : 'f-sf s-mid w15');
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // 段階4: : を + に、[] を 0 に置き換え、下から計算する（8 秒ごと。止めているときは最後の姿）
+      const c = i === 3 ? (run ? U.mod(ctx.ts, 8) : 8) : -1;
+      ['n0', 'n1', 'n2'].forEach((k, j) => {
+        const on = c >= 0.6 + j * 0.4;
+        st.node[k].t.textContent = on ? '+' : ':';
+        st.node[k].t.setAttribute('class', 't-c t-lg t-mono t-b' + (on ? ' t-x' : ''));
+        st.node[k].c.setAttribute('class', on ? 'f-x-soft s-x w2' : 'f-sf s-mid w15');
+      });
+      const nilOn = c >= 1.8;
+      st.nilT.textContent = nilOn ? '0' : '[]';
+      st.nilT.setAttribute('class', 't-c t-lg t-mono t-b' + (nilOn ? ' t-x' : ''));
+      if (i === 3) st.nilR.setAttribute('class', nilOn ? 'f-x-soft s-x w2' : 'f-sf s-mid w15');
+      st.vals.forEach((t, j) => op(t, c >= 2.8 + j * 0.8 ? 1 : 0));
+      op(st.f4a, c >= 1.8 ? '' : 0.15);
+      op(st.f4b, c >= 4.4 ? '' : 0.15);
+    }
+  };
+
+  /* ================================================================
+     場面6 末尾呼び出し
+     Node.js 24.22.1（V8 13.6、--stack-size の既定 984）で 'use strict' のファイルを node で走らせ、sumTo(9649) は 46556425、
+     sumTo(9650) は RangeError、go(0, 8960) は 40145280、go(0, 8961) は RangeError。node -e で走らせると sumTo(9649) も落ちた。
+     gcc 15.2.0 -S -masm=intel -fno-asynchronous-unwind-tables -fcf-protection=none の go（long）: -O0 は call go、-O2 は
+     .L11: add rax, rsi / sub rsi, 1 / jne .L11。末尾でない sum_to も -O2 では同じ 3 命令のループになった。
+     __attribute__((musttail)) を付けると -O0 でも jmp go、sum_to に付けると「error: cannot tail-call: return value must be a call」。
+     rustc 1.95.0: opt-level=0 は call qword ptr [rip + go@GOTPCREL]、-O は imul・mul・shld で和を求めループが無い。become は E0658。
+     GHC 9.6.7: -O2 の $wgo は add r14,rsi / dec rsi / test rsi,rsi / jne（objdump）、-O0 の go は jmp で自分の先頭へ戻り、
+     acc + n と n - 1 をサンク（第40章）にしてヒープに積む。-O0 の sumTo 1000000 は 500000500000、+RTS -K1m で Stack space overflow。
+     R7RS（2013 年 7 月 6 日）の 3.5 節は「Implementations of Scheme are required to be properly tail-recursive」。
+     WebKit の記事（2016 年 5 月 23 日）は「PTC is only available in strict mode」と書く（2026-11-22）
+     ================================================================ */
+  const S6A = [['sumTo 3', '3 + □', '6'], ['sumTo 2', '2 + □', '3'], ['sumTo 1', '1 + □', '1'], ['sumTo 0', '0 を返す', '0']];
+  const S6B = [[0, 3], [3, 2], [5, 1], [6, 0]];
+  const s6 = {
+    steps: [
+      { title: '枠が積もる', text: '`sumTo 3` は sumTo 2 を呼び、返ってきた答えに 3 を足す。足し算が呼び出しの後に残るので、呼ぶたびに枠を積んで n を覚えておく。sumTo 3 は 4 枚、sumTo n は n ＋ 1 枚の枠を使う（[[27-algorithm.html#s5.5|第27章 場面5]]のスタック）。' },
+      { title: '深い再帰はスタックを使い切る', text: 'スタックの大きさには上限がある。Node.js 24.22.1 の既定の設定では、`sumTo(9650)` が RangeError で落ちた。深さ 1 万に届かない。枠の大きさは関数の形で変わるので、落ちる深さも関数ごとに違う。' },
+      { title: '最後が呼び出しだけなら', text: '`go acc n = if n == 0 then acc else go (acc + n) (n - 1)` は、呼んだ後に何もしない（**末尾呼び出し**）。枠の値はもう要らないので、枠を使い回して引数を入れ替えればよい。途中の和は**累積引数** acc に入り、acc と n は第6章の sum と n と同じ列をたどる。' },
+      { title: '機械語では飛び越し', text: 'gcc 15.2 の -O0 では go は自分を `call` し、呼ぶたびに枠を積んだ。-O2 では `add`・`sub`・`jne` の 3 命令のループで、[[06-cpu.html#s4.3|第6章 場面4]]の ADD・SUB・JNZ と同じ形。GHC 9.6.7 の -O2 も同じ形にした。rustc -O はループも消し、和を式で求めた。' },
+      { title: '保証は言語ごとに違う', text: 'Scheme（R7RS）は末尾呼び出しで枠を増やさないことを処理系に求め、ECMAScript 2015 も仕様にしたが、Node.js 24 は `go(0, 8961)` で落ちた。C と Rust は最適化しだいで、gcc 15 は `musttail` で強制でき、Rust の `become` は安定版に無い。' },
+      { title: '章の答え', text: '関数を値にすると、map・filter・foldr・合成のように、手順の骨組みそのものが部品になる。機械の上では、関数の値はコードの番地と環境の組で、環境をヒープに置けば割り当ての費用がかかる。繰り返しで書き換えていた状態（sum と n）は引数（acc と n）に移り、末尾呼び出しなら機械語のループに戻る。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      // ---- 上の左: sumTo 3 の枠（積もる）
+      st.gA = S.g({}, svg);
+      S.text(40, 40, 'sumTo 3', { cls: 't-md t-mono t-b' }, st.gA);
+      S.text(110, 40, '末尾でない', { cls: 't-xs t-mid' }, st.gA);
+      st.fa = S6A.map(([a, b, v], k) => {
+        const y = 212 - k * 40;
+        const g = S.g({}, st.gA);
+        const r = S.rect(40, y, 200, 32, { rx: 4, cls: 'f-sf s-mid w15' }, g);
+        S.text(50, y + 21, a, { cls: 't-sm t-mono t-b' }, g);
+        S.text(118, y + 21, b, { cls: 't-sm t-mono pre' }, g);
+        const ret = S.text(232, y + 21, '→ ' + v, { cls: 't-sm t-mono t-b t-x t-end' }, g);
+        return { g, r, ret };
+      });
+      S.text(140, 262, '呼ぶたびに 1 枚積む', { cls: 't-c t-xs t-mid' }, st.gA);
+      // ---- 上の中: go 0 3 の枠（使い回す）
+      st.gB = S.g({}, svg);
+      S.text(280, 40, 'go 0 3', { cls: 't-md t-mono t-b' }, st.gB);
+      S.text(334, 40, '末尾呼び出し', { cls: 't-xs t-mid' }, st.gB);
+      st.fbR = S.rect(280, 212, 190, 32, { rx: 4, cls: 'f-sf s-x w15' }, st.gB);
+      st.fbT = S.text(290, 233, '', { cls: 't-sm t-mono t-b pre' }, st.gB);
+      st.fbRet = S.text(462, 233, '→ 6', { cls: 't-sm t-mono t-b t-x t-end' }, st.gB);
+      S.text(375, 262, '同じ 1 枚を使い回す', { cls: 't-c t-xs t-mid' }, st.gB);
+      // ---- 上の右: 第6章の sum・n と、go の acc・n
+      st.gT = S.g({}, svg);
+      S.text(680, 40, '第6章 場面4（YT-8）', { cls: 't-c t-xs t-b' }, st.gT);
+      S.text(845, 40, 'go の引数', { cls: 't-c t-xs t-b' }, st.gT);
+      [['sum（10 番地）', 640], ['n（11 番地）', 722], ['acc', 810], ['n', 880]].forEach(([s, x]) => S.text(x, 64, s, { cls: 't-c t-xs t-dim' }, st.gT));
+      S.line(500, 72, 920, 72, { cls: 's-rule w1' }, st.gT);
+      S.line(766, 30, 766, 238, { cls: 's-soft w1' }, st.gT);
+      st.rowHL = S.rect(504, 0, 412, 26, { rx: 3, cls: 'f-x-soft s-none' }, st.gT);
+      [['始め', ...S6B[0]], ['1 周め', ...S6B[1]], ['2 周め', ...S6B[2]], ['3 周め', ...S6B[3]]].forEach(([a, s, n, acc, m], j) => {
+        const y = 96 + j * 30;
+        S.text(512, y, a, { cls: 't-sm t-mid' }, st.gT);
+        [[s, 640], [n, 722], [s, 810], [n, 880]].forEach(([v, x]) => S.text(x, y, String(v), { cls: 't-c t-md t-mono t-b' }, st.gT));
+      });
+      S.text(512, 226, '終わり', { cls: 't-sm t-mid' }, st.gT);
+      S.text(681, 226, 'HALT（sum ＝ 6）', { cls: 't-c t-sm' }, st.gT);
+      S.text(845, 226, 'acc を返す（6）', { cls: 't-c t-sm' }, st.gT);
+      S.line(30, 276, 930, 276, { cls: 's-rule w1' }, svg);
+
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+      // ---- 段階1: sumTo の簡約
+      head(P[0], 40, 300, 'sumTo 3 の簡約', '待っている足し算が増える');
+      [['  sumTo 3', 0], ['= 3 + sumTo 2', 0], ['= 3 + (2 + sumTo 1)', 0], ['= 3 + (2 + (1 + sumTo 0))', 1], ['= 3 + (2 + (1 + 0))', 0], ['= 6', 0]].forEach(([s, hl], j) => {
+        S.text(50, 330 + j * 27, s, { cls: 't-md t-mono pre' + (hl ? ' t-x t-b' : '') }, P[0]);
+      });
+      head(P[0], 520, 300, '定義');
+      codeCol(P[0], 520, 312, 400, [['sumTo :: Int -> Int', ''], ['sumTo 0 = 0', ''], ['sumTo n = n + sumTo (n - 1)', '', 1]], { lh: 28, cls: 't-md t-mono' });
+      S.lines(520, 436, ['n + sumTo (n - 1) の + は、呼び出しが返った後に', '計算する。それまで枠に n を置いておく'], { cls: 't-sm t-mid' }, P[0], 22);
+
+      // ---- 段階2: Node.js で深く呼ぶ
+      head(P[1], 40, 300, 'Node.js で深く呼ぶ', 'ファイルに書いて node で走らせた（Node.js 24.22.1）');
+      codeCol(P[1], 40, 312, 880, [["'use strict';", ''], ['function sumTo(n) { return n === 0 ? 0 : n + sumTo(n - 1); }', '']], { lh: 24, cls: 't-md t-mono' });
+      [['sumTo(9649)', '46556425', 0], ['sumTo(9650)', 'RangeError: Maximum call stack size exceeded', 1]].forEach(([a, b, hl], j) => {
+        const y = 410 + j * 32;
+        if (hl) S.rect(40, y - 20, 880, 28, { rx: 4, cls: 'f-x-soft s-none' }, P[1]);
+        S.text(52, y, a, { cls: 't-md t-mono t-b' }, P[1]);
+        S.text(220, y, b, { cls: 't-md t-mono pre' + (hl ? ' t-x t-b' : ' t-d t-b') }, P[1]);
+      });
+      S.text(40, 496, 'V8 の既定のスタックは 984 KB（node --v8-options の --stack-size）', { cls: 't-sm t-mid' }, P[1]);
+      S.text(40, 520, '同じ関数でも node -e で走らせると sumTo(9649) で落ちた。段数は走らせ方でも変わる', { cls: 't-sm t-mid' }, P[1]);
+
+      // ---- 段階3: go の簡約
+      head(P[2], 40, 300, 'go 0 3 の簡約', '式の長さが変わらない');
+      ['  go 0 3', '= go 3 2', '= go 5 1', '= go 6 0', '= 6'].forEach((s, j) => S.text(50, 330 + j * 28, s, { cls: 't-md t-mono pre' }, P[2]));
+      head(P[2], 400, 300, '累積引数 acc を持つ形', 'ghci で go 0 3 は 6');
+      codeCol(P[2], 400, 312, 520, [['go :: Int -> Int -> Int', ''], ['go acc n = if n == 0 then acc', ''], ['          else go (acc + n) (n - 1)', '呼んだ後に何もしない', 1]], { lh: 28, cls: 't-md t-mono', nx: 330 });
+      S.lines(400, 436, ['acc は「ここまでの和」。sumTo 3 ＝ go 0 3', 'JavaScript なら function go(acc, n) { return n === 0 ? acc : go(acc + n, n - 1); }'], { cls: 't-sm t-mid' }, P[2], 22);
+
+      // ---- 段階4: 機械語
+      head(P[3], 40, 300, 'gcc 15.2 -O0', '途中を … で省いた');
+      codeCol(P[3], 40, 310, 270, [['go:', ''], ['  push rbp', '枠を作る'], ['  …', ''], ['  call go', '自分を呼ぶ', 1], ['  leave', '枠を捨てる'], ['  ret', '']], { lh: 18, cls: 't-xs t-mono', nx: 140 });
+      head(P[3], 330, 300, 'gcc 15.2 -O2');
+      codeCol(P[3], 330, 310, 290, [['go:', ''], ['  mov  rax, rdi', 'acc'], ['  test rsi, rsi', ''], ['  je   .L14', 'n が 0 なら終わり'], ['.L11:', ''], ['  add  rax, rsi', 'acc ＋ n', 1], ['  sub  rsi, 1', 'n − 1', 1], ['  jne  .L11', '0 でなければ戻る', 1], ['.L14:', ''], ['  ret', '']], { lh: 18, cls: 't-xs t-mono', nx: 150 });
+      head(P[3], 640, 300, 'YT-8（第6章 場面4）');
+      codeCol(P[3], 640, 310, 280, [['0: LOAD 10', ''], ['1: ADD 11', 'sum ＋ n', 1], ['2: STORE 10', ''], ['3: LOAD 11', ''], ['4: SUB 12', 'n − 1', 1], ['5: STORE 11', ''], ['6: JNZ 0', '0 でなければ戻る', 1], ['7: HALT', '']], { lh: 18, cls: 't-xs t-mono', nx: 120 });
+      S.text(40, 516, 'gcc 15.2 -O2 は、末尾でない sum_to（n + sum_to(n - 1)）も同じ 3 命令のループにした', { cls: 't-xs t-mid' }, P[3]);
+      S.text(40, 532, 'GHC 9.6.7 -O2 の $wgo も add r14, rsi ／ dec rsi ／ test rsi, rsi ／ jne のループ（末尾でない sumTo は枠を積むまま）', { cls: 't-xs t-mid' }, P[3]);
+      S.text(40, 548, 'rustc 1.95 -O は imul・mul・shld で和を式で求め、ループも呼び出しも残さなかった', { cls: 't-xs t-mid' }, P[3]);
+
+      // ---- 段階5: 言語ごとの決まり
+      head(P[4], 40, 300, '末尾呼び出しの決まり');
+      S.text(40, 326, '言語', { cls: 't-xs t-dim' }, P[4]);
+      S.text(190, 326, '決まり', { cls: 't-xs t-dim' }, P[4]);
+      S.text(500, 326, '手元で見たこと', { cls: 't-xs t-dim' }, P[4]);
+      S.line(40, 334, 920, 334, { cls: 's-rule w1' }, P[4]);
+      [['Scheme', 'R7RS（2013 年）3.5 節が処理系に求める', '手元に処理系は無い'],
+       ['JavaScript', 'ECMAScript 2015 が strict mode で決めた', 'Node.js 24 は go(0, 8961) で RangeError'],
+       ['', 'WebKit の JavaScriptCore は実装した（2016 年の記事）', ''],
+       ['C（gcc 15.2）', '最適化しだい。musttail で強制できる', '-O0 でも jmp go。sum_to には誤り'],
+       ['', '', 'cannot tail-call: return value must be a call'],
+       ['Rust（rustc 1.95）', '最適化しだい', 'become は E0658（実験中）'],
+       ['Haskell（GHC 9.6.7）', '末尾呼び出しは枠を積まずに飛ぶ（GHC の作り）', '-O0 でも go は jmp で先頭へ戻った']].forEach(([a, b, c], j) => {
+        const y = 358 + j * 26;
+        if (a && j) S.line(40, y - 18, 920, y - 18, { cls: 's-soft w1' }, P[4]);
+        S.text(40, y, a, { cls: 't-sm t-b' }, P[4]);
+        S.text(190, y, b, { cls: 't-sm' }, P[4]);
+        S.text(500, y, c, { cls: (j === 4 ? 't-xs t-mono t-x' : 't-sm t-mid') + ' pre' }, P[4]);
+      });
+      S.text(40, 544, 'GHC の -O0 は acc + n を計算せずに積むので、ヒープが増える（第40章）', { cls: 't-xs t-mid' }, P[4]);
+
+      // ---- 段階6: 章の答え
+      head(P[5], 40, 300, 'この章の答え');
+      [['手順の骨組みが部品になる', ['map・filter・foldr・(.) は', '関数を受け取る関数', '（場面1・4・5）']],
+       ['関数の値はコードと環境の組', ['番地と、自由変数の値の組', '作るたびに割り当て', '（場面2・3）']],
+       ['繰り返しの状態は引数へ', ['sum と n は acc と n に', '末尾呼び出しならループ', '（場面6）']]].forEach(([t, ls], j) => {
+        const x = 40 + j * 300;
+        S.rect(x, 316, 280, 150, { rx: 8, cls: j === 2 ? 'f-x-soft s-x w15' : 'f-sf s-d w15' }, P[5]);
+        S.text(x + 16, 344, t, { cls: 't-md t-b' + (j === 2 ? ' t-x' : '') }, P[5]);
+        S.lines(x + 16, 378, ls, { cls: 't-sm' }, P[5], 24);
+      });
+      S.text(40, 500, '代償：作るクロージャの割り当てとごみ集め、深い再帰のスタック、最適化に頼る速さ', { cls: 't-sm t-mid' }, P[5]);
+      S.text(40, 526, '次の章では、関数だけでなくデータも書き換えない値にする（第39章）', { cls: 't-sm t-b' }, P[5]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      op(st.gA, i <= 1 ? '' : 0.35);
+      op(st.gB, i >= 2 ? '' : 0.35);
+      op(st.gT, i >= 2 ? '' : 0.35);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      // sumTo 3: 枠を 4 枚積み、上から返しながら降ろす（9 秒ごと）。止めているとき・段階1 以外は 4 枚積んだ姿に返す値を添える
+      const ca = (run && i === 0) ? U.mod(ctx.ts, 9) : -1;
+      st.fa.forEach((f, k) => {
+        const shown = ca < 0 || ca >= 0.4 + 0.5 * k;
+        const back = ca < 0 || ca >= 2.8 + 0.6 * (3 - k);
+        op(f.g, !shown ? 0 : (ca >= 0 && back && k > 0) ? 0.4 : '');
+        op(f.ret, back ? '' : 0);
+      });
+      // go 0 3: 1 枚の枠の中身が入れ替わる（6 秒ごと）。止めているとき・段階3 以外は最後の姿
+      const cb = (run && i === 2) ? U.mod(ctx.ts, 6) : 99;
+      const k = Math.min(3, Math.floor(cb / 0.8)), done = cb >= 3.2;
+      const [acc, n] = S6B[k];
+      st.fbT.textContent = `acc = ${acc}   n = ${n}`;
+      op(st.fbRet, done ? '' : 0);
+      st.rowHL.setAttribute('y', done ? 206 : 78 + k * 30);
+    }
+  };
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第X部 関数型 ／ 第38章',
+      title: '高階関数とクロージャ',
+      home: '../index.html',
+      prev: { href: '37-lambda.html', title: 'ラムダ計算' },
+      next: { href: '39-immutable.html', title: '不変データ', lead: '第38章で、関数を数と同じ値として扱い、渡し、返し、組み合わせた。' },
+      legend: [{ c: 'd', label: 'データ（値・式・ヒープの上の物）' }, { c: 'x', label: '注目・変化' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>

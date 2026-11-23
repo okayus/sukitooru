@@ -1,0 +1,1186 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>型推論と多相 — YouTubeが見えるまで</title>
+<meta name="description" content="Haskell では、関数の引数にも戻り値にも型を書かずに済む。コンパイラが式の使われ方から型の等式を集めて解き、最も一般的な型を決めるからである。">
+<meta property="og:title" content="型推論と多相 — YouTubeが見えるまで">
+<meta property="og:description" content="Haskell では、関数の引数にも戻り値にも型を書かずに済む。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第X部 関数型 ／ 第41章 ／ 全43章</p>
+    <h1 id="h-s0">型推論と多相</h1>
+    <p class="standfirst">Haskell では、関数の引数にも戻り値にも型を書かずに済む。コンパイラが式の使われ方から型の等式を集めて解き、最も一般的な型を決めるからである（Hindley–Milner の型推論）。この章では、その推論の手順と、型を変数のまま残す多相、型ごとに実装を選ぶ型クラスを、GHC 9.6.7 の実際の出力で見る。多相な型は、関数が値に対してできることを縛り、その縛りから関数の性質が導ける。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>型は方程式で決まる</a><p>分からない型に型変数を置き、関数の適用ごとに等式を 1 本集める。Rust は関数の境目に型を書かせる。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>単一化</a><p>等式の両辺を同じ形にする代入を求める。形が合わない誤りと、型変数が自分を含む誤り。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>let 多相と主要型</a><p>定義の型は forall で一般化され、使うたびに具体化される。λ の引数はされない。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>型が振る舞いを縛る（パラメトリシティ）</a><p>a -> a の関数は、止まるなら id だけ。型だけから出る等式と、それが崩れる条件。機械の上の 1 つのコード。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>型クラスと辞書渡し</a><p>制約 Num a => は、実装の表（辞書）を受け取る隠れた引数になる。GHC の Core と Rust のトレイト。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>型を作る型と Functor</a><p>種が * -> * の Maybe と []。map をまとめる Functor と、コンパイラが確かめない則。章の答え。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の章（モナド）へ。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードと出力は GHC 9.6.7・rustc 1.95.0（x86-64 の Linux）で 2026 年 11 月に動かして確かめた。GHC の誤りの文は位置の行を省いて写し、Core は ghc -ddump-simpl -dsuppress-all -dsuppress-uniques の出力。出力は版と設定で変わる。文献は原典の年を添えた。図は模式図。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 型は方程式で決まる ================= -->
+<section class="scene sc-anim" id="s1" data-tab="方程式" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>型は方程式で決まる</h2>
+    <p class="sh-meta"><span class="chip">型変数</span><span class="chip">型の等式</span><span class="chip">E0282</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">第40章の <code>take 3 [1..]</code> は、型を 1 つも書かずに ghci で動いた。それでも GHC は、評価の前にこの式の型を決めている。書かれていない型は、式の使われ方から型の等式を集め、それを解いて決める。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">等式を先に全部集めてから解く形は、Pierce『Types and Programming Languages』（2002 年）第22章の説明に合わせた。Milner の 1978 年のアルゴリズム W は、適用を 1 つ見るたびにその場で解く。どちらも同じ型に行き着く。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="twice の本体の構文木に型変数を置き、適用ごとに型の等式を集める図と、Rust の場合"></svg></div>
+    <figcaption>図1　左は twice の本体 f (f x) の構文木で、節の右の札がその式の型変数。右は集めた等式、下は段階ごとの中身。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 単一化 ================= -->
+<section class="scene sc-anim" id="s2" data-tab="単一化" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>単一化</h2>
+    <p class="sh-meta"><span class="chip">Robinson 1965</span><span class="chip">出現検査</span><span class="chip">GHC-83865</span><span class="chip">GHC-25897</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">集めた 2 本の等式を解くと、twice の型が決まる。解き方は、等式の両辺が同じ形になるように型変数へ型を代入していく単一化で、解けなければ、それが型の誤りになる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">単一化は Robinson が 1965 年に論理式の機械的な証明（導出原理）のために定式化し、Milner が 1978 年に型の推論へ使った。単純型付きラムダ計算の強正規化は、Girard ら『Proofs and Types』（1989 年）第6章に証明がある。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="2 本の等式の右辺どうしを単一化して twice の型を得る図と、単一化が失敗する 2 つの例"></svg></div>
+    <figcaption>図2　上は場面1 の等式と、右辺どうしを単一化する図。下は段階ごとの中身で、GHC 9.6.7 の誤りの文は位置の行を省いた。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 let 多相と主要型 ================= -->
+<section class="scene sc-anim" id="s3" data-tab="let 多相" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>let 多相と主要型</h2>
+    <p class="sh-meta"><span class="chip">forall</span><span class="chip">Hindley 1969</span><span class="chip">Damas・Milner 1982</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">twice の t は、使うたびに別の型にしてよい。定義した関数の型は「どの型についても」の形にまとめられ、使う所ごとに新しく具体化されるからだ。まとめるのは let で定義した名前だけで、λ の引数はまとめない。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Hindley–Milner の名は、組合せ論理の項に主要型があることを示した Hindley（1969 年）と、ML の型推論のアルゴリズム W を作った Milner（1978 年）から。W が主要型を返すことは Damas と Milner が 1982 年に証明した。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="id の型の一般化と具体化、λ の引数で型が付かない例、主要型とその具体化、型を書けば通る高階ランクの例"></svg></div>
+    <figcaption>図3　左上は let で定義した名前、左下は λ の引数、右上は主要型、右下は注釈が要る所。出力は ghci と ghc（GHC 9.6.7）。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 型が振る舞いを縛る ================= -->
+<section class="scene sc-anim" id="s4" data-tab="縛り" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>型が振る舞いを縛る（パラメトリシティ）</h2>
+    <p class="sh-meta"><span class="chip">a -> a</span><span class="chip">自由定理</span><span class="chip">Wadler 1989</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">多相な型は、使う側には自由を与え、書く側には制約を課す。型変数 a の値について何も知らない関数は、その値を調べることも作ることもできない。この制約から、関数の中身を見ずに言える性質が出てくる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">「Theorems for free!」（Wadler 1989）は、どの型からも同様の等式が出ることを示した。元は Reynolds の抽象化定理（1983 年）。再帰と seq のある Haskell では、h が正格などの条件が付く（Johann ら 2004）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="a -> a と Int -> Int の関数の候補、[a] -> [a] の関数の例、2 通りの順で計算した値、型の引数が消える中間表現"></svg></div>
+    <figcaption>図4　左上は a -> a と Int -> Int、左下は [a] -> [a] の関数を [3,2,1] に当てた値（ghci）。右上は h を当てる順を変えた 2 通りの値、右下は GHC の中間表現で型が消える段。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 型クラスと辞書渡し ================= -->
+<section class="scene sc-anim" id="s5" data-tab="型クラス" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>型クラスと辞書渡し</h2>
+    <p class="sh-meta"><span class="chip">Num a =&gt;</span><span class="chip">$dNum</span><span class="chip">-ddump-simpl</span><span class="chip">E0038</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">+ は Int にも Double にも使えるが、機械語の足し算は型ごとに違う（<a class="xref" href="26-kata.html#s3.2">第26章 場面3</a>）。型ごとの別の実装を 1 つの名前で呼ぶ多相を Haskell は型クラスで書き、コンパイラは実装の表を隠れた引数で渡す。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">型クラスは Wadler と Blott が 1989 年に、型推論を保ったまま + や == を多重定義する方法として提案した。2 つの多相の名は Strachey（1967 年）。Rust の Reference は、影響元に Haskell の型クラスを挙げる。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="sumAll のソース、Num の辞書 2 つ、+ の型ごとの実装、Core に現れる辞書の引数、-O2 の特殊化、Rust のトレイト"></svg></div>
+    <figcaption>図5　左上はソース、右上は Int と Double の Num の辞書（GHC.Num・GHC.Float の .hi から）。下は段階ごとの中身で、Core と機械語は GHC 9.6.7 と rustc 1.95.0 の出力。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 型を作る型と Functor ================= -->
+<section class="scene sc-anim" id="s6" data-tab="Functor" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>型を作る型と Functor</h2>
+    <p class="sh-meta"><span class="chip">* -&gt; *</span><span class="chip">fmap</span><span class="chip">Functor の則</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">Maybe や [] は、それだけでは値の型にならず、型を 1 つ受け取って Maybe Int のような型を作る。この型を作る型を変数にすると、リストと Maybe の map を 1 つの名前にまとめられる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Functor の名は圏論の関手から来ている。Haskell の Functor は、型を作る型 f と、関数を f の上へ写す fmap の組で、2 つの則はその組が関手であるための条件に当たる。次の章のモナドは、この上に重なる型クラス。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="種（型の型）、同じ形の 3 つの map と fmap、Functor の則、Rust の map、章の答え"></svg></div>
+    <figcaption>図6　左上は種（ghci の :k）、右上は同じ形の 3 つの map と fmap（ghci の :t）。下は段階ごとの中身。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — 型推論と多相</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>書かれていない型は、分からない所に型変数を置き、関数の適用ごとに型の等式を 1 本集めて決める。Rust は関数の境目の型を書かせ、Haskell と ML は境目も推す（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>等式は単一化で解き、twice は (t -> t) -> t -> t になる。名前の違う型どうし（Bool と Char）と、型変数が自分を含む等式（t1 ＝ t1 → t2）は解けず、型の誤りになる。Ω には型が付かない（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>let で定義した名前の型は forall で一般化され、使うたびに具体化される。λ の引数はされない。推論の結果は主要型で、引数を多相にする型などは書く必要がある（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>型変数の値を調べられない関数は、型が振る舞いを縛る。a -> a は止まるなら id だけで、[a] -> [a] の関数は map と順を入れ替えても同じ値を返す。制約があると崩れる（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>型クラスの制約は、実装の表（辞書）を受け取る隠れた引数になり、-O2 は型の決まる呼び出しを特殊化する。Rust の総称は型ごとに写し、dyn は実装の表の番地を値と一緒に持つ（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>Maybe・[]・IO は種 * -> * の型を作る型。Functor はそれを変数にした型クラスで、2 つの則はコンパイラが確かめない約束。型は書かなくても決まり、多相な型は関数にできることを縛る（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th>型推論</th><td>書いていない型を、式の使われ方から決めること。Haskell と ML は関数の引数と戻り値も推す（Hindley–Milner の型推論）。Rust は関数の中だけ。</td></tr>
+        <tr><th>型変数</th><td>まだ決まっていない型、またはどの型でもよい型を表す名前。GHC は a・t・p などの小文字で表示する。</td></tr>
+        <tr><th>単一化・出現検査</th><td>2 つの型を同じ形にする代入を求めること（Robinson、1965 年）。型変数を、自分を含む型と等しく置かないかを確かめるのが出現検査。</td></tr>
+        <tr><th>let 多相（一般化と具体化）</th><td>let で定義した名前の型に残った型変数を forall でまとめ、使うたびに新しい型変数に取り替えること。λ の引数には行わない。</td></tr>
+        <tr><th>主要型</th><td>推論が返す最も一般的な型。正しい型はどれも、その型変数に型を代入した形（Damas・Milner、1982 年）。</td></tr>
+        <tr><th>パラメトリック多相・パラメトリシティ</th><td>全部の型で同じ動きをする多相と、型変数の値を調べられないことから出る性質（自由定理）。a -> a は id だけ。</td></tr>
+        <tr><th>アドホック多相・型クラス</th><td>型ごとに別の実装を同じ名前で呼ぶ多相（Strachey、1967 年の講義）。Haskell は class と instance で書く（Wadler・Blott、1989 年）。</td></tr>
+        <tr><th><i class="sw d"></i>辞書渡し</th><td>型クラスの制約を、実装の表（辞書）を受け取る隠れた引数に変える実装。GHC の Core の $dNum。Num の辞書は関数 7 つの組。</td></tr>
+        <tr><th>種（カインド）</th><td>型の型。Int は *、Maybe は * -> *、Either は * -> * -> *（GHC 9.6.7 の :k の表示。新しい書き方では * を Type と書く）。</td></tr>
+        <tr><th>Functor</th><td>種 * -> * の型 f に fmap :: (a -> b) -> f a -> f b を与える型クラス。則 fmap id ＝ id と合成の則は約束で、コンパイラは確かめない。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <p class="note">次の第42章は、失敗・状態・入出力という作用を戻り値の型に出し、&gt;&gt;= でつなぐモナド。Monad は、この章の型クラスと種 * -> * の上に立つ型クラス。</p>
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg;
+
+  /* ---------- この章で使う部品 ---------- */
+
+  /* 濃さ（fade の付いた要素は 0.35 秒かけて変わる） */
+  const op = (el, v) => { el.style.opacity = v; };
+  /* 動きを止めているときは、段階の動きの終わりの姿を見せる */
+  const playing = () => YT.motion.playing;
+  /* 等幅の行の並び（空白を詰めない） */
+  function code(parent, x, y, lines, lh, cls) {
+    return lines.map((s, k) => S.text(x, y + k * lh, s, { cls: (cls || 't-mono t-sm') + ' pre' }, parent));
+  }
+  /* 文字の幅の見積もり（等幅は 0.6 em、全角は 1 em）。札の幅を書体の読み込みに左右されずに決める */
+  const tw = (s, fs, mono) => Array.from(String(s)).reduce((a, c) => a + (c.charCodeAt(0) > 0x2000 ? fs : fs * (mono ? 0.6 : 0.58)), 0);
+  /* 枠付きの札（中央 cx・cy）。{ g, r, t } を返す */
+  function box(parent, cx, cy, s, o) {
+    o = o || {};
+    const fs = o.fs || 11, w = o.w || Math.max(o.min || 22, tw(s, fs, o.mono) + (o.pad == null ? 14 : o.pad)), h = o.h || 24;
+    const g = S.g({ cls: o.gcls }, parent);
+    const r = S.rect(cx - w / 2, cy - h / 2, w, h, { rx: 4, cls: o.box || 'f-sf s-rule w1' }, g);
+    const t = S.text(cx, cy + fs * 0.36, s, { cls: 't-c ' + (o.cls || 't-sm') + (o.mono ? ' t-mono' : '') }, g);
+    return { g, r, t, w, cx, cy };
+  }
+  /* 処理系の誤りの文（1 行目が見出し） */
+  function errBox(parent, x, y, w, lines, lh) {
+    const g = S.g({}, parent);
+    lh = lh || 18;
+    S.rect(x, y, w, 12 + lines.length * lh, { rx: 5, cls: 'f-x-soft s-x w15' }, g);
+    lines.forEach((s, k) => S.text(x + 12, y + 20 + k * lh, s, { cls: 't-sm t-mono pre' + (k ? '' : ' t-b t-x') }, g));
+    return g;
+  }
+  /* 動く札（型変数や辞書を運ぶ）。位置は frame が決める */
+  function token(parent, s, w) {
+    const g = S.g({}, parent);
+    w = w || 28;
+    S.rect(-w / 2, -12, w, 24, { rx: 4, cls: 'f-sf s-x w15' }, g);
+    S.text(0, 5, s, { cls: 't-c t-mono t-md t-b t-x pre' }, g);
+    g.style.display = 'none';
+    return g;
+  }
+  /* 札を (x0,y0) から (x1,y1) へ、t0 から d 秒で動かす。動いている間だけ見せる */
+  function fly(tk, c, t0, d, x0, y0, x1, y1) {
+    const f = U.prog(c, t0, d), moving = c >= t0 && f < 1;
+    tk.style.display = moving ? '' : 'none';
+    if (moving) { const e = U.ease.inOut(f); at(tk, U.lerp(x0, x1, e), U.lerp(y0, y1, e)); }
+    return f >= 1;
+  }
+  const at = (g, x, y) => g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+  /* 端末の出力（ghci など）。[文字, 濃さ] の行を等幅で並べる。濃さは 'b'（入力・強調）か 'd'（薄く） */
+  function term(parent, x, y, w, title, lines, lh) {
+    const g = S.g({}, parent);
+    lh = lh || 18;
+    S.rect(x, y, w, 30 + lines.length * lh, { rx: 6, cls: 'f-in s-rule w1' }, g);
+    S.text(x + 12, y + 18, title, { cls: 't-xs t-dim' }, g);
+    lines.forEach(([s, k], j) => S.text(x + 12, y + 38 + j * lh, s, { cls: 't-sm t-mono pre' + (k === 'b' ? ' t-b' : k === 'd' ? ' t-mid' : '') }, g));
+    return g;
+  }
+  /* 1 行の中で色を変える（[文字, 足すクラス] の並びを tspan にする） */
+  function spans(parent, x, y, parts, cls) {
+    const t = S.text(x, y, '', { cls }, parent);
+    return parts.map(([s, c]) => S.el('tspan', { text: s, cls: c || null }, t));
+  }
+  /* 段階に入ってから時刻 t0 に出る要素と、伸びる線。onStep と frame の両方がこの表を見る
+     el: [出る段階, 要素, t0]、ln: [出る段階, 線, t0, 秒, x1, y1, x2, y2] */
+  function stager() {
+    const els = [], lns = [];
+    return {
+      el(step, el, t0) { els.push([step, el, t0]); return el; },
+      ln(step, el, t0, dur) { const a = ['x1', 'y1', 'x2', 'y2'].map((k) => +el.getAttribute(k)); lns.push([step, el, t0, dur].concat(a)); return el; },
+      /* 段階 i の終わりの姿 */
+      settle(i) {
+        els.forEach(([s, el]) => op(el, i >= s ? '' : 0));
+        lns.forEach(([s, el, , , x1, y1, x2, y2]) => { grow(el, x1, y1, x2, y2, 1); op(el, i >= s ? '' : 0); });
+      },
+      /* 段階 i に入って c 秒の姿（その段階に出る物だけを動かす） */
+      run(i, c) {
+        els.forEach(([s, el, t0]) => { if (s === i) op(el, c >= t0 ? '' : 0); });
+        lns.forEach(([s, el, t0, d, x1, y1, x2, y2]) => {
+          if (s !== i) return;
+          const f = U.ease.inOut(U.prog(c, t0, d));
+          grow(el, x1, y1, x2, y2, f);
+          op(el, c >= t0 ? '' : 0);
+        });
+      }
+    };
+  }
+  /* 線を始点から伸ばす（f は 0..1） */
+  function grow(line, x1, y1, x2, y2, f) {
+    line.setAttribute('x2', U.lerp(x1, x2, f).toFixed(1));
+    line.setAttribute('y2', U.lerp(y1, y2, f).toFixed(1));
+  }
+
+  /* ================================================================
+     場面1 型は方程式で決まる
+     twice の型は ghci（GHC 9.6.7）の :t で (t -> t) -> t -> t。等式は手で立て、場面2 で解いた結果が :t と合うことを確かめた。
+     :t take 3 [1..] は (Num a, Enum a) => [a]。
+     Rust の E0282 と、型を書いた twice は rustc 1.95.0（edition 2024）で確かめた（2026-11-22）
+     ================================================================ */
+  /* 木の節: [中央 x, 中央 y, 幅, 高さ, 題, 下の小さい字, 型変数] */
+  const N1 = {
+    R: [250, 130, 132, 46, '適用', 'f (f x)', 'γ'],
+    F1: [130, 232, 64, 38, 'f', '', 'α'],
+    I: [372, 232, 120, 46, '適用', 'f x', 'δ'],
+    F2: [300, 332, 64, 38, 'f', '', 'α'],
+    X: [430, 332, 64, 38, 'x', '', 'β']
+  };
+  const TAG1 = (k) => [N1[k][0] + N1[k][2] / 2 + 24, N1[k][1]];   // 型変数の札の中央
+  /* 等式の行の欄の中央 x（左辺・＝・左・→・右） */
+  const EQX = [612, 646, 682, 716, 750];
+  const EQY = [204, 284];
+  /* 各段階の等式: [行, [左辺, 左, 右], 札の出どころ（節）, 注目する節] */
+  const EQ1 = [
+    [0, ['α', 'β', 'δ'], ['F2', 'X', 'I'], ['I', 'F2', 'X']],
+    [1, ['α', 'δ', 'γ'], ['F1', 'I', 'R'], ['R', 'F1', 'I']]
+  ];
+  const s1 = {
+    steps: [
+      { title: '分からない型に変数を置く', text: '`twice f x = f (f x)` は f を 2 回当てる関数で、型を 1 つも書いていない。推論は、分からない型ごとに新しい**型変数**（まだ決まっていない型の名前）を置く。引数 f に α、x に β、内側の `f x` の値に δ、本体の値に γ。twice の型は α → β → γ の形になる。' },
+      { title: '適用 1 つから等式 1 つ', text: '関数を引数に当てる式 `M N` では、M の型が「N の型 → `M N` の型」でなければならない。内側の `f x` に当てはめると α ＝ β → δ。f は、x の型の値を受け取って δ 型の値を返す関数だ、という等式になる。等式は、木の適用の節ごとに 1 本ずつ集まる（[[28-compiler.html#s2.2|第28章 場面2]]）。' },
+      { title: '外側の適用からもう 1 本', text: '外側の `f (f x)` は、同じ f を内側の値に当てる。そこから α ＝ δ → γ。同じ名前 f には同じ型変数 α を使うので、2 本の等式は α でつながる。この時点で等式が 2 本、型変数が 4 個あり、どれもまだ具体的な型ではない。解くのは次の場面の単一化。' },
+      { title: 'Rust は関数の境目に書かせる', text: 'Rust は引数と戻り値の型を書かせ、推すのは関数の本体の中だけ（[[28-compiler.html#s2.4|第28章 場面2]]）。twice は `fn twice<T>(f: impl Fn(T) -> T, x: T) -> T` と書く。型を書かないクロージャ `|f, x| f(f(x))` は E0282 で止まる。ML と Haskell は境目の型も推す。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      // 上: 定義の 1 行
+      S.text(40, 38, 'twice f x = f (f x)', { cls: 't-lg t-mono t-b pre' }, svg);
+      S.text(250, 38, '型の注釈は 0 個', { cls: 't-sm t-mid' }, svg);
+      // 左: 本体の木
+      const gT = st.gT = S.g({}, svg);
+      S.text(40, 78, '本体 f (f x) の構文木（第28章 場面1 の木と同じ形）', { cls: 't-xs t-dim' }, gT);
+      const E = (a, b, da, db) => S.line(N1[a][0] + da, N1[a][1] + N1[a][3] / 2, N1[b][0] + db, N1[b][1] - N1[b][3] / 2, { cls: 's-mid w15' }, gT);
+      st.edges = { F1: E('R', 'F1', -34, 0), I: E('R', 'I', 34, 0), F2: E('I', 'F2', -28, 0), X: E('I', 'X', 28, 0) };
+      st.nodes = {};
+      st.tags = {};
+      Object.keys(N1).forEach((k) => {
+        const [x, y, w, h, t, sub, tv] = N1[k];
+        const r = S.rect(x - w / 2, y - h / 2, w, h, { rx: 6, cls: 'f-sf s-d w15' }, gT);
+        if (sub) {
+          S.text(x, y - 3, t, { cls: 't-c t-sm t-b' }, gT);
+          S.text(x, y + 14, sub, { cls: 't-c t-xs t-mono t-d pre' }, gT);
+        } else S.text(x, y + 6, t, { cls: 't-c t-md t-mono t-b t-d' }, gT);
+        st.nodes[k] = r;
+        const [tx, ty] = TAG1(k);
+        const tg = S.g({}, gT);
+        const tr = S.rect(tx - 17, ty - 12, 34, 24, { rx: 4, cls: 'f-in s-rule w1' }, tg);
+        const tt = S.text(tx, ty + 5, ': ' + tv, { cls: 't-c t-mono t-md t-b pre' }, tg);
+        st.tags[k] = { g: tg, r: tr, t: tt };
+      });
+      // 右: 集めた等式
+      const gE = st.gE = S.g({}, svg);
+      S.rect(530, 60, 400, 296, { rx: 8, cls: 'f-sf s-rule w1' }, gE);
+      S.text(548, 86, '型の等式', { cls: 't-sm t-b' }, gE);
+      st.sig = S.g({}, gE);
+      S.text(548, 124, 'twice :', { cls: 't-md t-mono t-b pre' }, st.sig);
+      ['α', '→', 'β', '→', 'γ'].forEach((s, k) => S.text(648 + k * 30, 124, s, { cls: 't-c t-md t-mono t-b' }, st.sig));
+      S.text(548, 146, 'f の型 → x の型 → 本体の型', { cls: 't-xs t-dim' }, st.sig);
+      S.line(546, 166, 914, 166, { cls: 's-rule w1' }, gE);
+      st.rows = EQY.map((y, r) => {
+        const g = S.g({}, gE);
+        S.text(548, y + 6, '(' + (r + 1) + ')', { cls: 't-sm t-mono t-dim' }, g);
+        const slot = EQX.map((x, k) => S.text(x, y + 7, '', { cls: 't-c t-xl t-mono t-b' }, g));
+        slot[1].textContent = '＝';
+        slot[3].textContent = '→';
+        const sub = S.text(590, y + 32, r ? '外側の f (f x) から' : '内側の f x から', { cls: 't-xs t-dim' }, g);
+        return { g, slot, sub };
+      });
+      st.count = S.text(548, 340, '型変数 4 個・等式 2 本。解くのは場面2', { cls: 't-xs t-mid' }, gE);
+      S.line(30, 372, 930, 372, { cls: 's-rule w1' }, svg);
+      // 下: 段階ごとの中身
+      const P = st.P = [0, 1, 2, 3].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1: 型変数の読み方
+      S.text(40, 404, 'α・β・γ・δ は推論の途中で置く型変数（まだ決まっていない型の名前）', { cls: 't-sm' }, P[0]);
+      S.text(40, 428, '同じ名前 f の 2 か所には、同じ α を使う', { cls: 't-sm t-mid' }, P[0]);
+      S.text(40, 452, 'GHC は、推した結果の型変数を a・t などの小文字で表示する', { cls: 't-xs t-dim' }, P[0]);
+      // 段階2・3: 適用の規則
+      [1, 2].forEach((i) => {
+        const g = P[i];
+        S.text(40, 400, '関数の適用 M N から立てる等式', { cls: 't-sm t-b' }, g);
+        const cx = [150, 330, 520], ex = [238, 422];
+        ['M の型', 'N の型', 'M N の型'].forEach((s, k) => box(g, cx[k], 438, s, { w: 140, h: 30, fs: 12.5, cls: 't-md' }));
+        S.text(ex[0], 444, '＝', { cls: 't-c t-lg t-b' }, g);
+        S.text(ex[1], 444, '→', { cls: 't-c t-lg t-b' }, g);
+        const inst = i === 1 ? [['f の型', 'α'], ['x の型', 'β'], ['f x の型', 'δ']] : [['f の型', 'α'], ['f x の型', 'δ'], ['f (f x) の型', 'γ']];
+        inst.forEach(([s, v], k) => {
+          S.text(cx[k], 484, s, { cls: 't-c t-xs t-mono t-dim pre' }, g);
+          S.text(cx[k], 512, v, { cls: 't-c t-xl t-mono t-b t-x' }, g);
+        });
+        S.text(ex[0], 510, '＝', { cls: 't-c t-lg t-b t-x' }, g);
+        S.text(ex[1], 510, '→', { cls: 't-c t-lg t-b t-x' }, g);
+        S.text(616, 498, i === 1 ? 'M ＝ f、N ＝ x' : 'M ＝ f、N ＝ f x', { cls: 't-sm t-mono pre' }, g);
+        S.text(616, 520, i === 1 ? '→ 等式 (1)' : '→ 等式 (2)', { cls: 't-sm t-b t-x' }, g);
+      });
+      // 段階4: Rust
+      S.text(40, 400, 'Rust（rustc 1.95.0）：関数の引数と戻り値の型は書く', { cls: 't-sm t-b' }, P[3]);
+      code(P[3], 40, 428, ['fn twice<T>(f: impl Fn(T) -> T, x: T) -> T { f(f(x)) }'], 20);
+      S.text(420, 428, '← 通る', { cls: 't-xs t-mid' }, P[3]);
+      code(P[3], 40, 452, ['let twice = |f, x| f(f(x));'], 20);
+      S.text(236, 452, '← 型を書かないクロージャは止まる', { cls: 't-xs t-b t-x' }, P[3]);
+      errBox(P[3], 40, 466, 470, [
+        'error[E0282]: type annotations needed',
+        '2 |     let twice = |f, x| f(f(x));',
+        '  |                  ^     - type must be known at this point'
+      ], 18);
+      S.rect(560, 392, 370, 146, { rx: 6, cls: 'f-in s-rule w1' }, P[3]);
+      S.text(576, 418, 'Haskell・ML：境目の型も推す', { cls: 't-sm t-b' }, P[3]);
+      code(P[3], 576, 450, ['twice f x = f (f x)'], 20, 't-mono t-md');
+      S.text(576, 482, 'twice not True も twice (+1) 5 も通る', { cls: 't-xs t-mid' }, P[3]);
+      S.text(576, 506, '（True と 7。t が Bool と数の型に決まる）', { cls: 't-xs t-dim' }, P[3]);
+      // 動く札（節の型変数を等式へ運ぶ）
+      st.toks = [0, 1, 2].map(() => token(svg, ''));
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      // 注目する節: 段階2 は内側、段階3 は外側
+      const hl = i === 1 ? EQ1[0][3] : i === 2 ? EQ1[1][3] : [];
+      Object.keys(N1).forEach((k) => {
+        const on = hl.includes(k);
+        st.nodes[k].setAttribute('class', on ? 'f-sf s-x w2' : 'f-sf s-d w15');
+        st.tags[k].r.setAttribute('class', on ? 'f-x-soft s-x w15' : 'f-in s-rule w1');
+        st.tags[k].t.setAttribute('class', 't-c t-mono t-md t-b pre' + (on ? ' t-x' : ''));
+        op(st.tags[k].g, '');
+      });
+      Object.keys(st.edges).forEach((k) => {
+        const on = (i === 1 && (k === 'F2' || k === 'X')) || (i === 2 && (k === 'F1' || k === 'I'));
+        st.edges[k].setAttribute('class', on ? 's-x w2' : 's-mid w15');
+      });
+      op(st.gT, i === 3 ? 0.45 : '');
+      op(st.gE, i === 3 ? 0.45 : '');
+      op(st.sig, '');
+      // 等式の行: 段階2 で (1)、段階3 で (2) が埋まる
+      st.rows.forEach((row, r) => {
+        const shown = i >= r + 1;
+        op(row.g, shown ? '' : 0);
+        const v = EQ1[r][1];
+        [0, 2, 4].forEach((k, j) => { row.slot[k].textContent = v[j]; op(row.slot[k], ''); });
+        row.slot.forEach((t) => t.setAttribute('class', 't-c t-xl t-mono t-b' + (i === r + 1 ? ' t-x' : '')));
+      });
+      op(st.count, i >= 2 ? '' : 0);
+      st.toks.forEach((tk) => { tk.style.display = 'none'; });
+      if (i === 1 || i === 2) EQ1[i - 1][1].forEach((v, j) => { st.toks[j].querySelector('text').textContent = v; });
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, c = playing() ? ctx.ts : 99;
+      if (i === 0) {
+        // 型変数の札を、引数・内側・外側の順に置く
+        ['F1', 'F2', 'X', 'I', 'R'].forEach((k, j) => op(st.tags[k].g, c >= 0.3 + j * 0.3 ? '' : 0));
+        op(st.sig, c >= 1.9 ? '' : 0);
+      } else if (i === 1 || i === 2) {
+        // 節の札が等式の欄へ移り、着いた欄から字が出る
+        const [r, , from] = EQ1[i - 1];
+        const row = st.rows[r];
+        from.forEach((k, j) => {
+          const t0 = 0.5 + j * 0.45, f = U.prog(c, t0, 0.9);
+          const tk = st.toks[j];
+          const moving = c >= t0 && f < 1;
+          tk.style.display = moving ? '' : 'none';
+          if (moving) {
+            const [x0, y0] = TAG1(k), x1 = EQX[j * 2], y1 = EQY[r];
+            const e = U.ease.inOut(f);
+            at(tk, U.lerp(x0 + 6, x1, e), U.lerp(y0, y1, e));
+          }
+          op(row.slot[j * 2], f >= 1 ? '' : 0);
+        });
+      }
+    }
+  };
+
+  /* ================================================================
+     場面2 単一化
+     ghci（GHC 9.6.7）: twice f x = f (f x) の後 :t twice → twice :: (t -> t) -> t -> t、:t twice not → Bool -> Bool。
+     ghc -Wall の警告は GHC-38417（-Wmissing-signatures）。誤りの文は ghci の出力から位置の行を省いて写した:
+     'a' && True → GHC-83865、:t \x -> x x → GHC-25897（ファイルに書いても同じ文と番号）。
+     :t let loop = loop in loop → t（2026-11-22）
+     ================================================================ */
+  const MX = [570, 710];   // 向かい合わせた 2 つの木の、矢印の左の子・右の子の x
+  const s2 = {
+    steps: [
+      { title: '形をそろえる', text: '2 本の等式は左辺がどちらも α なので、右辺どうしも等しい: β → δ ＝ δ → γ。両辺はどちらも「→」の形なので、矢印の左どうし、右どうしを等しいと置ける。β ＝ δ と δ ＝ γ。このように形の同じ所で分け、型変数に型を代入して等式を減らしていく手順が**単一化**。' },
+      { title: '代入して型を得る', text: 'β・δ・γ は互いに等しいので 1 つの型変数 t に置き換え、α ＝ t → t。twice の型 α → β → γ は (t → t) → t → t になり、ghci の `:t twice` と同じ。`ghc -Wall` も、型を書かない twice にこの型を添えて警告する。t は使う所で決まる。' },
+      { title: '形が合わない', text: '`\'a\' && True` では、`&&` が Bool を 2 つ受け取るので、1 つめの引数から Bool ＝ Char が出る。両辺は型変数を含まない別の名前の型で、どう代入しても等しくならない。単一化はここで失敗し、GHC は「Bool を期待したが Char だった」と報告する。プログラムは実行の前に止まる。' },
+      { title: '自分を含む型（出現検査）', text: '`\\x -> x x` は x を x 自身に当てる。x の型を t1、結果を t2 とすると t1 ＝ t1 → t2。右辺が t1 を含むので、有限の型では等しくならない。単一化は代入の前に、型変数が相手の中に出ないかを確かめる（**出現検査**）。GHC 9.6.7 の文は「t1 と t1 -> t2 が合わない」。' },
+      { title: 'Ω には型が付かない', text: '[[37-lambda.html#s4.5|第37章 場面4]] の Ω は λx. x x を含むので型が付かない。再帰を持たない単純型付きラムダ計算では、型の付く項はどの順で簡約しても止まる（**強正規化**）。Haskell で止まらない式を書けるのは再帰の定義を足したからで、`let loop = loop in loop` の型は t。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      const gTop = st.gTop = S.g({}, svg);
+      // 左: 場面1 の等式から、右辺どうしの等式へ
+      S.text(46, 40, '場面1 で集めた等式', { cls: 't-xs t-dim' }, gTop);
+      code(gTop, 46, 74, ['(1)  α ＝ β → δ', '(2)  α ＝ δ → γ'], 30, 't-mono t-lg');
+      S.text(46, 144, '左辺がどちらも α なので、右辺どうしも等しい', { cls: 't-xs t-dim' }, gTop);
+      st.rhs = S.text(46, 178, 'β → δ ＝ δ → γ', { cls: 't-lg t-mono t-b pre' }, gTop);
+      S.text(46, 216, '矢印の左どうし・右どうしを等しいと置く', { cls: 't-xs t-dim' }, gTop);
+      st.res = [S.text(46, 254, 'β ＝ δ', { cls: 't-xl t-mono t-b t-x pre' }, gTop), S.text(176, 254, 'δ ＝ γ', { cls: 't-xl t-mono t-b t-x pre' }, gTop)];
+      // 右: 2 つの右辺を木にして向かい合わせる（上が (1) の右辺、下が (2) の右辺で根が下）
+      const gM = S.g({}, gTop);
+      const leaf = (x, y, s) => { S.rect(x - 23, y - 16, 46, 32, { rx: 5, cls: 'f-sf s-rule w1' }, gM); S.text(x, y + 7, s, { cls: 't-c t-lg t-mono t-b' }, gM); };
+      const arrow = (x, y) => { S.circle(x, y, 17, { cls: 'f-in s-fg w15' }, gM); S.text(x, y + 6, '→', { cls: 't-c t-lg t-b' }, gM); };
+      MX.forEach((x) => { S.line(640, 71, x, 98, { cls: 's-mid w15' }, gM); S.line(640, 239, x, 212, { cls: 's-mid w15' }, gM); });
+      arrow(640, 54);
+      leaf(MX[0], 114, 'β'); leaf(MX[1], 114, 'δ');
+      S.text(668, 59, '(1) の右辺 β → δ', { cls: 't-xs t-dim' }, gM);
+      arrow(640, 256);
+      leaf(MX[0], 196, 'δ'); leaf(MX[1], 196, 'γ');
+      S.text(668, 261, '(2) の右辺 δ → γ', { cls: 't-xs t-dim' }, gM);
+      st.eqL = MX.map((x) => S.line(x, 130, x, 180, { cls: 's-x w2 dash' }, gM));
+      st.eqT = MX.map((x) => {
+        const g = S.g({}, gM);
+        S.rect(x - 12, 145, 24, 20, { rx: 4, cls: 'f-bg s-none' }, g);
+        S.text(x, 160, '＝', { cls: 't-c t-md t-b t-x' }, g);
+        return g;
+      });
+      S.text(MX[0] - 34, 160, '左どうし', { cls: 't-xs t-dim t-end' }, gM);
+      S.text(MX[1] + 34, 160, '右どうし', { cls: 't-xs t-dim' }, gM);
+      S.line(30, 286, 930, 286, { cls: 's-rule w1' }, svg);
+      // 下: 段階ごとの中身
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1: 単一化の手順
+      S.text(40, 318, '単一化の手順：等式を 1 本ずつ取り出して', { cls: 't-sm t-b' }, P[0]);
+      [
+        ['A → B ＝ C → D', 'A ＝ C と B ＝ D の 2 本に分ける'],
+        ['v ＝ T（v は型変数）', 'T の中に v が無ければ、残りの等式の v を T に置き換える'],
+        ['T ＝ T', '同じ型どうしは消す'],
+        ['Bool ＝ Char', '名前の違う型どうし、矢印と名前の型は等しくできない：失敗']
+      ].forEach(([a, b], k) => {
+        const y = 354 + k * 34;
+        S.rect(40, y - 21, 890, 30, { rx: 4, cls: k === 0 ? 'f-x-soft' : 'f-none' }, P[0]);
+        S.text(56, y, a, { cls: 't-md t-mono t-b pre' + (k === 0 ? ' t-x' : '') }, P[0]);
+        S.text(330, y, b, { cls: 't-sm' }, P[0]);
+      });
+      S.text(40, 518, '等式が無くなれば成功。それまでの置き換えの全体（代入）が答えになる', { cls: 't-sm t-mid' }, P[0]);
+      // 段階2: 代入と、GHC の表示
+      S.text(40, 318, '代入（4 つの型変数）', { cls: 't-sm t-b' }, P[1]);
+      [['β', 't'], ['δ', 't'], ['γ', 't'], ['α', 't → t']].forEach(([v, t], k) => {
+        const y = 352 + k * 30;
+        S.text(64, y, v, { cls: 't-c t-lg t-mono t-b' }, P[1]);
+        S.text(96, y, '↦', { cls: 't-c t-md t-mid' }, P[1]);
+        S.text(122, y, t, { cls: 't-lg t-mono t-b t-x pre' }, P[1]);
+      });
+      S.text(40, 488, 'twice : α → β → γ', { cls: 't-md t-mono pre' }, P[1]);
+      S.text(40, 516, '      ＝ (t → t) → t → t', { cls: 't-md t-mono t-b t-x pre' }, P[1]);
+      term(P[1], 420, 300, 510, 'ghci（GHC 9.6.7）', [['ghci> twice f x = f (f x)', 'b'], ['ghci> :t twice', 'b'], ['twice :: (t -> t) -> t -> t', ''], ['ghci> :t twice not', 'b'], ['twice not :: Bool -> Bool', '']], 19);
+      term(P[1], 420, 442, 510, 'ghc -Wall（型を書かない twice をコンパイル）', [['warning: [GHC-38417] [-Wmissing-signatures]', 'd'], ['    Top-level binding with no type signature:', 'd'], ['      twice :: (t -> t) -> t -> t', 'b']], 18);
+      // 段階3: 形が合わない
+      code(P[2], 40, 330, ["'a' && True"], 20, 't-mono t-lg t-b');
+      code(P[2], 40, 362, ['(&&) :: Bool -> Bool -> Bool', "'a'  :: Char"], 22, 't-mono t-sm t-mid');
+      box(P[2], 82, 444, 'Bool', { w: 76, h: 34, fs: 15, mono: true, cls: 't-lg t-b' });
+      S.text(140, 450, '＝', { cls: 't-c t-lg t-b t-x' }, P[2]);
+      box(P[2], 198, 444, 'Char', { w: 76, h: 34, fs: 15, mono: true, cls: 't-lg t-b' });
+      box(P[2], 282, 444, '失敗', { w: 56, h: 28, fs: 12.5, box: 'f-x-soft s-x w15', cls: 't-md t-b t-x' });
+      S.text(40, 500, '名前の違う型どうしは、代入しても等しくならない', { cls: 't-sm t-b t-x' }, P[2]);
+      S.text(40, 524, '&& の 1 つめの引数から出た等式', { cls: 't-xs t-dim' }, P[2]);
+      errBox(P[2], 400, 310, 530, [
+        'error: [GHC-83865]',
+        "    • Couldn't match expected type ‘Bool’ with actual type ‘Char’",
+        "    • In the first argument of ‘(&&)’, namely ‘'a'’"
+      ], 18);
+      S.text(400, 404, 'ghci（GHC 9.6.7）の出力。位置の行は省いた', { cls: 't-xs t-dim' }, P[2]);
+      // 段階4: 自分を含む型
+      code(P[3], 40, 330, ['\\x -> x x'], 20, 't-mono t-lg t-b');
+      S.text(40, 360, 'x の型を t1、x x の型を t2 と置くと', { cls: 't-xs t-dim' }, P[3]);
+      box(P[3], 70, 430, 't1', { w: 52, h: 34, fs: 15, mono: true, cls: 't-lg t-b' });
+      S.text(118, 436, '＝', { cls: 't-c t-lg t-b t-x' }, P[3]);
+      S.line(200, 413, 172, 446, { cls: 's-mid w15' }, P[3]);
+      S.line(200, 413, 228, 446, { cls: 's-mid w15' }, P[3]);
+      S.circle(200, 400, 16, { cls: 'f-in s-fg w15' }, P[3]);
+      S.text(200, 406, '→', { cls: 't-c t-lg t-b' }, P[3]);
+      box(P[3], 172, 462, 't1', { w: 46, h: 32, fs: 15, mono: true, cls: 't-lg t-b t-x', box: 'f-x-soft s-x w2' });
+      box(P[3], 232, 462, 't2', { w: 46, h: 32, fs: 15, mono: true, cls: 't-lg t-b' });
+      S.text(272, 466, '← 右辺の中に t1', { cls: 't-xs t-b t-x' }, P[3]);
+      S.text(40, 512, '出現検査で失敗：置き換えても右辺が左辺より大きいまま', { cls: 't-sm t-b t-x' }, P[3]);
+      errBox(P[3], 400, 310, 530, [
+        'error: [GHC-25897]',
+        "    • Couldn't match expected type ‘t1’ with actual type ‘t1 -> t2’",
+        '      ‘t1’ is a rigid type variable bound by',
+        '        the inferred type of it :: (t1 -> t2) -> t2'
+      ], 18);
+      S.text(400, 422, ':t \\x -> x x の出力（GHC 9.6.7）。位置の行と後の行は省いた', { cls: 't-xs t-dim' }, P[3]);
+      S.text(400, 444, '「出現検査（occurs check）」の語は文に出ない', { cls: 't-xs t-dim' }, P[3]);
+      // 段階5: Ω
+      code(P[4], 40, 332, ['Ω = (λx. x x) (λx. x x)'], 20, 't-mono t-lg t-b');
+      S.text(40, 364, '第37章 場面4 の止まらない項。λx. x x に型が付かないので、Ω にも付かない', { cls: 't-sm' }, P[4]);
+      S.rect(40, 388, 420, 76, { rx: 6, cls: 'f-sf s-rule w1' }, P[4]);
+      S.text(56, 414, '単純型付きラムダ計算（再帰なし）', { cls: 't-sm t-b' }, P[4]);
+      S.text(56, 442, '型の付く項は、どの順で簡約しても止まる', { cls: 't-sm' }, P[4]);
+      term(P[4], 490, 388, 440, 'ghci（GHC 9.6.7）：再帰の定義を足すと', [['ghci> :t let loop = loop in loop', 'b'], ['let loop = loop in loop :: t', '']], 19);
+      S.text(490, 500, '止まらない式にも、どの型にもなれる t が付く', { cls: 't-sm t-mid' }, P[4]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      op(st.gTop, i <= 1 ? '' : 0.4);
+      st.rhs.setAttribute('class', 't-lg t-mono t-b pre' + (i === 0 ? ' t-x' : ''));
+      st.eqL.forEach((l) => grow(l, +l.getAttribute('x1'), 130, +l.getAttribute('x1'), 180, 1));
+      st.eqT.forEach((g) => op(g, ''));
+      st.res.forEach((t) => op(t, ''));
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, c = playing() ? ctx.ts : 99;
+      if (i !== 0) return;
+      // 左どうし、右どうしの順に「＝」の線を引き、引き終えたら結果の等式を出す
+      MX.forEach((x, k) => {
+        const t0 = 0.6 + k * 0.7, f = U.ease.inOut(U.prog(c, t0, 0.7));
+        grow(st.eqL[k], x, 130, x, 180, f);
+        op(st.eqT[k], f >= 1 ? '' : 0);
+        op(st.res[k], c >= t0 + 0.9 ? '' : 0);
+      });
+    }
+  };
+
+  /* ================================================================
+     場面3 let 多相と主要型
+     ghci（GHC 9.6.7）: :set -fprint-explicit-foralls の後 :t id → id :: forall a. a -> a。
+     :t (id 'a', id True) → (Char, Bool)。let f x = x in (f 'a', f True) → ('a',True)。
+     \f -> (f 'a', f True) → GHC-83865（Couldn't match expected type ‘Char’ with actual type ‘Bool’）。
+     twice に (Int -> Int) -> Int -> Int・([a] -> [a]) -> [a] -> [a] と書くと通り、(Int -> Bool) -> Int -> Bool は GHC-83865。
+     pair :: (forall a. a -> a) -> (Char, Bool) は LANGUAGE の印なしで通り、pair id は ('a',True)。
+     show (read "3") はファイルで GHC-39999（ghci は既定の型の規則で通ってしまうので、ファイルで確かめた）（2026-11-22）
+     ================================================================ */
+  const Q3 = [   // 4 つの区画: [x, y, 幅, 高さ, 題, 主役になる段階]
+    [30, 14, 436, 262, 'let で定義した名前：一般化して、使うたびに具体化', [0, 1]],
+    [30, 288, 436, 258, 'λ の引数：一般化しない', [2]],
+    [494, 14, 436, 262, '主要型：正しい型はどれもこの型の具体化', [3]],
+    [494, 288, 436, 258, '注釈が要る所', [4]]
+  ];
+  const s3 = {
+    steps: [
+      { title: '一般化と forall', text: '`id x = x` を推すと、x の型 a には等式が 1 本も無く、何にも決まらない。残った型変数は、定義の推論を終える所で「どの型 a についても」とまとめる（**一般化**）。Prelude の id も同じ定義で、ghci に forall を表示させると `id :: forall a. a -> a`。' },
+      { title: '使うたびに具体化', text: '`(id \'a\', id True)` では、id を使う所ごとに a を新しい型変数（a1、a2）に取り替えてから単一化する（**具体化**）。a1 ＝ Char、a2 ＝ Bool と別々に決まり、式の型は `(Char, Bool)`。1 つの定義を、型の違う 2 か所で使える。let で定義した名前のこの扱いが **let 多相**。' },
+      { title: 'λ の引数はまとめない', text: '`\\f -> (f \'a\', f True)` は型が付かない。f は引数で、何が渡るかは呼ぶ側しだいなので、推論は f に型変数 φ を 1 つだけ置き、2 か所の使い方を同じ φ に集める。Char ＝ Bool が要り、単一化が失敗する（GHC-83865）。let で定義した f なら通る。' },
+      { title: '主要型', text: '推論が返す型は、付けられる型のうち最も一般的なもの（**主要型**）で、正しい型はどれも、その型変数に型を代入した形になる。twice に `(Int -> Int) -> Int -> Int` と書いても通るのは、t に Int を入れた形だから。どの t でも作れない形は GHC が拒んだ。' },
+      { title: '注釈が要る所', text: '引数の f を多相のまま受け取るには型を書く。`pair :: (forall a. a -> a) -> (Char, Bool)` を、GHC 9.6.7 は拡張の印なしで通した。この形の型は一般には推論できない（Wells 1999）ので、書いた型から確かめる。[[5|型クラス]]の曖昧さでも注釈が要る。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, sg = st.sg = stager();
+      st.F = []; st.C = [];
+      Q3.forEach(([x, y, w, h, title]) => {
+        const f = S.g({}, svg);
+        S.rect(x, y, w, h, { rx: 8, cls: 'f-sf s-rule w1' }, f);
+        S.text(x + 16, y + 26, title, { cls: 't-sm t-b' }, f);
+        st.F.push(f);
+        st.C.push(S.g({}, svg));
+      });
+      // 左上: let で定義した名前
+      const C0 = st.C[0];
+      S.rect(124, 54, 248, 40, { rx: 6, cls: 'f-in s-fg w15' }, C0);
+      st.mono = S.text(248, 80, 'id :: a -> a', { cls: 't-c t-lg t-mono t-b pre' }, C0);
+      st.poly = S.g({}, C0);
+      spans(st.poly, 149, 80, [['id :: ', ''], ['forall a.', 't-x'], [' a -> a', '']], 't-lg t-mono t-b pre');
+      S.text(248, 114, 'Prelude の id（定義は id x = x）を、forall を表示する設定の :t で', { cls: 't-c t-xs t-dim' }, C0);
+      sg.ln(1, S.line(212, 124, 136, 170, { cls: 's-mid w15' }, C0), 0.4, 0.6);
+      sg.ln(1, S.line(284, 124, 360, 170, { cls: 's-mid w15' }, C0), 0.7, 0.6);
+      sg.el(1, S.text(146, 150, 'a1 ＝ Char', { cls: 't-end t-sm t-mono t-b t-x pre' }, C0), 1.0);
+      sg.el(1, S.text(350, 150, 'a2 ＝ Bool', { cls: 't-sm t-mono t-b t-x pre' }, C0), 1.3);
+      sg.el(1, box(C0, 134, 192, "id 'a' :: Char", { w: 160, h: 30, fs: 12.5, mono: true, cls: 't-md' }).g, 1.0);
+      sg.el(1, box(C0, 362, 192, 'id True :: Bool', { w: 170, h: 30, fs: 12.5, mono: true, cls: 't-md' }).g, 1.3);
+      sg.el(1, S.text(248, 238, "(id 'a', id True) :: (Char, Bool)", { cls: 't-c t-md t-mono t-b pre' }, C0), 1.8);
+      sg.el(1, S.text(248, 260, 'ghci の :t の表示', { cls: 't-c t-xs t-dim' }, C0), 1.8);
+      // 左下: λ の引数
+      const C1 = st.C[1];
+      code(C1, 46, 340, ["\\f -> (f 'a', f True)"], 20, 't-mono t-lg t-b');
+      sg.el(2, code(C1, 46, 374, ["f 'a'  から  φ ＝ Char → r1"], 22)[0], 0.4);
+      sg.el(2, code(C1, 46, 398, ['f True から  φ ＝ Bool → r2'], 22)[0], 0.9);
+      sg.el(2, S.text(46, 428, 'φ は 1 つなので Char ＝ Bool が要る：失敗', { cls: 't-sm t-b t-x' }, C1), 1.5);
+      const e1 = errBox(C1, 46, 440, 404, ['error: [GHC-83865]', "• Couldn't match expected type ‘Char’ with actual type ‘Bool’"], 18);
+      e1.querySelectorAll('text').forEach((t) => t.setAttribute('class', t.getAttribute('class').replace('t-sm', 't-xs')));
+      sg.el(2, e1, 1.9);
+      code(C1, 46, 518, ["let f x = x in (f 'a', f True)"], 20, 't-mono t-sm');
+      S.text(260, 518, "⇒ ('a',True)", { cls: 't-sm t-mono t-b pre' }, C1);
+      S.text(46, 538, 'let で束ねた f は一般化されるので通る', { cls: 't-xs t-dim' }, C1);
+      // 右上: 主要型
+      const C2 = st.C[2];
+      S.rect(592, 54, 240, 40, { rx: 6, cls: 'f-in s-fg w15' }, C2);
+      S.text(712, 80, '(t -> t) -> t -> t', { cls: 't-c t-lg t-mono t-b pre' }, C2);
+      S.text(712, 114, 'twice の主要型（場面2 で求めた型）', { cls: 't-c t-xs t-dim' }, C2);
+      [['t := Int', '(Int -> Int) -> Int -> Int'], ['t := Bool', '(Bool -> Bool) -> Bool -> Bool'], ['t := [a]', '([a] -> [a]) -> [a] -> [a]']].forEach(([a, b], k) => {
+        const g = S.g({}, C2), y = 152 + k * 30;
+        S.text(512, y, a, { cls: 't-sm t-mono t-b t-x pre' }, g);
+        S.text(596, y, '⇒', { cls: 't-c t-sm t-mid' }, g);
+        S.text(612, y, b, { cls: 't-sm t-mono pre' }, g);
+        sg.el(3, g, 0.5 + k * 0.5);
+      });
+      const gNo = S.g({}, C2);
+      S.line(510, 232, 914, 232, { cls: 's-rule w1' }, gNo);
+      S.text(512, 256, '(Int -> Bool) -> Int -> Bool', { cls: 't-sm t-mono t-x pre' }, gNo);
+      S.text(712, 256, 'どの t でも作れない（GHC-83865）', { cls: 't-xs t-b t-x' }, gNo);
+      sg.el(3, gNo, 2.1);
+      // 右下: 注釈が要る所
+      const C3 = st.C[3];
+      code(C3, 510, 338, ['pair :: (forall a. a -> a) -> (Char, Bool)', "pair f = (f 'a', f True)"], 21, 't-mono t-sm t-b');
+      code(C3, 510, 386, ["pair id  ⇒  ('a',True)"], 20, 't-mono t-sm');
+      S.text(510, 412, 'GHC 9.6.7 は印なしで通した（GHC2021 に RankNTypes）', { cls: 't-xs t-mid' }, C3);
+      S.text(510, 432, 'forall が引数の中にある型は、一般には推論できない', { cls: 't-xs t-mid' }, C3);
+      S.line(510, 446, 914, 446, { cls: 's-rule w1' }, C3);
+      code(C3, 510, 472, ['show (read "3")'], 20, 't-mono t-sm t-b');
+      S.text(640, 472, '→ GHC-39999（型クラスの曖昧さ）', { cls: 't-xs t-b t-x' }, C3);
+      code(C3, 510, 494, ["Ambiguous type variable ‘a0’ arising from a use of ‘show’"], 20, 't-mono t-xs t-x');
+      S.text(510, 518, 'read の結果の型が決まらない。read "3" :: Int と書けば "3"', { cls: 't-xs t-dim' }, C3);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      Q3.forEach((q, k) => {
+        const cur = q[5].includes(i), shown = i >= q[5][0];
+        op(st.F[k], cur ? '' : 0.45);
+        op(st.C[k], !shown ? 0 : cur ? '' : 0.4);
+      });
+      op(st.mono, 0);
+      op(st.poly, '');
+      st.sg.settle(i);
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, c = playing() ? ctx.ts : 99;
+      if (i === 0) {
+        // 推した型 a -> a に、一般化で forall a. が付く
+        const f = U.prog(c, 1.0, 0.5);
+        op(st.mono, 1 - f);
+        op(st.poly, f);
+      }
+      st.sg.run(i, c);
+    }
+  };
+
+  /* ================================================================
+     場面4 型が振る舞いを縛る（パラメトリシティ）
+     ghci（GHC 9.6.7）: :t take 2 → [a] -> [a]、:t \xs -> xs ++ xs → [a] -> [a]、:t filter odd → Integral a => [a] -> [a]、
+     :t (0 :) → Num a => [a] -> [a]。map (*2) (reverse [3,2,1]) と reverse (map (*2) [3,2,1]) はどちらも [2,4,6]、
+     map (*2) (filter odd [3,2,1]) は [6,2]、filter odd (map (*2) [3,2,1]) は []。:t cast → (Typeable a, Typeable b) => a -> Maybe b。
+     Core と STG は ghc -O0 -ddump-simpl -ddump-stg-final -dsuppress-all -dsuppress-uniques で、twice に型を書いたモジュールから写した。
+     種 * の値がごみ集めの管理する番地で表されることは、GHC 9.6.7 の利用者の手引き（表現の多相の節、BoxedRep）による（2026-11-22）
+     ================================================================ */
+  const Q4 = [
+    [30, 14, 436, 200, 'a -> a の関数は、値を調べられない', [0]],
+    [30, 226, 436, 320, '[a] -> [a] の関数（[3,2,1] に当てた値）', [1]],
+    [494, 14, 436, 346, 'h ＝ (*2) を g の前と後のどちらで当てても', [2, 3]],
+    [494, 372, 436, 174, '機械の上：型の引数は消える', [4]]
+  ];
+  const SQ4 = [   // 段階3 は reverse、段階4 は filter odd
+    { g: 'reverse', B: '[1,2,3]', D1: '[2,4,6]', D2: '[2,4,6]', eq: '＝' },
+    { g: 'filter odd', B: '[3,1]', D1: '[6,2]', D2: '[]', eq: '≠' }
+  ];
+  const s4 = {
+    steps: [
+      { title: 'a -> a の関数は id だけ', text: '`Int -> Int` の関数は (+1)、(*2)、negate など無数にある。`f :: a -> a` は a が何の型か知らないので、値を調べて分岐することも、a の値を新しく作ることもできない。返せるのは受け取った値だけで、止まる関数なら id しかない。型変数が、書ける実装を絞っている。' },
+      { title: '[a] -> [a] にできること', text: '`g :: [a] -> [a]` は、要素を並べ替え、捨て、複製できるが、要素を新しく作ることも、値で選ぶこともできない。reverse・`take 2`・`\\xs -> xs ++ xs` はこの型を持つ。`filter odd` の型は `Integral a => [a] -> [a]` で、制約が値を調べる手段を渡す。' },
+      { title: '型だけから出る等式', text: 'g は要素の値を見ずに並べ替えるだけなので、要素に h を先に当てても後で当てても結果は同じ: `map h (g xs)` ＝ `g (map h xs)`。g ＝ reverse、h ＝ (*2) なら両辺とも [2,4,6]。g の中身を見ずに型だけから出るこの等式を**自由定理**と呼ぶ。' },
+      { title: '制約があると崩れる', text: '`filter odd` は要素の値で選ぶので、等式が崩れる。左辺は [6,2]、右辺は []。型の `Integral a =>` が、値を調べられる印になっている。実行時に型を調べる cast も型に `Typeable a =>` を出すので、制約の無い `a -> a` は id のまま。' },
+      { title: '機械の上では 1 つのコード', text: 'GHC は、型変数に入る値を、どの型でもヒープの物への番地で表す。twice の Core にある型の引数 `@t` は次の段の STG で消え（[[26-kata.html#s3.6|第26章 場面3]]）、機械語は t によらず 1 つ。Rust は型ごとに機械語を写す（[[28-compiler.html#s3.6|第28章 場面3]]）。前者は番地をたどる手間を、後者は機械語の量を払う。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      st.F = []; st.C = [];
+      Q4.forEach(([x, y, w, h, title]) => {
+        const f = S.g({}, svg);
+        S.rect(x, y, w, h, { rx: 8, cls: 'f-sf s-rule w1' }, f);
+        S.text(x + 16, y + 26, title, { cls: 't-sm t-b' }, f);
+        st.F.push(f);
+        st.C.push(S.g({}, svg));
+      });
+      const val = (g, cx, cy, s, w) => box(g, cx, cy, s, { w: w || 36, h: 28, fs: 12.5, mono: true, cls: 't-md t-b t-d', box: 'f-d-soft s-d w15' });
+      // 左上: Int -> Int と a -> a
+      const C0 = st.C[0];
+      S.text(46, 70, 'Int -> Int', { cls: 't-md t-mono t-b pre' }, C0);
+      val(C0, 72, 132, '3');
+      [['4', '(+1)'], ['6', '(*2)'], ['-3', 'negate'], ['0', 'const 0']].forEach(([v, f], k) => {
+        const y = 92 + k * 26;
+        S.line(91, 132, 190, y, { cls: 's-mid w1' }, C0);
+        box(C0, 210, y, v, { w: 36, h: 22, fs: 11, mono: true, cls: 't-sm t-b t-d', box: 'f-d-soft s-d w1' });
+        S.text(236, y + 4, f, { cls: 't-xs t-mono t-mid pre' }, C0);
+      });
+      S.text(196, 202, '…（無数）', { cls: 't-xs t-dim' }, C0);
+      S.line(290, 50, 290, 204, { cls: 's-rule w1' }, C0);
+      S.text(306, 70, 'a -> a', { cls: 't-md t-mono t-b pre' }, C0);
+      val(C0, 328, 132, 'v');
+      S.text(328, 164, 'a の値', { cls: 't-c t-xs t-dim' }, C0);
+      S.line(348, 132, 398, 132, { cls: 's-x w2', 'marker-end': mk('x') }, C0);
+      val(C0, 422, 132, 'v');
+      S.text(306, 196, '止まるなら id だけ', { cls: 't-sm t-b t-x' }, C0);
+      // 左下: [a] -> [a] の関数
+      const C1 = st.C[1];
+      [['関数', 46], ['型（ghci の :t）', 170], ['[3,2,1] に当てる', 356]].forEach(([s, x]) => S.text(x, 280, s, { cls: 't-xs t-dim' }, C1));
+      S.line(40, 288, 456, 288, { cls: 's-rule w1' }, C1);
+      [
+        ['reverse', '[a] -> [a]', '[1,2,3]', 0],
+        ['take 2', '[a] -> [a]', '[3,2]', 0],
+        ['\\xs -> xs ++ xs', '[a] -> [a]', '[3,2,1,3,2,1]', 0],
+        ['filter odd', 'Integral a => [a] -> [a]', '[3,1]', 1],
+        ['(0 :)', 'Num a => [a] -> [a]', '[0,3,2,1]', 1]
+      ].forEach(([f, t, r, c], k) => {
+        const y = 314 + k * 30;
+        if (c) S.rect(40, y - 19, 416, 27, { rx: 4, cls: 'f-x-soft' }, C1);
+        S.text(46, y, f, { cls: 't-sm t-mono t-b pre' }, C1);
+        S.text(170, y, t, { cls: 't-sm t-mono pre' + (c ? ' t-x' : '') }, C1);
+        S.text(356, y, r, { cls: 't-sm t-mono t-d pre' }, C1);
+      });
+      S.text(46, 482, '制約の無い 3 つ：並べ替える・捨てる・複製するだけ', { cls: 't-xs' }, C1);
+      S.text(46, 504, '制約の付いた 2 つ：値で選ぶ（odd）・値を作る（0）', { cls: 't-xs t-b t-x' }, C1);
+      S.text(46, 530, '実行時に型を調べる cast の型も (Typeable a, Typeable b) => …', { cls: 't-xs t-dim' }, C1);
+      // 右上: 2 通りの順
+      const C2 = st.C[2], sq = st.sq = {};
+      const arw = (x1, y1, x2, y2) => S.line(x1, y1, x2, y2, { cls: 's-mid w15', 'marker-end': mk('mid') }, C2);
+      sq.ar = [arw(644, 96, 762, 96), arw(820, 112, 820, 194), arw(590, 112, 590, 256), arw(644, 276, 762, 276)];
+      S.text(530, 101, 'xs', { cls: 't-end t-sm t-mono t-dim' }, C2);
+      val(C2, 590, 96, '[3,2,1]', 104);
+      sq.gTop = S.text(703, 86, '', { cls: 't-c t-sm t-mono t-b pre' }, C2);
+      S.text(832, 158, 'map (*2)', { cls: 't-sm t-mono pre' }, C2);
+      S.text(580, 190, 'map (*2)', { cls: 't-end t-sm t-mono pre' }, C2);
+      sq.gBot = S.text(703, 266, '', { cls: 't-c t-sm t-mono t-b pre' }, C2);
+      sq.B = val(C2, 820, 96, '', 104);
+      sq.D1 = val(C2, 820, 214, '', 104);
+      S.text(760, 218, 'map h (g xs)', { cls: 't-end t-xs t-mono t-dim pre' }, C2);
+      sq.C = val(C2, 590, 276, '[6,4,2]', 104);
+      sq.D2 = val(C2, 820, 276, '', 104);
+      S.text(820, 308, 'g (map h xs)', { cls: 't-c t-xs t-mono t-dim pre' }, C2);
+      sq.sign = S.text(820, 251, '', { cls: 't-c t-lg t-b t-x' }, C2);
+      sq.eq = spans(C2, 512, 340, [['map h (g xs)', ''], ['', 't-x'], ['g (map h xs)', '']], 't-md t-mono t-b pre');
+      // 右下: 中間表現で型が消える
+      const C3 = st.C[3];
+      S.text(510, 420, 'Core（ghc -O0 -ddump-simpl）', { cls: 't-xs t-dim' }, C3);
+      spans(C3, 510, 442, [['twice = \\ ', ''], ['@t', 't-x t-b'], [' f x -> f (f x)', '']], 't-sm t-mono pre');
+      S.text(510, 472, 'STG（-ddump-stg-final）', { cls: 't-xs t-dim' }, C3);
+      code(C3, 510, 494, ['twice = \\r [f x] let { sat = \\u [] f x; } in  f sat;'], 20);
+      S.text(510, 524, '@t は消え、f と x はどの型でもヒープの物への番地', { cls: 't-xs t-b t-x' }, C3);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state, sq = st.sq;
+      Q4.forEach((q, k) => {
+        const cur = q[5].includes(i), shown = i >= q[5][0];
+        op(st.F[k], cur ? '' : 0.45);
+        op(st.C[k], !shown ? 0 : cur ? '' : 0.4);
+      });
+      const v = SQ4[i >= 3 ? 1 : 0];
+      sq.gTop.textContent = v.g;
+      sq.gBot.textContent = v.g;
+      sq.B.t.textContent = v.B;
+      sq.D1.t.textContent = v.D1;
+      sq.D2.t.textContent = v.D2;
+      sq.sign.textContent = v.eq;
+      sq.eq[1].textContent = '  ' + v.eq + '  ';
+      [sq.B.g, sq.D1.g, sq.C.g, sq.D2.g, sq.sign, sq.eq[0].parentNode].forEach((el) => op(el, ''));
+      sq.ar.forEach((a) => a.setAttribute('class', 's-mid w15'));
+    },
+    frame(ctx) {
+      const st = ctx.state, sq = st.sq, i = ctx.step, c = playing() ? ctx.ts : 99;
+      if (i !== 2 && i !== 3) return;
+      // 右回り（g の後に h）と左回り（h の後に g）を順に計算し、最後に 2 つの値を比べる
+      const T = [0.4, 1.0, 1.6, 2.2];
+      [sq.B.g, sq.D1.g, sq.C.g, sq.D2.g].forEach((el, k) => {
+        op(el, c >= T[k] ? '' : 0);
+        sq.ar[[0, 1, 2, 3][k]].setAttribute('class', c >= T[k] && c < T[k] + 0.6 ? 's-x w2' : 's-mid w15');
+      });
+      op(sq.sign, c >= 2.8 ? '' : 0);
+      op(sq.eq[0].parentNode, c >= 2.8 ? '' : 0);
+    }
+  };
+
+  /* ================================================================
+     場面5 型クラスと辞書渡し
+     Core は SumAll.hs（export の一覧なし）を ghc -O0 / -O2 -ddump-simpl -dsuppress-all -dsuppress-uniques -dno-typeable-binds で出した。
+     export を total だけにすると、-O2 では辞書を取る sumAll が消えた。辞書の中身は ghc --show-iface で
+     base-4.18.3.0 の GHC/Num.hi（$fNumInt）と GHC/Float.hi（$fNumDouble）から写した。
+     機械語は sumAll を [Int] と [Double] に使った版の -O2 -ddump-asm（+# → addq、+## → addsd）。
+     Rust は rustc 1.95.0 -O -C symbol-mangling-version=v0 の nm と objdump -M intel（sum_all::<f64> は addsd、<i32> は add と SIMD の paddd）。
+     size_of は &i32 が 8、&dyn Display と Box<dyn Fn(i32) -> i32> が 16。E0038 は edition 2024（2026-11-22）
+     ================================================================ */
+  const CW = 6.6;   // t-sm（11px）の等幅 1 字の幅
+  const NUMROWS = [
+    ['+', '$fNumInt_$c+', 'plusDouble'],
+    ['-', '$fNumInt_$c-', 'minusDouble'],
+    ['*', '$fNumInt_$c*', 'timesDouble'],
+    ['negate', '$fNumInt_$cnegate', 'negateDouble'],
+    ['abs', '$fNumInt_$cabs', 'fabsDouble'],
+    ['signum', '$fNumInt_$csignum', '$fNumDouble_$csignum'],
+    ['fromInteger', '$fNumInt_$cfromInteger', '$fNumDouble_$cfromInteger']
+  ];
+  const ROWY = (k) => 88 + k * 20;
+  const CORE0 = [   // -O0 の Core。[文字, 印]（d は辞書、t は型の引数）
+    [['sumAll', '']],
+    [['  = \\ ', ''], ['@a', 't'], [' ', ''], ['$dNum', 'd'], [' ds ->', '']],
+    [['      case ds of {', '']],
+    [['        [] -> fromInteger ', ''], ['$dNum', 'd'], [' (IS 0#);', '']],
+    [['        : x xs -> + ', ''], ['$dNum', 'd'], [' x (sumAll ', ''], ['$dNum', 'd'], [' xs)', '']],
+    [['      }', '']]
+  ];
+  const COREY = (k) => 318 + k * 22, TOTY = 470;
+  const s5 = {
+    steps: [
+      { title: 'アドホック多相', text: '`(+) :: Num a => a -> a -> a` の `Num a =>` は**制約**で、a が Num の型であることを求める。+ は全部の型で同じ動きをするのではなく、型ごとに別の実装を持つ（**アドホック多相**）。GHC 9.6.7 -O2 の機械語では、Int が addq、Double が addsd。' },
+      { title: 'class と instance', text: '`class Num a where` は、Num の型が持つべき関数の名前と型を宣言する（7 つ。オブジェクト指向のクラスとは別の物）。`instance Num Int` が Int での中身を与える。数のリテラル 0 は `fromInteger 0` の略で、型が決まるまで Int とも Double とも決まらない。' },
+      { title: '制約は隠れた引数になる', text: '`ghc -O0 -ddump-simpl` で sumAll の Core を見ると、引数が 3 つある: 型 `@a`、Num の**辞書** `$dNum`、リスト。`+ $dNum` は辞書から + を取り出して呼び、0 は `fromInteger $dNum` で作る。制約 1 つが、実装の表を受け取る引数 1 つになる（**辞書渡し**）。' },
+      { title: '呼ぶ側が辞書を選ぶ', text: 'total は型が Int と決まっているので、コンパイラは Int の辞書 `$fNumInt` を選んで sumAll に渡す。辞書は 7 つの関数を並べた値で、Int の + は I# の中の整数を取り出して `+#` で足す。どの実装を使うかは型検査の時点で決まり、実行中に型を調べる処理は入らない。' },
+      { title: '-O2 では特殊化', text: '-O2 では GHC が、Int で呼ぶ所のために辞書を取らない版 `$w$ssumAll` を作り、`+#` で直接足した（`$s` は特殊化、`$w` は worker/wrapper 変換の印）。辞書を取る sumAll も残ったのは、モジュールの外へ出す関数だから。total だけを外へ出すように書き換えると消えた。' },
+      { title: 'Rust のトレイト', text: 'Rust のトレイトも同じ考えで、総称の関数は型ごとに写す（`sum_all::<i32>` と `<f64>`）。`&dyn Trait` は値の番地と実装の表（vtable）の番地の組で 16 バイト（[[30-gbemu-desktop.html#s5.2|第30章 場面5]]）。self を取らない関数は表から呼べず、それを持つトレイトは dyn にできなかった（E0038）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 左上: ソース
+      const gS = S.g({}, svg);
+      S.rect(30, 14, 436, 238, { rx: 8, cls: 'f-sf s-rule w1' }, gS);
+      S.text(46, 40, 'Haskell のソース', { cls: 't-sm t-b' }, gS);
+      st.c1 = spans(gS, 46, 70, [['(+) :: ', ''], ['Num a =>', ''], [' a -> a -> a', '']], 't-sm t-mono pre')[1];
+      S.text(250, 70, '← ghci の :t (+)', { cls: 't-xs t-dim' }, gS);
+      S.line(40, 86, 456, 86, { cls: 's-rule w1' }, gS);
+      st.c3 = spans(gS, 46, 112, [['sumAll :: ', ''], ['Num a =>', ''], [' [a] -> a', '']], 't-sm t-mono pre')[1];
+      code(gS, 46, 134, ['sumAll []     = 0', 'sumAll (x:xs) = x + sumAll xs'], 22);
+      st.tot = code(gS, 46, 186, ['total :: Int', 'total = sumAll [3, 2, 1]'], 22);
+      S.text(46, 238, '1 つのモジュールに書き、ghc -O0 と -O2 で Core を出した', { cls: 't-xs t-dim' }, gS);
+      // 右上: 辞書
+      S.rect(494, 14, 436, 238, { rx: 8, cls: 'f-sf s-rule w1' }, svg);
+      S.text(510, 40, 'instance ごとの実装の組（辞書）', { cls: 't-sm t-b' }, svg);
+      const gD = st.gD = S.g({}, svg);
+      st.rowHL = NUMROWS.map((r, k) => S.rect(500, ROWY(k) - 14, 424, 19, { rx: 3, cls: 'f-x-soft' }, gD));
+      st.cellHL = S.rect(586, ROWY(0) - 15, 152, 21, { rx: 3, cls: 'f-none s-x w2' }, gD);
+      S.text(510, 66, '関数', { cls: 't-xs t-dim' }, gD);
+      S.text(590, 66, '$fNumInt（Int）', { cls: 't-xs t-b t-mono' }, gD);
+      S.text(752, 66, '$fNumDouble（Double）', { cls: 't-xs t-b t-mono' }, gD);
+      NUMROWS.forEach(([m, a, b], k) => {
+        S.text(510, ROWY(k), m, { cls: 't-xs t-mono t-b pre' }, gD);
+        S.text(590, ROWY(k), a, { cls: 't-xs t-mono pre' }, gD);
+        S.text(752, ROWY(k), b, { cls: 't-xs t-mono pre' }, gD);
+      });
+      S.text(510, 238, 'ghc --show-iface で GHC.Num・GHC.Float の .hi を読んだ', { cls: 't-xs t-dim' }, gD);
+      S.line(30, 264, 930, 264, { cls: 's-rule w1' }, svg);
+      // 下: 段階ごとの中身
+      const P = st.P = [0, 1, 2, 3].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1: + の型ごとの実装
+      S.text(40, 292, '+ の実装は型ごとに違う（GHC 9.6.7 -O2 の Core と機械語）', { cls: 't-sm t-b' }, P[0]);
+      [[110, '型'], [292, 'instance の中の関数'], [452, 'Core の演算'], [574, '機械語']].forEach(([x, s]) => S.text(x, 318, s, { cls: 't-c t-xs t-dim' }, P[0]));
+      [['Int の +', '$fNumInt_$c+', '+#', 'addq', '整数の加算'], ['Double の +', 'plusDouble', '+##', 'addsd', '浮動小数点数の加算']].forEach(([a, b, c, d, e], k) => {
+        const y = 346 + k * 46;
+        box(P[0], 110, y, a, { w: 120, h: 30, fs: 12.5, cls: 't-md t-b' });
+        S.line(172, y, 210, y, { cls: 's-mid w15', 'marker-end': mk('mid') }, P[0]);
+        box(P[0], 292, y, b, { w: 150, h: 30, fs: 11, mono: true, cls: 't-sm' });
+        S.line(369, y, 418, y, { cls: 's-mid w15', 'marker-end': mk('mid') }, P[0]);
+        box(P[0], 452, y, c, { w: 60, h: 30, fs: 12.5, mono: true, cls: 't-md t-b' });
+        S.line(484, y, 532, y, { cls: 's-mid w15', 'marker-end': mk('mid') }, P[0]);
+        box(P[0], 574, y, d, { w: 72, h: 30, fs: 12.5, mono: true, cls: 't-md t-b t-x', box: 'f-x-soft s-x w15' });
+        S.text(620, y + 4, e, { cls: 't-xs t-mid' }, P[0]);
+      });
+      S.text(40, 450, 'reverse（場面4）は、1 つの実装を全部の型に使う：パラメトリック多相', { cls: 't-sm t-mid' }, P[0]);
+      S.text(40, 476, '+ は、型ごとの別の実装を 1 つの名前で呼ぶ：アドホック多相', { cls: 't-sm t-b t-x' }, P[0]);
+      S.text(40, 512, '機械語は、sumAll を [Int] と [Double] に使った版の -ddump-asm（AT&T 記法）から', { cls: 't-xs t-dim' }, P[0]);
+      // 段階2: class と instance
+      term(P[1], 40, 276, 430, 'ghci の :i Num（抜粋）', [
+        ['class Num a where', 'b'], ['  (+) :: a -> a -> a', ''], ['  (-) :: a -> a -> a', ''], ['  (*) :: a -> a -> a', ''],
+        ['  negate :: a -> a', ''], ['  abs :: a -> a', ''], ['  signum :: a -> a', ''], ['  fromInteger :: Integer -> a', 'b'],
+        ["instance Num Double -- Defined in ‘GHC.Float’", 'd'], ["instance Num Int -- Defined in ‘GHC.Num’", 'd']
+      ], 21);
+      S.text(500, 302, '数のリテラル 0 は fromInteger 0 の略', { cls: 't-sm t-b' }, P[1]);
+      S.text(500, 324, 'Haskell 2010 の報告書 6.4.1', { cls: 't-xs t-dim' }, P[1]);
+      term(P[1], 500, 340, 300, 'ghci', [['ghci> :t 0', 'b'], ['0 :: Num a => a', '']], 19);
+      S.text(500, 434, '型が決まった所で、その型の instance の', { cls: 't-xs' }, P[1]);
+      S.text(500, 454, 'fromInteger が選ばれる', { cls: 't-xs' }, P[1]);
+      // 段階3・4: -O0 の Core（同じ所に置き、段階4 で total の行を足す）
+      const Pc = st.Pc = S.g({ cls: 'fade hide' }, svg);
+      S.text(40, 292, 'sumAll の Core（ghc -O0 -ddump-simpl -dsuppress-all -dsuppress-uniques）', { cls: 't-xs t-dim' }, Pc);
+      st.dn = [];
+      CORE0.forEach((parts, k) => {
+        const ts = spans(Pc, 46, COREY(k), parts.map(([s, m]) => [s, m === 'd' ? 't-b' : m === 't' ? 't-b' : '']), 't-sm t-mono pre');
+        parts.forEach(([, m], j) => { if (m === 'd') st.dn.push(ts[j]); });
+      });
+      S.text(200, COREY(1), '← 型 @a・辞書 $dNum・リスト ds', { cls: 't-xs t-b t-x' }, Pc);
+      S.text(330, COREY(3), '← 0 も辞書の fromInteger で作る', { cls: 't-xs t-x' }, Pc);
+      S.text(360, COREY(4), '← 辞書から + を取り出して呼ぶ', { cls: 't-xs t-x' }, Pc);
+      const gTot = st.gTot = S.g({}, Pc);
+      st.fInt = spans(gTot, 46, TOTY, [['total = sumAll ', ''], ['$fNumInt', 't-x t-b'], [' (: (I# 3#) (: (I# 2#) (: (I# 1#) [])))', '']], 't-sm t-mono pre')[1];
+      S.text(46, TOTY + 24, '呼ぶ側が Int の辞書 $fNumInt を渡す（I# 3# は Int の 3）', { cls: 't-xs t-b t-x' }, gTot);
+      st.tokD = token(svg, '$fNumInt', 72);
+      st.tokP = token(svg, '+', 28);
+      // 段階5: -O2 の Core
+      S.text(40, 292, '-O2 の Core（抜粋。辞書を取らない Int 用の版）', { cls: 't-xs t-dim' }, P[2]);
+      code(P[2], 46, 318, ['$w$ssumAll', '  = \\ ds ->', '      case ds of {', '        [] -> 0#;', '        : x xs ->', '          case x of { I# x1 ->'], 20);
+      spans(P[2], 46, 438, [['          case $w$ssumAll xs of ww { __DEFAULT -> ', ''], ['+#', 't-x t-b'], [' x1 ww }', '']], 't-sm t-mono pre');
+      code(P[2], 46, 458, ['          }', '      }'], 20);
+      S.text(500, 330, '辞書が無く、+# で直接足す', { cls: 't-sm t-b t-x' }, P[2]);
+      S.text(500, 354, '$s は特殊化、$w は worker/wrapper 変換の印', { cls: 't-xs t-mid' }, P[2]);
+      S.text(500, 394, '辞書を取る sumAll も残った（外へ出す関数）', { cls: 't-xs' }, P[2]);
+      S.text(500, 416, 'module SumAll2 (total) where と書き、total だけを', { cls: 't-xs' }, P[2]);
+      S.text(500, 436, '外へ出すと、辞書を取る sumAll は消えた', { cls: 't-xs' }, P[2]);
+      // 段階6: Rust のトレイト
+      S.text(40, 292, '総称の関数：型ごとに写す（rustc 1.95.0 -O）', { cls: 't-sm t-b' }, P[3]);
+      code(P[3], 40, 320, ['fn sum_all<T: Add<Output = T> + Copy + Default>(xs: &[T]) -> T'], 20, 't-mono t-xs');
+      term(P[3], 40, 336, 420, 'nm と objdump（足し算の命令）', [['mono::sum_all::<f64>   addsd xmm0, QWORD PTR [rax]', ''], ['mono::sum_all::<i32>   add   eax, DWORD PTR [rcx]', '']], 19);
+      S.text(40, 430, '辞書の引数は無く、機械語が型ごとに 2 つ', { cls: 't-xs t-b' }, P[3]);
+      S.text(40, 452, 'i32 版は長い配列向けに SIMD の paddd も持つ', { cls: 't-xs t-dim' }, P[3]);
+      S.text(500, 292, 'dyn：値の番地と実装の表の番地の組', { cls: 't-sm t-b' }, P[3]);
+      code(P[3], 500, 318, ['size_of::<&i32>()                     8', 'size_of::<&dyn Display>()            16', 'size_of::<Box<dyn Fn(i32) -> i32>>() 16'], 18, 't-mono t-xs');
+      box(P[3], 555, 386, '値の番地 8 B', { w: 110, h: 28, fs: 11, cls: 't-sm', box: 'f-d-soft s-d w1' });
+      box(P[3], 665, 386, '表の番地 8 B', { w: 110, h: 28, fs: 11, cls: 't-sm', box: 'f-d-soft s-d w1' });
+      S.line(720, 386, 766, 386, { cls: 's-mid w15', 'marker-end': mk('mid') }, P[3]);
+      box(P[3], 845, 386, '実装の表（vtable）', { w: 150, h: 28, fs: 11, cls: 't-sm' });
+      code(P[3], 500, 426, ['trait Num2 { fn zero() -> Self; }'], 18, 't-mono t-xs');
+      const e5 = errBox(P[3], 500, 436, 430, ['error[E0038]: the trait `Num2` is not dyn compatible', '...because associated function `zero` has no `self` parameter'], 16);
+      e5.querySelectorAll('text').forEach((t) => t.setAttribute('class', t.getAttribute('class').replace('t-sm', 't-xs')));
+      S.text(500, 504, 'Haskell の辞書は値と別に渡るので、0 を作る fromInteger も持てる', { cls: 't-xs t-b' }, P[3]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      const vis = [0, 1, -1, -1, 2, 3];   // 段階ごとの下の中身（-1 は Core）
+      st.P.forEach((g, k) => S.fade(g, vis[i] === k));
+      S.fade(st.Pc, i === 2 || i === 3);
+      op(st.gTot, i === 3 ? '' : 0);
+      st.c1.setAttribute('class', i === 0 ? 't-x t-b' : '');
+      st.c3.setAttribute('class', i === 2 ? 't-x t-b' : '');
+      st.tot.forEach((t) => t.setAttribute('class', 't-sm t-mono pre' + (i === 3 ? ' t-b t-x' : '')));
+      st.dn.forEach((t) => t.setAttribute('class', 't-b' + (i === 2 || i === 3 ? ' t-x' : '')));
+      op(st.gD, i === 0 ? 0 : i === 1 || i === 3 ? '' : 0.45);
+      st.rowHL.forEach((r, k) => op(r, i === 1 && k === 6 ? '' : 0));
+      op(st.cellHL, i === 3 ? '' : 0);
+      st.tokD.style.display = 'none';
+      st.tokP.style.display = 'none';
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, c = playing() ? ctx.ts : 99;
+      if (i !== 3) return;
+      // total の $fNumInt が sumAll の引数 $dNum へ入り、+ $dNum が辞書の + の欄を引く
+      fly(st.tokD, c, 0.5, 1.0, 46 + 19 * CW, TOTY - 4, 46 + 11.5 * CW, COREY(1) - 4);
+      const done = fly(st.tokP, c, 1.9, 1.0, 46 + 18.5 * CW, COREY(4) - 4, 630, ROWY(0) - 4);
+      op(st.cellHL, done ? '' : 0);
+    }
+  };
+
+  /* ================================================================
+     場面6 型を作る型と Functor
+     ghci（GHC 9.6.7）: :k Maybe → * -> *、:k Either → * -> * -> *、:k Maybe Maybe → GHC-83865、-XNoStarIsType で Maybe :: Type -> Type。
+     :t fmap @[]・@Maybe・@IO、:i Functor（type Functor :: (* -> *) -> Constraint）、fmap (*2) の 3 つの値、
+     doubleAll = fmap (*2) の型 (Functor f, Num b) => f b -> f b、則の値 Just 3・[7,5,3]。
+     Counted の instance は ghc -Wall -O0 で警告なしに通り、print (fmap id (Counted 0 'a')) は Counted 1 'a'。
+     :i Applicative → class Functor f => Applicative f、:i Monad → class Applicative m => Monad m。
+     Rust の map の宣言は rustc 1.95.0 の rust-src（core の option.rs・result.rs・iter/traits/iterator.rs）から写した。
+     fn fmap_any<F<_>, A, B> は構文の誤り（2026-11-22）
+     ================================================================ */
+  const KINDS = [   // [型, 種, 値の例, 型を作る型か]
+    ['Int', '*', '3', 0],
+    ['Maybe', '* -> *', '（無い）', 1],
+    ['Maybe Int', '*', 'Just 3・Nothing', 0],
+    ['[]', '* -> *', '（無い）', 1],
+    ['[Int]', '*', '[3,2,1]', 0],
+    ['IO', '* -> *', '（無い）', 1],
+    ['Either', '* -> * -> *', '（無い）', 1]
+  ];
+  const KY = (k) => 92 + k * 23;
+  const FX = 600, FY = [74, 100, 126], FFY = 172;   // fmap の行（名前の右の欄の x と各行の y）
+  const s6 = {
+    steps: [
+      { title: '種：型の型', text: '型にも型がある（**種**、カインド）。値を持つ Int は種 `*`、Maybe は型を 1 つ受け取って型を返すので `* -> *`、Either は `* -> * -> *`（ghci の `:k`）。`Maybe Int` は種 `*` で値を持つ。種の合わない `Maybe Maybe` は誤り。新しい表示では * を Type と書く。' },
+      { title: '同じ形の 3 つの map', text: 'リスト・Maybe・IO の map の型は、型を作る型の所（[]、Maybe、IO）だけが違い、ほかは同じ形をしている。GHC ではこの 3 つが fmap という 1 つの名前の型ごとの実装になっていて、ghci の `:t fmap @[]` のように型を指定すると、それぞれの型が見える。' },
+      { title: 'Functor', text: '**Functor** は `fmap :: (a -> b) -> f a -> f b` を持つ型クラスで、f は種が `* -> *` の型変数（**高カインドの多相**）。instance は []・Maybe・IO など。f の上で 1 度書いた `doubleAll = fmap (*2)` は、リストにも Maybe にも使える。' },
+      { title: '則はコンパイラが確かめない', text: 'Functor には則が 2 つある。何もしない関数を写しても何もしないことと、合成を写すと写した物の合成になること。[] と Maybe は満たす。ところが数を 1 足す Counted の instance も、GHC 9.6.7 は `-Wall` で何も言わずに通した。則はコンパイラが確かめない約束。' },
+      { title: 'Rust には f が無い', text: 'Rust の `Option::map`・`Result::map`・`Iterator::map` は型ごとに別々のメソッドで、まとめるトレイトは標準ライブラリに無い（[[30-gbemu-desktop.html#s3.2|第30章 場面3]]）。rustc 1.95.0 は引数を取る型の変数 `F<_>` を受け付けず、Functor のような総称の関数は直接は書けない。' },
+      { title: '章の答え', text: '型は書かなくても、式の使われ方から等式を集めて解けば決まり、結果は最も一般的な型になる（場面1〜3）。多相な型は、関数が値にできることを縛り、そこから中身を見ずに言える性質が出る（場面4）。型ごとの実装は辞書という引数になり（場面5）、型を作る型も変数にできる。次の章のモナドは Functor の先にある。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      // 左上: 種
+      const gK = st.gK = S.g({}, svg);
+      S.rect(30, 14, 436, 238, { rx: 8, cls: 'f-sf s-rule w1' }, gK);
+      S.text(46, 40, '種：型の型（ghci の :k）', { cls: 't-sm t-b' }, gK);
+      [['型', 46], ['種', 170], ['値の例', 300]].forEach(([s, x]) => S.text(x, 66, s, { cls: 't-xs t-dim' }, gK));
+      st.kHL = [];
+      KINDS.forEach(([t, k, v, c], j) => {
+        const y = KY(j);
+        if (c) st.kHL.push(S.rect(40, y - 16, 416, 22, { rx: 3, cls: 'f-x-soft' }, gK));
+        S.text(46, y, t, { cls: 't-sm t-mono t-b pre' }, gK);
+        S.text(170, y, k, { cls: 't-sm t-mono pre' + (c ? ' t-x t-b' : '') }, gK);
+        S.text(300, y, v, { cls: v[0] === '（' ? 't-xs t-dim' : 't-sm t-mono t-d pre' }, gK);
+      });
+      // 右上: 3 つの map と fmap
+      const gM = st.gM = S.g({}, svg);
+      S.rect(494, 14, 436, 238, { rx: 8, cls: 'f-sf s-rule w1' }, gM);
+      S.text(510, 40, '同じ形の 3 つの map（ghci の :t fmap @…）', { cls: 't-sm t-b' }, gM);
+      const X = 't-x t-b';
+      [
+        ['fmap @[]', [[':: (a -> b) -> ', ''], ['[', X], ['a', ''], [']', X], [' -> ', ''], ['[', X], ['b', ''], [']', X]]],
+        ['fmap @Maybe', [[':: (a -> b) -> ', ''], ['Maybe', X], [' a -> ', ''], ['Maybe', X], [' b', '']]],
+        ['fmap @IO', [[':: (a -> b) -> ', ''], ['IO', X], [' a -> ', ''], ['IO', X], [' b', '']]]
+      ].forEach(([n, parts], k) => {
+        S.text(510, FY[k], n, { cls: 't-sm t-mono t-b pre' }, gM);
+        spans(gM, FX, FY[k], parts, 't-sm t-mono pre');
+      });
+      S.line(504, 144, 920, 144, { cls: 's-rule w1' }, gM);
+      S.text(510, FFY, 'fmap', { cls: 't-sm t-mono t-b pre' }, gM);
+      st.fF = spans(gM, FX, FFY, [[':: ', ''], ['Functor f =>', 't-b'], [' (a -> b) -> ', ''], ['f', X], [' a -> ', ''], ['f', X], [' b', '']], 't-sm t-mono pre');
+      S.text(510, 200, 'f は種 * -> * の型変数（[]・Maybe・IO が入る）', { cls: 't-xs t-b t-x' }, gM);
+      S.text(510, 236, '型を指定した fmap @[] などは、ghci の :t で確かめた', { cls: 't-xs t-dim' }, gM);
+      st.toks = [['[]', 30, 16.5], ['Maybe', 50, 17.5], ['IO', 30, 16]].map(([s, w, c]) => ({ tk: token(svg, s, w), x0: FX + c * CW }));
+      S.line(30, 264, 930, 264, { cls: 's-rule w1' }, svg);
+      // 下: 段階ごとの中身
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+      // 段階1: 種の誤り
+      code(P[0], 40, 296, ['ghci> :k Maybe Maybe'], 20, 't-mono t-sm t-b');
+      errBox(P[0], 40, 308, 470, ['error: [GHC-83865]', '    • Expecting one more argument to ‘Maybe’', '      Expected a type, but ‘Maybe’ has kind ‘* -> *’'], 18);
+      S.text(40, 404, '値の型を書く所に置けるのは、種 * の型だけ', { cls: 't-sm t-b' }, P[0]);
+      S.text(40, 428, 'Maybe Maybe の外側の Maybe は、種 * の型を待っている', { cls: 't-xs t-mid' }, P[0]);
+      term(P[0], 540, 284, 380, '新しい表示（* の代わりに Type）', [['ghci> :set -XNoStarIsType', 'b'], ['ghci> :k Maybe', 'b'], ['Maybe :: Type -> Type', '']], 19);
+      // 段階2: fmap の値
+      term(P[1], 40, 280, 430, 'ghci（GHC 9.6.7）', [['ghci> fmap (*2) [3,2,1]', 'b'], ['[6,4,2]', ''], ['ghci> fmap (*2) (Just 3)', 'b'], ['Just 6', ''], ['ghci> fmap (*2) Nothing', 'b'], ['Nothing', '']], 19);
+      S.text(500, 304, 'リスト：要素ごとに当てる（map と同じ）', { cls: 't-sm' }, P[1]);
+      S.text(500, 332, 'Maybe：Just の中身に当て、Nothing はそのまま', { cls: 't-sm' }, P[1]);
+      S.text(500, 360, 'IO：入出力をした結果の値に当てる', { cls: 't-sm' }, P[1]);
+      S.text(500, 396, 'どれも、形（リストの長さ、Just か Nothing か）は変えない', { cls: 't-xs t-mid' }, P[1]);
+      // 段階3: Functor
+      term(P[2], 40, 276, 430, 'ghci の :i Functor（抜粋。定義場所の注記を省いた）', [
+        ['type Functor :: (* -> *) -> Constraint', 'b'], ['class Functor f where', ''], ['  fmap :: (a -> b) -> f a -> f b', 'b'], ['  (<$) :: a -> f b -> f a', ''],
+        ['instance Functor IO', 'd'], ['instance Functor []', 'd'], ['instance Functor Maybe', 'd'], ['instance Functor (Either a)', 'd']
+      ], 19);
+      S.text(40, 490, 'base の foldr も、種 * -> * の型変数 t の上に書かれている（ghci の :t）', { cls: 't-xs' }, P[2]);
+      code(P[2], 40, 512, ['foldr :: Foldable t => (a -> b -> b) -> b -> t a -> b'], 20, 't-mono t-xs t-b');
+      S.text(500, 300, 'f は種 * -> * の型変数（高カインドの多相）', { cls: 't-sm t-b t-x' }, P[2]);
+      term(P[2], 500, 316, 420, 'f の上で 1 度書く（ghci）', [['ghci> doubleAll = fmap (*2)', 'b'], ['ghci> :t doubleAll', 'b'], ['doubleAll :: (Functor f, Num b) => f b -> f b', ''], ['ghci> doubleAll [3,2,1]', 'b'], ['[6,4,2]', ''], ['ghci> doubleAll (Just 3)', 'b'], ['Just 6', '']], 19);
+      // 段階4: 則
+      S.text(40, 292, 'Functor の 2 つの則', { cls: 't-sm t-b' }, P[3]);
+      code(P[3], 40, 320, ['fmap id      ＝ id', 'fmap (g . h) ＝ fmap g . fmap h'], 24, 't-mono t-md t-b');
+      term(P[3], 40, 360, 430, 'ghci：[] と Maybe で確かめる', [['ghci> fmap id (Just 3)', 'b'], ['Just 3', ''], ['ghci> fmap ((+1) . (*2)) [3,2,1]', 'b'], ['[7,5,3]', ''], ['ghci> (fmap (+1) . fmap (*2)) [3,2,1]', 'b'], ['[7,5,3]', '']], 19);
+      S.text(500, 292, '則を破る instance も通る（ghc -Wall）', { cls: 't-sm t-b' }, P[3]);
+      code(P[3], 500, 320, ['data Counted a = Counted Int a deriving Show', 'instance Functor Counted where', '  fmap g (Counted n x) = Counted (n + 1) (g x)'], 18, 't-mono t-xs');
+      term(P[3], 500, 376, 420, '実行した結果', [["print (fmap id (Counted 0 'a'))", 'b'], ["Counted 1 'a'", '']], 19);
+      S.text(500, 472, 'fmap id が id にならない：則はコンパイラが確かめない約束', { cls: 't-xs t-b t-x' }, P[3]);
+      S.text(500, 494, '則を確かめるのは、書いた人の証明やテスト', { cls: 't-xs t-mid' }, P[3]);
+      // 段階5: Rust
+      S.text(40, 292, 'Rust の map は型ごとに別々（rustc 1.95.0 の core のソース）', { cls: 't-sm t-b' }, P[4]);
+      [['Option::map', 'pub const fn map<U, F>(self, f: F) -> Option<U>'], ['Result::map', 'pub const fn map<U, F>(self, op: F) -> Result<U, E>'], ['Iterator::map', 'fn map<B, F>(self, f: F) -> Map<Self, F>']].forEach(([a, b], k) => {
+        const y = 324 + k * 26;
+        S.text(40, y, a, { cls: 't-sm t-mono t-b pre' }, P[4]);
+        S.text(160, y, b, { cls: 't-xs t-mono pre' }, P[4]);
+      });
+      S.text(40, 412, '3 つをまとめるトレイト（Functor に当たるもの）は標準ライブラリに無い', { cls: 't-xs t-b' }, P[4]);
+      code(P[4], 560, 324, ['fn fmap_any<F<_>, A, B>(…)'], 20, 't-mono t-sm');
+      const e6 = errBox(P[4], 560, 336, 360, ['error: expected one of `,`, `:`, `=`, or `>`, found `<`'], 18);
+      e6.querySelectorAll('text').forEach((t) => t.setAttribute('class', t.getAttribute('class').replace('t-sm', 't-xs')));
+      S.text(560, 394, '引数を取る型の変数 F<_> は書けない', { cls: 't-xs t-b t-x' }, P[4]);
+      // 段階6: 章の答え
+      [['推論（場面1〜3）', '書かない型も、等式で決まる'], ['縛り（場面4）', '型が、書ける実装を絞る'], ['型クラス（場面5）', '制約は、辞書という引数に'], ['Functor（場面6）', '型を作る型も、変数に']].forEach(([a, b], k) => {
+        const x = 40 + k * 222;
+        S.rect(x, 286, 208, 70, { rx: 6, cls: 'f-sf s-rule w1' }, P[5]);
+        S.text(x + 14, 312, a, { cls: 't-sm t-b' }, P[5]);
+        S.text(x + 14, 338, b, { cls: 't-xs' }, P[5]);
+      });
+      [['Functor', 200], ['Applicative', 480], ['Monad（第42章）', 760]].forEach(([s, x], k) => {
+        box(P[5], x, 420, s, { w: 160, h: 32, fs: 12.5, cls: 't-md t-b', box: k === 2 ? 'f-x-soft s-x w15' : 'f-sf s-fg w15' });
+        if (k) S.line(x - 200, 420, x - 84, 420, { cls: 's-mid w15', 'marker-end': mk('mid') }, P[5]);
+      });
+      S.text(340, 452, 'class Functor f => Applicative f', { cls: 't-c t-xs t-mono pre' }, P[5]);
+      S.text(620, 452, 'class Applicative m => Monad m', { cls: 't-c t-xs t-mono pre' }, P[5]);
+      S.text(480, 486, 'ghci の :i Applicative と :i Monad（矢印の先のクラスは、元のクラスを前提にする）', { cls: 't-c t-xs t-dim' }, P[5]);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      op(st.gK, i <= 2 ? '' : 0.4);
+      op(st.gM, i === 0 ? 0.4 : i <= 2 ? '' : 0.4);
+      st.kHL.forEach((r) => op(r, i === 0 || i === 2 ? '' : 0));
+      st.toks.forEach((t) => { t.tk.style.display = 'none'; });
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, c = playing() ? ctx.ts : 99;
+      if (i !== 2) return;
+      // 3 つの map の型を作る型が、fmap の f の欄へ集まる
+      st.toks.forEach((t, k) => fly(t.tk, c, 0.5 + k * 0.5, 0.9, t.x0, FY[k] - 4, FX + 28.5 * CW, FFY - 4));
+    }
+  };
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第X部 関数型 ／ 第41章',
+      title: '型推論と多相',
+      home: '../index.html',
+      prev: { href: '40-lazy.html', title: '遅延評価' },
+      next: { href: '42-monad.html', title: 'モナド', lead: '純粋な関数は、引数から戻り値を決めるほかに何もしない。' },
+      legend: [{ c: 'd', label: '値・式' }, { c: 'x', label: '注目・いま決まる所' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>

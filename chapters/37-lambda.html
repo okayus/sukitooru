@@ -1,0 +1,1392 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>ラムダ計算 — YouTubeが見えるまで</title>
+<meta name="description" content="関数型は、計算機の何に立ち向かうのか。第6章の CPU はレジスタとメモリを命令ごとに書き換える状態機械で、命令型の言語はそれを変数と代入で写している。関数型の言語が土台にするのは、式を等しい式で置き換えていく計算のモデル、ラムダ計算である。">
+<meta property="og:title" content="ラムダ計算 — YouTubeが見えるまで">
+<meta property="og:description" content="関数型は、計算機の何に立ち向かうのか。">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:site_name" content="YouTubeが見えるまで">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/engine.js"></script>
+<style>
+  /* この章だけのスタイル */
+  svg text.pre { white-space: pre; }
+  svg a { cursor: pointer; }
+  svg a:hover text, svg a:focus-visible text { text-decoration: underline; text-underline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+<main class="scenes">
+
+<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">第X部 関数型 ／ 第37章 ／ 全43章</p>
+    <h1 id="h-s0">ラムダ計算</h1>
+    <p class="standfirst">関数型は、計算機の何に立ち向かうのか。第6章の CPU はレジスタとメモリを命令ごとに書き換える状態機械で、命令型の言語はそれを変数と代入で写している。関数型の言語が土台にするのは、式を等しい式で置き換えていく計算のモデル、ラムダ計算である。この章では、変数・抽象・適用の 3 つの形と β簡約の規則だけで、数・真偽・再帰まで書けることを、小さな項を 1 歩ずつ簡約して確かめる。</p>
+    <p class="legend" data-auto></p>
+    <p class="keys fit-only" data-auto></p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      <li><a href="#s1" data-go="1"><span class="n">1</span>状態か、式か</a><p>第6章の 22 命令が書き換える状態と、sumTo 3 を置き換える式の列。参照透過性と部の問い。</p></li>
+      <li><a href="#s2" data-go="2"><span class="n">2</span>3 つの形</a><p>変数・抽象・適用。括弧の規約、束縛変数と自由変数、α変換。</p></li>
+      <li><a href="#s3" data-go="3"><span class="n">3</span>β簡約</a><p>仮引数を引数で置き換える、ただ 1 つの規則。変数の捕獲と、環境に記録する処理系。</p></li>
+      <li><a href="#s4" data-go="4"><span class="n">4</span>順序と合流性</a><p>内側からでも外側からでも答えは 6。止まらない Ω と、順序で止まるかが変わる項。</p></li>
+      <li><a href="#s5" data-go="5"><span class="n">5</span>数もデータも関数</a><p>真偽・数・対を関数で書く（Church の符号化）。2 ＋ 1 を簡約して 3 の形にする。</p></li>
+      <li><a href="#s6" data-go="6"><span class="n">6</span>再帰と、計算できること</a><p>不動点コンビネータ Y で sumTo を書く。λ とチューリング機械の等価性。章の答え。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の章（高階関数とクロージャ）へ。</p></li>
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+    <p>コードと出力は GHC 9.6.7・Node.js 24.22.1（x86-64 の Linux）で 2026 年 11 月に動かして確かめた。簡約の列は、この章のために書いた小さな簡約器（JavaScript）で 1 歩ずつ確かめた。出力は版と設定で変わる。文献は原典の年を添えた: Church「A Set of Postulates for the Foundation of Logic」（1932・1933 年）・「An Unsolvable Problem of Elementary Number Theory」（1936 年）、Church と Rosser「Some Properties of Conversion」（1936 年）、Turing「Computability and λ-Definability」（1937 年）、Backus「<a href="https://doi.org/10.1145/359576.359579">Can Programming Be Liberated from the von Neumann Style?</a>」（1977 年の講演、1978 年）。図は模式図。</p>
+  </footer>
+</section>
+
+<!-- ================= 1 状態か、式か ================= -->
+<section class="scene sc-anim" id="s1" data-tab="状態か式か" aria-labelledby="h-s1">
+  <header class="sh a-sh">
+    <h2 id="h-s1"><span class="n">1</span>状態か、式か — 計算の 2 つのモデル</h2>
+    <p class="sh-meta"><span class="chip">YT-8 の 22 命令</span><span class="chip">sumTo 3</span><span class="chip">参照透過性</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">第36章の評価器は、構文木を歩きながら環境に名前と値を足し、書き換えた。その下の CPU も、命令ごとにレジスタとメモリを書き換える。同じ 3 ＋ 2 ＋ 1 を、式の置き換えだけで計算すると何が違うかを比べる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Backus は 1977 年のチューリング賞講演で、CPU とメモリの間で語を 1 つずつ運ぶ通り道を「フォン・ノイマン・ボトルネック」と名付けた。参照透過性の語は、Strachey が 1967 年の講義ノートで、哲学者 Quine から借りた。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="YT-8 が 22 命令で書き換える状態の表と、sumTo 3 を等しい式で置き換えていく列"></svg></div>
+    <figcaption>図1　左は第6章 場面4 の YT-8 が書き換えた状態（値は命令を実行した後）。右は段階ごとに、いまの状態と sum の移り変わり、命令型の言語での書き方、等式で書いた sumTo の置き換えの列。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 2 3 つの形 ================= -->
+<section class="scene sc-anim" id="s2" data-tab="3つの形" aria-labelledby="h-s2">
+  <header class="sh a-sh">
+    <h2 id="h-s2"><span class="n">2</span>3 つの形 — 変数・抽象・適用</h2>
+    <p class="sh-meta"><span class="chip">x</span><span class="chip">λx. M</span><span class="chip">M N</span><span class="chip">α変換</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">λ計算の項は、変数・抽象・適用の 3 つの形でできている。数も if も代入も無い。この章で使う記法と、名前がどの λ に結び付くか（束縛）の規則を決める。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">λ記法は、Church が 1932・1933 年の 2 本の論文で、論理の土台として出した。その論理には Kleene と Rosser が 1935 年に矛盾を示し、関数を扱う部分だけが λ計算として残った。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="変数・抽象・適用の 3 つの形と、項の木、束縛の線、α変換の例"></svg></div>
+    <figcaption>図2　上は 3 つの形と木での描き方（@ は適用の節、三角は任意の項）。下は段階ごとの例で、束縛の破線は変数からそれを束縛する λ へ引いた。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 3 β簡約 ================= -->
+<section class="scene sc-anim" id="s3" data-tab="β簡約" aria-labelledby="h-s3">
+  <header class="sh a-sh">
+    <h2 id="h-s3"><span class="n">3</span>β簡約 — ただ 1 つの計算の規則</h2>
+    <p class="sh-meta"><span class="chip">(λx. M) N → M[x := N]</span><span class="chip">簡約基</span><span class="chip">変数の捕獲</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">計算の規則は 1 つだけ。関数に引数を渡した形を見つけたら、本体の中の仮引数を引数で置き換える。置き換えられる形が無くなるまで、これを繰り返す。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">数と組み込みの演算の規則（δ簡約）は、純粋な λ計算には無い。場面5 で、数と足し算も λ だけで書く。置き換えでは同じ引数が何か所にも写るので、引数を先に簡約するかどうかで手間が変わる（場面4）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="β簡約の形と、引数が仮引数の位置へ入る例、変数の捕獲とその避け方、環境を使う評価"></svg></div>
+    <figcaption>図3　上は β簡約の形（三角は任意の項、x の丸は M の中の自由な x）。下は段階ごとの例で、動く札は引数が仮引数の位置へ入る所。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 4 順序と合流性 ================= -->
+<section class="scene sc-anim" id="s4" data-tab="順序と合流" aria-labelledby="h-s4">
+  <header class="sh a-sh">
+    <h2 id="h-s4"><span class="n">4</span>順序と合流性 — どこから簡約しても答えは 1 つ</h2>
+    <p class="sh-meta"><span class="chip">適用順序</span><span class="chip">正規順序</span><span class="chip">Church–Rosser 1936</span><span class="chip">Ω</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">1 つの項に簡約基が 2 つ以上あると、どれから簡約するかを選べる。選び方で途中の歩みは変わるが、行き着く答えは変わらない。ただし、選び方によっては止まらなくなる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">多くの言語の値呼びは、引数を先に計算する点で適用順序に近いが、関数の本体（λ の中）は呼ばれるまで簡約しない点が違う。Haskell の遅延評価は正規順序に近く、同じ引数を 2 回計算しない工夫を足している（<a class="xref" href="40-lazy.html#s1">第40章 場面1</a>）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="1 つの項から内側と外側の 2 つの道で簡約して 6 で合う図と、止まらない項 Ω、順序で止まるかが変わる項"></svg></div>
+    <figcaption>図4　上は 1 つの項からの 2 つの道（左は内側から、右は外側から。段階1 は同じ項の木）で、x の地は次に簡約する所。下は止まらない項 Ω と、順序で止まるかどうかが変わる項。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 5 数もデータも関数 ================= -->
+<section class="scene sc-anim" id="s5" data-tab="数も関数" aria-labelledby="h-s5">
+  <header class="sh a-sh">
+    <h2 id="h-s5"><span class="n">5</span>数もデータも関数 — Church の符号化</h2>
+    <p class="sh-meta"><span class="chip">true・false</span><span class="chip">3 = λf. λx. f (f (f x))</span><span class="chip">plus</span><span class="chip">pair</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">λ計算には数も真偽も無い。それでも 3 つの形だけで、真偽・数・対を関数として書ける（Church の符号化）。値そのものではなく、その値を使って何をするかを関数にする。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">Church は 1933 年の論文の終わりでこの数の表し方を示した。実際の言語は、真偽・数・対を直和・直積の型とビットの並びで持つ（<a class="xref" href="29-imi.html#s2">第29章 場面2</a>）。同じ定義を Haskell で書き、plus 2 1 に 1 を足す関数と 0 を渡すと 3 が返った（GHC 9.6.7）。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="真偽・数・足し算・対を λ だけで書いた定義と、f を n 回当てる鎖、2 ＋ 1 の簡約の列"></svg></div>
+    <figcaption>図5　上は定義（＝ の左は略記で、簡約の途中で右辺に置き換える）。下は段階ごとの例で、f の箱の数が数を表し、x の地は次に簡約する所。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 6 再帰と、計算できること ================= -->
+<section class="scene sc-anim" id="s6" data-tab="再帰" aria-labelledby="h-s6">
+  <header class="sh a-sh">
+    <h2 id="h-s6"><span class="n">6</span>再帰と、計算できること — 不動点と答え</h2>
+    <p class="sh-meta"><span class="chip">Y</span><span class="chip">Church 1936</span><span class="chip">Turing 1937</span><span class="chip">Haskell</span></p>
+  </header>
+  <div class="col a-left">
+    <p class="prose a-lead">λ には名前が無いので、関数が自分を呼ぶには工夫が要る。不動点コンビネータを使えば再帰も 3 つの形で書け、λ計算はチューリング機械と同じだけのことを計算できる。</p>
+    <div class="narr-slot a-panel"></div>
+    <div class="prose a-after">
+      <p class="note">不動点コンビネータは Y だけではない。Turing が 1937 年に示した Θ は、Θ G が G (Θ G) にそのまま簡約される。値呼びの JavaScript では、Y の x(x) を v =&gt; x(x)(v) と包むと止まり、6 を返した。</p>
+    </div>
+  </div>
+  <figure class="anim-fig a-fig">
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 960 560" role="img" aria-label="再帰の定義と不動点、Y による展開、sumTo 3 の列、計算できる関数の等価性、Haskell の記法、第X部の道"></svg></div>
+    <figcaption>図6　段階1〜3 の上は定義（W は Y G を 1 歩簡約した項）。下は段階ごとの中身で、↠ は何歩かの簡約、x の地は次に簡約する所。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 7 まとめ ================= -->
+<section class="scene sc-wrap" id="s7" data-tab="まとめ" aria-labelledby="h-s7">
+  <header class="sh a-sh">
+    <h2 id="h-s7"><span class="n">7</span>まとめ — ラムダ計算</h2>
+  </header>
+  <div class="prose a-text">
+    <ol class="keypoints">
+      <li>第6章の CPU は状態を命令ごとに書き換え、命令型の言語はそれを変数・代入・文の並びで写す。式の置き換えで計算すると書き換わる場所が無く、式を等しい式で置き換えられる（<a class="xref" href="#s1" data-go="1">1</a>）。</li>
+      <li>λ計算の項は、変数・抽象・適用の 3 つの形だけ。変数は根の方へたどって最初に出会う同じ名前の λ に束縛され、束縛変数の名前は付け替えてよい（<a class="xref" href="#s2" data-go="2">2</a>）。</li>
+      <li>計算の規則は β簡約 (λx. M) N → M[x := N] だけ。自由変数が捕まるときは先に α変換する。処理系の多くは書き写さず、環境に記録する（<a class="xref" href="#s3" data-go="3">3</a>）。</li>
+      <li>どの簡約基から簡約しても、止まる限り答えは 1 つ（合流性）。Ω のように止まらない項もあり、正規順序は正規形があれば必ずそこに着く（<a class="xref" href="#s4" data-go="4">4</a>）。</li>
+      <li>真偽・数・対も関数で書ける（Church の符号化）。数 n は f を n 回当てる関数で、plus 2 1 は β簡約 6 回で 3 の形になる（<a class="xref" href="#s5" data-go="5">5</a>）。</li>
+      <li>再帰は不動点コンビネータで書け、λ計算はチューリング機械と同じ関数を計算できる。関数型が立つのは、状態の書き換えではなく式の置き換えという計算のモデル（<a class="xref" href="#s6" data-go="6">6</a>）。</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap a-tbl">
+    <table class="gloss">
+      <tbody>
+        <tr><th><i class="sw d"></i>ラムダ計算（λ計算）</th><td>変数 x・抽象 λx. M・適用 M N の 3 つの形と β簡約だけで計算を表す体系。Church が 1932〜36 年に作った。</td></tr>
+        <tr><th>束縛変数・自由変数</th><td>λx. M の中でその λ に結び付く x と、どの λ にも結び付かない変数。λx. x y の x は束縛変数、y は自由変数。</td></tr>
+        <tr><th>α変換</th><td>束縛変数の名前を、束縛する λ と使う所をそろえて付け替えること。λx. x と λy. y は同じ項。</td></tr>
+        <tr><th><i class="sw x"></i>β簡約・簡約基</th><td>(λx. M) N を、M の自由な x をすべて N にした M[x := N] に書き換える規則と、その形（λ への適用）。</td></tr>
+        <tr><th>正規形</th><td>簡約基を含まない項。計算の答えにあたる。Ω ＝ (λx. x x) (λx. x x) のように正規形を持たない項もある。</td></tr>
+        <tr><th>正規順序・適用順序</th><td>最も左で最も外側の簡約基から簡約する順と、中に簡約基を含まない最も左の簡約基から簡約する順。値呼び（第40章）とは別。</td></tr>
+        <tr><th>合流性（Church–Rosser の定理）</th><td>1 つの項を 2 通りに簡約しても、さらに簡約すれば同じ項に着けるという性質（1936 年）。正規形は、あれば 1 つ。</td></tr>
+        <tr><th>Church の符号化</th><td>真偽・数・対を関数で表す方法。true ＝ λt. λf. t、3 ＝ λf. λx. f (f (f x))（f を 3 回当てる）。</td></tr>
+        <tr><th>不動点コンビネータ（Y）</th><td>Y G と G (Y G) が等しくなる項。Y ＝ λf. (λx. f (x x)) (λx. f (x x))。名前の無い λ で再帰を書くのに使う。</td></tr>
+        <tr><th>参照透過性</th><td>式を等しい式（その値）で置き換えても、全体の意味が変わらない性質。Strachey が 1967 年に Quine から借りた語。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="a-after">
+    <p class="note">第X部の残りの章は、実際の関数型言語がこの 3 つの形に足したものを 1 つずつ見る。次の第38章では、関数を数と同じ値として渡し、返し、しまうと、機械の上で何になるかを追う。</p>
+    <nav class="chnav" data-auto aria-label="章の移動"></nav>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const U = YT.util, S = YT.svg;
+
+  /* ---------- この章で使う部品 ---------- */
+
+  /* 濃さ（fade の付いた要素は 0.35 秒かけて変わる） */
+  const op = (el, v) => { el.style.opacity = v; };
+  /* 動きを止めているときは、段階の動きの終わりの姿を見せる */
+  const playing = () => YT.motion.playing;
+  /* 等幅の行の並び（空白を詰めない） */
+  function code(parent, x, y, lines, lh, cls) {
+    return lines.map((s, k) => S.text(x, y + k * lh, s, { cls: (cls || 't-mono t-sm') + ' pre' }, parent));
+  }
+  /* 項を等幅の升目に 1 字ずつ置く。λ・Ω は IBM Plex Mono に無い字で、代わりの書体で描かれる。
+     字ごとに升目の中央へ置くので、書体の幅の違いが後ろの字の位置をずらさない。
+     size は t-lg（15px）・t-md（12.5px）・t-sm（11px）。升目の幅は 0.6em */
+  const FS = { 't-xl': 19, 't-lg': 15, 't-md': 12.5, 't-sm': 11 };
+  function term(parent, x0, y, s, size, base) {
+    size = size || 't-lg';
+    const fs = FS[size], cw = fs * 0.6;
+    const g = S.g({}, parent);
+    const bg = S.g({}, g);   // 強調の下地（文字より下に描く）
+    const cls0 = 't-c t-mono ' + size + (base ? ' ' + base : '');
+    const ch = Array.from(s).map((c, i) => (c === ' ' ? null : S.text(x0 + (i + 0.5) * cw, y, c, { cls: cls0 }, g)));
+    const T = {
+      g, ch, s, x0, y, cw, fs, len: ch.length,
+      at: (i) => x0 + (i + 0.5) * cw,          // i 字めの中央
+      left: (i) => x0 + i * cw,
+      end: x0 + ch.length * cw,
+      paint(a, b, cls) { for (let i = a; i < b; i++) if (ch[i]) ch[i].setAttribute('class', cls0 + (cls ? ' ' + cls : '')); return T; },
+      mark(a, b, cls) { S.rect(x0 + a * cw - 2, y - fs * 0.86, (b - a) * cw + 4, fs * 1.2, { rx: 3, cls: cls || 'f-x-soft' }, bg); return T; },
+      clear() { S.clear(bg); T.paint(0, ch.length, ''); return T; }
+    };
+    return T;
+  }
+  /* 文字列の中で sub が k 番目に現れる位置 [a, b)（字の数え方は Array.from と同じ） */
+  function find(s, sub, k) {
+    const A = Array.from(s), B = Array.from(sub);
+    let n = 0;
+    for (let i = 0; i + B.length <= A.length; i++) {
+      if (B.every((c, j) => A[i + j] === c)) { if (n === (k || 0)) return [i, i + B.length]; n++; }
+    }
+    throw new Error('見つからない: ' + sub + ' in ' + s);
+  }
+  /* 他の章の場面へのリンク（SVG の a） */
+  function xlink(parent, x, y, href, label, end) {
+    const a = S.el('a', { href, 'aria-label': label }, parent);
+    S.text(x, y, label + ' ↗', { cls: 't-xs t-mid' + (end ? ' t-end' : '') }, a);
+    return a;
+  }
+  /* 項を木で描くための形: 変数・抽象・適用と、任意の項（三角で描く）。場面4 だけは数と足し算（外から足した物）も描く */
+  const V = (n) => ({ k: 'v', n }), L = (x, b) => ({ k: 'l', x, b }), Ap = (f, a) => ({ k: 'a', f, a }), Mv = (n) => ({ k: 'm', n });
+  const Nm = (n) => ({ k: 'n', n }), Add = (f, a) => ({ k: 'o', f, a });
+  /* 項の木。葉を左から等間隔に置き、節は子の真ん中に置く。根の中心が (cx, y0)、葉の間隔 sw、段の高さ lh。
+     変数は丸、λ は角の丸い四角、適用は @ の丸、任意の項は三角。変数ごとに、根の方へたどって最初に出会う同じ名前の λ を binder に持つ */
+  function tree(parent, t, cx, y0, sw, lh) {
+    const list = [];
+    let slot = 0;
+    const lay = (u, d, up) => {
+      const n = { t: u, d, up };
+      if (u.k === 'v' || u.k === 'm' || u.k === 'n') n.x = slot++;
+      else if (u.k === 'l') { n.kids = [lay(u.b, d + 1, n)]; n.x = n.kids[0].x; }
+      else { n.kids = [lay(u.f, d + 1, n), lay(u.a, d + 1, n)]; n.x = (n.kids[0].x + n.kids[1].x) / 2; }
+      list.push(n);
+      return n;
+    };
+    const root = lay(t, 0, null);
+    const w = (slot - 1) * sw;
+    list.forEach((n) => { n.X = cx - w / 2 + n.x * sw; n.Y = y0 + n.d * lh; });
+    const g = S.g({}, parent), ge = S.g({}, g), gn = S.g({}, g);
+    list.forEach((n) => (n.kids || []).forEach((k) => S.line(n.X, n.Y, k.X, k.Y, { cls: 's-mid w15' }, ge)));
+    list.forEach((n) => {
+      const u = n.t;
+      if (u.k === 'l') {
+        n.box = S.rect(n.X - 20, n.Y - 12, 40, 24, { rx: 6, cls: 'f-sf s-fg w15' }, gn);
+        n.lab = S.text(n.X, n.Y + 4.5, 'λ' + u.x, { cls: 't-c t-md t-mono t-b' }, gn);
+      } else if (u.k === 'm') {
+        n.box = S.path(`M${n.X},${n.Y - 13} L${n.X + 15},${n.Y + 12} H${n.X - 15} Z`, { cls: 'f-in s-mid w15' }, gn);
+        n.lab = S.text(n.X, n.Y + 8, u.n, { cls: 't-c t-sm t-mono t-b' }, gn);
+      } else {
+        const leaf = u.k === 'v' || u.k === 'n';
+        n.box = S.circle(n.X, n.Y, 12, { cls: leaf ? 'f-sf s-mid w15' : 'f-in s-mid w15' }, gn);
+        n.lab = S.text(n.X, n.Y + 4.5, leaf ? u.n : u.k === 'o' ? '+' : '@', { cls: 't-c t-mono ' + (u.k === 'v' ? 't-md t-b' : u.k === 'n' ? 't-md t-b t-d' : 't-sm t-mid') }, gn);
+      }
+    });
+    list.forEach((n) => {
+      if (n.t.k !== 'v') return;
+      let u = n.up;
+      while (u && !(u.t.k === 'l' && u.t.x === n.t.n)) u = u.up;
+      n.binder = u;
+    });
+    return { g, root, list, leaves: list.filter((n) => n.t.k === 'v' || n.t.k === 'm') };
+  }
+  /* 束縛の線: 変数の葉から、それを束縛する λ の節へ。side は膨らませる向き（−1 左、1 右） */
+  function bindLine(parent, leaf, side, mk) {
+    const b = leaf.binder, x1 = leaf.X + side * 11, y1 = leaf.Y - 6, x2 = b.X + side * 21, y2 = b.Y + 2;
+    const cx = (side < 0 ? Math.min(x1, x2) : Math.max(x1, x2)) + side * 46;
+    return S.path(`M${x1.toFixed(1)},${y1.toFixed(1)} C${cx.toFixed(1)},${y1.toFixed(1)} ${cx.toFixed(1)},${y2.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`, { cls: 'f-none s-mid w15 dash', 'marker-end': mk('mid') }, parent);
+  }
+  /* 動く札（引数）。止まっている間は見せない（行き先の字が代わりに出る） */
+  function chip(parent, s, size) {
+    const fs = FS[size || 't-xl'], w = Array.from(s).length * fs * 0.6 + 10;
+    const g = S.g({}, parent);
+    S.rect(-w / 2, -fs * 0.92, w, fs * 1.3, { rx: 4, cls: 'f-sf s-d w15' }, g);
+    S.text(0, 0, s, { cls: 't-c t-mono t-b t-d ' + (size || 't-xl') }, g);
+    g.style.opacity = 0;
+    return {
+      g,
+      fly(a, b, f, bend) {   // a から b へ、f（0〜1）の位置。0 と 1 では隠す
+        const cx = (a[0] + b[0]) / 2 + (bend || 0), cy = (a[1] + b[1]) / 2;
+        const x = (1 - f) * (1 - f) * a[0] + 2 * (1 - f) * f * cx + f * f * b[0], y = (1 - f) * (1 - f) * a[1] + 2 * (1 - f) * f * cy + f * f * b[1];
+        g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+        g.style.opacity = f > 0 && f < 1 ? '' : 0;
+      }
+    };
+  }
+  /* 簡約の列の 1 行。r は次に簡約する所（最初に現れる位置）で、x の地を付ける */
+  function redexRow(parent, s, x0, y, r, size, base) {
+    const T = term(parent, x0, y, s, size || 't-lg', base == null ? 't-b' : base);
+    let m = null;
+    if (r) {
+      const [a, b] = find(s, r);
+      m = S.rect(T.left(a) - 2, y - T.fs * 0.88, (b - a) * T.cw + 4, T.fs * 1.22, { rx: 3, cls: 'f-x-soft' }, T.g.firstChild);
+    }
+    return { T, m, g: T.g };
+  }
+  /* 矢印と札をまとめた g（行の出し入れと一緒に消すため） */
+  function arrowL(parent, mk, x1, y1, x2, y2, lab, lx, ly, end) {
+    const a = S.g({}, parent);
+    S.path(`M${x1},${y1} L${x2},${y2}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, a);
+    if (lab) S.text(lx, ly, lab, { cls: 't-xs t-mid' + (end ? ' t-end' : '') }, a);
+    return a;
+  }
+  /* 項の文字の上に、束縛の線を弧で引く。pairs は [変数の字, λ の後の名前の字]。h が 0 なら離れ方で高さを決める */
+  function arcsOver(parent, T, pairs, h0, mk, c) {
+    c = c || 'mid';
+    return pairs.map(([o, b]) => {
+      const xo = T.at(o), xb = T.at(b), y = T.y - T.fs * 0.95, h = h0 || 14 + 5 * Math.abs(o - b);
+      return S.path(`M${xo.toFixed(1)},${y.toFixed(1)} C${xo.toFixed(1)},${(y - h).toFixed(1)} ${xb.toFixed(1)},${(y - h).toFixed(1)} ${xb.toFixed(1)},${(y - 2).toFixed(1)}`, { cls: 'f-none s-' + c + ' w15 dash', 'marker-end': mk(c) }, parent);
+    });
+  }
+
+  /* ================================================================
+     場面1 状態か、式か
+     左の表は第6章 場面4 の YT-8 のプログラム（0〜7 番地の 8 命令、10 番地 sum、11 番地 n、12 番地 定数 1）を
+     第6章と同じ規則でこの場で走らせて作る（22 命令。sum 0 → 3 → 5 → 6、n 3 → 2 → 1 → 0）。
+     右下の列は指示書 §4 の sumTo の簡約の列（引き算と最後の足し算 3 回は 1 行にまとめた）。
+     JavaScript の while の版は Node.js 24.22.1 で sum = 6 を確かめた
+     ================================================================ */
+  const MEM0 = [0x1A, 0x2B, 0x4A, 0x1B, 0x3C, 0x4B, 0x50, 0x00, 0, 0, 0, 3, 1];
+  const OPN = { 1: 'LOAD', 2: 'ADD', 3: 'SUB', 4: 'STORE', 5: 'JNZ' };
+  const RUN = (() => {
+    let pc = 0, a = 0, z = 0;
+    const m = MEM0.slice(), rows = [];
+    for (let k = 0; k < 40; k++) {
+      const at = pc, ir = m[at], o = ir >> 4, n = ir & 15;
+      pc += 1;
+      let w = null;
+      if (o === 1) { a = m[n]; w = 'a'; }
+      else if (o === 2) { a = (a + m[n]) & 255; z = a === 0 ? 1 : 0; w = 'a'; }
+      else if (o === 3) { a = (a - m[n]) & 255; z = a === 0 ? 1 : 0; w = 'a'; }
+      else if (o === 4) { m[n] = a; w = n === 10 ? 'sum' : 'n'; }
+      else if (o === 5 && !z) { pc = n; w = 'pc'; }
+      rows.push({ at, pc, ins: o ? OPN[o] + ' ' + n : 'HALT', a, sum: m[10], n: m[11], w });
+      if (!o) break;
+    }
+    return rows;
+  })();
+  const S1E = ['sumTo 3', '3 + sumTo 2', '3 + (2 + sumTo 1)', '3 + (2 + (1 + sumTo 0))', '3 + (2 + (1 + 0))', '6'];
+  const S1R = ['sumTo 3', 'sumTo 2', 'sumTo 1', 'sumTo 0', '3 + (2 + (1 + 0))'];   // 行 k で次に置き換える所
+  const S1N = ['sumTo 3', '3 + sumTo 2', '(2 + sumTo 1)', '(1 + sumTo 0)', '0', '6'];  // 行 k で新しくできた所
+  const RY = (r) => 104 + r * 18.4;     // 表の行（0 は始め、1〜22 は命令）
+  const EY = (k) => 300 + k * 37;       // 式の列の行
+  /* 表の文字の色。書き換えた欄は太字、変わらない欄は薄く。cur の行の書き換えた欄は x。段階2 は ADD 11 の行の A を x */
+  function paintTable(st, i, cur) {
+    st.cells.forEach((c, j) => {
+      const on = j === cur && j > 0, add = i === 1 && c.r.ins === 'ADD 11';
+      ['pc', 'a', 'sum', 'n'].forEach((key) => {
+        const ch = c.r.w === key || j === 0;
+        c[key].setAttribute('class', 't-c t-sm t-mono ' + ((on && c.r.w === key) || (add && key === 'a') ? 't-b t-x' : ch ? 't-b' : 't-dim'));
+      });
+    });
+  }
+  const s1 = {
+    steps: [
+      { title: '状態を書き換える機械', text: '[[06-cpu.html#s4|第6章 場面4]] の YT-8 は、PC・A・10 番地の sum・11 番地の n を 22 命令で書き換え、10 番地に 6 を残した。どの命令も、いまの状態を読んで次の状態を書く。sum は同じ番地のまま、時点によって 0・3・5・6 と値を変える。' },
+      { title: '文の意味は「前の状態から後の状態へ」', text: '命令型の言語は、この機械を変数（番地）・代入（書き込み）・文の並び（PC の進む順）として写す。`sum = sum + n` の意味は前の状態から後の状態を作ることで、同じ文が 1 周めは 0 ＋ 3、2 周めは 3 ＋ 2 を計算する。文の順を入れ替えると答えが変わる。' },
+      { title: '同じ計算を、式の置き換えで', text: '`sumTo 0 = 0` と `sumTo n = n + sumTo (n - 1)` の 2 つの等式だけで書く。`sumTo 3` の中の sumTo を等式の右辺で置き換えていくと 6 に着く。どの行も前の行と等しい式で、書き換わる番地も、PC に当たる「いまどこを実行しているか」も無い。' },
+      { title: '参照透過性', text: '`sumTo 2` の値は、いつ・何度計算しても 3 なので、式の中の `sumTo 2` を 3 で置き換えても全体の意味は変わらない。この性質を**参照透過性**と呼ぶ。sum は時点によって 0・3・5・6 なので、プログラムの中の sum を 1 つの値で置き換えることはできない。' },
+      { title: '第X部の問い', text: 'Backus は 1977 年のチューリング賞講演で、従来の言語の欠点に「意味が状態の遷移に密着していること」を挙げた。第X部は、関数型が計算機の何に立ち向かうのかを問う。ただし機械は状態機械のままで、式の簡約も最後は第6章の CPU が命令で実行する。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state;
+      /* 左: YT-8 の状態の表 */
+      st.gL = S.g({ cls: 'fade' }, svg);
+      S.text(36, 26, 'YT-8 が状態を書き換える（第6章 場面4）', { cls: 't-md t-b' }, st.gL);
+      const CX = { k: 52, pc: 84, ins: 110, a: 222, sum: 290, n: 360 };
+      S.text(CX.k, 56, '回', { cls: 't-c t-xs t-dim' }, st.gL);
+      S.text(CX.pc, 56, 'PC', { cls: 't-c t-xs t-b' }, st.gL);
+      S.text(CX.ins, 56, '命令', { cls: 't-xs t-b' }, st.gL);
+      S.text(CX.a, 56, 'A', { cls: 't-c t-xs t-b' }, st.gL);
+      S.text(CX.sum, 56, 'sum', { cls: 't-c t-xs t-b' }, st.gL);
+      S.text(CX.sum, 70, '（10 番地）', { cls: 't-c t-xs t-dim' }, st.gL);
+      S.text(CX.n, 56, 'n', { cls: 't-c t-xs t-b' }, st.gL);
+      S.text(CX.n, 70, '（11 番地）', { cls: 't-c t-xs t-dim' }, st.gL);
+      S.text(36, 72, '値は実行した後', { cls: 't-xs t-dim' }, st.gL);
+      S.line(36, 78, 400, 78, { cls: 's-rule w1' }, st.gL);
+      st.bands = S.g({}, st.gL);   // 行の下地（段階2 の ADD の行、段階1 の今の行）
+      st.cur = S.rect(36, RY(0) - 13, 364, 18, { rx: 3, cls: 'f-x-soft' }, st.bands);
+      st.addBands = [];
+      st.cells = [];
+      const rows = [{ at: 0, pc: 0, ins: '（始め）', a: 0, sum: 0, n: 3, w: null }].concat(RUN);
+      rows.forEach((r, k) => {
+        const y = RY(k);
+        const ch = (key) => k > 0 && r.w === key;
+        const c = {
+          k: S.text(CX.k, y, k ? String(k) : '', { cls: 't-c t-xs t-mono t-dim' }, st.gL),
+          pc: S.text(CX.pc, y, String(r.pc), { cls: 't-c t-sm t-mono' + (ch('pc') || !k ? ' t-b' : ' t-dim') }, st.gL),
+          ins: S.text(CX.ins, y, r.ins, { cls: 't-sm' + (k ? ' t-mono' : ' t-dim') }, st.gL),
+          a: S.text(CX.a, y, String(r.a), { cls: 't-c t-sm t-mono' + (ch('a') || !k ? ' t-b' : ' t-dim') }, st.gL),
+          sum: S.text(CX.sum, y, String(r.sum), { cls: 't-c t-sm t-mono' + (ch('sum') || !k ? ' t-b' : ' t-dim') }, st.gL),
+          n: S.text(CX.n, y, String(r.n), { cls: 't-c t-sm t-mono' + (ch('n') || !k ? ' t-b' : ' t-dim') }, st.gL),
+          r
+        };
+        if (r.ins === 'ADD 11') st.addBands.push(S.rect(36, y - 13, 364, 18, { rx: 3, cls: 'f-x-soft fade hide' }, st.bands));
+        st.cells.push(c);
+      });
+      st.rows = rows;
+      st.sumHl = S.rect(CX.sum - 26, 46, 52, RY(22) - 40, { rx: 5, cls: 'f-none s-x w15 fade hide' }, st.gL);
+      S.text(36, 540, '22 命令の後、10 番地に 6 が残る', { cls: 't-xs t-mid' }, st.gL);
+      S.line(420, 40, 420, 545, { cls: 's-rule w1' }, svg);
+
+      /* 右上（段階1）: いまの状態 */
+      st.gNow = S.g({ cls: 'fade hide' }, svg);
+      S.text(446, 26, 'いまの状態（4 つの場所）', { cls: 't-md t-b' }, st.gNow);
+      st.now = ['PC', 'A', 'sum', 'n'].map((nm, k) => {
+        const x = 446 + k * 120;
+        S.rect(x, 44, 104, 74, { rx: 6, cls: 'f-sf s-rule w1' }, st.gNow);
+        S.text(x + 52, 64, nm + (nm === 'sum' ? '（10 番地）' : nm === 'n' ? '（11 番地）' : ''), { cls: 't-c t-xs t-b' }, st.gNow);
+        return S.text(x + 52, 102, '0', { cls: 't-c t-xl t-mono t-b' }, st.gNow);
+      });
+      st.nowIns = S.text(446, 148, '', { cls: 't-sm t-mono' }, st.gNow);
+
+      /* 右下（段階1・2）: sum の値の移り変わり */
+      st.gCh = S.g({ cls: 'fade' }, svg);
+      const CXk = (k) => 474 + k * 19.5, CYv = (v) => 462 - v * 30;
+      S.text(446, 246, 'sum（10 番地）の値の移り変わり', { cls: 't-md t-b' }, st.gCh);
+      S.line(CXk(0), CYv(0), CXk(22) + 10, CYv(0), { cls: 's-mid w1' }, st.gCh);
+      [0, 5, 10, 15, 20, 22].forEach((k) => {
+        S.line(CXk(k), CYv(0), CXk(k), CYv(0) + 5, { cls: 's-mid w1' }, st.gCh);
+        S.text(CXk(k), CYv(0) + 18, String(k), { cls: 't-c t-xs t-mono t-dim' }, st.gCh);
+      });
+      S.text(CXk(22) + 10, CYv(0) + 36, '実行した命令の数', { cls: 't-xs t-dim t-end' }, st.gCh);
+      [3, 5, 6].forEach((v) => S.line(CXk(0), CYv(v), CXk(22), CYv(v), { cls: 's-soft w1 dash2' }, st.gCh));
+      let dS = `M${CXk(0)},${CYv(0)}`;
+      rows.forEach((r, k) => { if (k) dS += ` H${CXk(k)} V${CYv(r.sum)}`; });
+      S.path(dS, { cls: 'f-none s-d w3 round' }, st.gCh);
+      st.chPts = [3, 10, 17].map((k) => {
+        const v = rows[k].sum;
+        const c = S.circle(CXk(k), CYv(v), 5, { cls: 'f-d' }, st.gCh);
+        const t = S.text(CXk(k) - 8, CYv(v) - 10, String(v), { cls: 't-c t-md t-mono t-b t-d' }, st.gCh);
+        return { c, t, k };
+      });
+      st.chCur = S.line(CXk(0), CYv(6) - 14, CXk(0), CYv(0), { cls: 's-x w15' }, st.gCh);
+      st.CXk = CXk;
+
+      /* 右上（段階2〜）: 命令型の言語で書く */
+      st.gJS = S.g({ cls: 'fade hide' }, svg);
+      S.text(446, 26, '命令型の言語で書くと（JavaScript）', { cls: 't-md t-b' }, st.gJS);
+      S.rect(446, 38, 300, 108, { rx: 6, cls: 'f-in s-rule w1' }, st.gJS);
+      st.jsHl = S.rect(450, 86, 292, 18, { rx: 3, cls: 'f-x-soft' }, st.gJS);
+      code(st.gJS, 458, 60, ['let sum = 0, n = 3;', 'while (n !== 0) {', '  sum = sum + n;', '  n = n - 1;', '}'], 19.5, 't-mono t-sm');
+      st.jsMap = S.g({ cls: 'fade hide' }, st.gJS);
+      S.text(756, 60, '← 変数 ＝ 10・11 番地', { cls: 't-xs t-mid' }, st.jsMap);
+      S.text(756, 79.5, '← 繰り返し ＝ JNZ', { cls: 't-xs t-mid' }, st.jsMap);
+      S.text(756, 99, '← 代入 ＝ LOAD・ADD・STORE', { cls: 't-xs t-x t-b' }, st.jsMap);
+      st.jsRun = S.g({ cls: 'fade hide' }, st.gJS);
+      ['1 周め  0 + 3 → 3', '2 周め  3 + 2 → 5', '3 周め  5 + 1 → 6'].forEach((s, k) => S.text(456 + k * 160, 172, s, { cls: 't-sm t-mono t-x pre' }, st.jsRun));
+      S.text(446, 194, '同じ文 sum = sum + n が、実行する時点で違う値を計算する', { cls: 't-xs t-mid' }, st.jsRun);
+
+      /* 右下（段階3〜）: 式の置き換え */
+      st.gE = S.g({ cls: 'fade hide' }, svg);
+      S.text(446, 222, '式を置き換える（等式だけで書いた sumTo）', { cls: 't-md t-b' }, st.gE);
+      S.rect(446, 234, 300, 46, { rx: 6, cls: 'f-in s-rule w1' }, st.gE);
+      code(st.gE, 458, 252, ['sumTo 0 = 0', 'sumTo n = n + sumTo (n - 1)'], 19, 't-mono t-sm');
+      st.E = S1E.map((s, k) => {
+        const g = S.g({ cls: 'fade' }, st.gE);
+        if (k) S.text(470, EY(k), '＝', { cls: 't-c t-md t-dim' }, g);
+        const T = term(g, 490, EY(k), s, 't-lg', k === 5 ? 't-b' : '');
+        if (k === 1) S.text(940, EY(k) + 2, '3 - 1 も済ませた', { cls: 't-xs t-dim t-end' }, g);
+        if (k === 5) S.text(940, EY(k) + 2, '足し算 3 回', { cls: 't-xs t-dim t-end' }, g);
+        return { g, T };
+      });
+      // 段階4: sumTo 2 は 3
+      st.gRT = S.g({ cls: 'fade hide' }, svg);
+      {
+        const T = st.E[1].T;
+        st.rtMark = find(S1E[1], 'sumTo 2');
+        S.text(T.end + 16, EY(1), '＝ 3 + 3', { cls: 't-md t-mono t-b t-x pre' }, st.gRT);
+        S.text(T.end + 16, EY(1) + 18, 'sumTo 2 は、いつ計算しても 3', { cls: 't-xs t-x t-b' }, st.gRT);
+        S.text(290, RY(22) + 20, 'sum は 0・3・5・6', { cls: 't-c t-xs t-x t-b' }, st.gRT);
+      }
+      // 段階5: Backus の分け方
+      st.gQ = S.g({ cls: 'fade hide' }, svg);
+      S.rect(36, 32, 364, 2, { cls: 'f-x' }, st.gQ);
+      S.text(400, 26, '状態遷移の意味論', { cls: 't-sm t-b t-x t-end' }, st.gQ);
+      S.rect(446, 228 - 24, 494, 2, { cls: 'f-x' }, st.gQ);
+      S.text(940, 222, '簡約の意味論', { cls: 't-sm t-b t-x t-end' }, st.gQ);
+      S.text(446, 528, 'Backus（1978）の分け方：状態を順に変えて終わりの状態を得るか、', { cls: 't-xs t-mid' }, st.gQ);
+      S.text(446, 546, 'プログラムを簡単なプログラムへ簡約して答えを得るか', { cls: 't-xs t-mid' }, st.gQ);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      S.fade(st.gNow, i === 0);
+      S.fade(st.gCh, i <= 1);
+      st.chCur.style.display = 'none';
+      st.chPts.forEach((p) => {
+        p.c.setAttribute('class', i === 1 ? 'f-x' : 'f-d');
+        p.t.setAttribute('class', 't-c t-md t-mono t-b ' + (i === 1 ? 't-x' : 't-d'));
+      });
+      S.fade(st.gJS, i >= 1);
+      S.fade(st.jsMap, i === 1);
+      S.fade(st.jsRun, i === 1);
+      op(st.gJS, i >= 2 ? 0.45 : '');
+      S.fade(st.gE, i >= 2);
+      S.fade(st.gRT, i === 3);
+      S.fade(st.gQ, i === 4);
+      st.addBands.forEach((b) => S.fade(b, i === 1));
+      S.fade(st.sumHl, i === 3);
+      op(st.gL, i === 2 ? 0.45 : '');
+      st.cur.style.display = 'none';
+      st.jsHl.style.display = i === 1 ? '' : 'none';
+      paintTable(st, i, -1);
+      // 式の列: 段階4 では sumTo 2 を x に
+      st.E.forEach((e) => { e.T.clear(); op(e.g, ''); });
+      if (i === 3) st.E[1].T.mark(st.rtMark[0], st.rtMark[1]).paint(st.rtMark[0], st.rtMark[1], 't-x t-b');
+      st.lastK = -1;
+    },
+    frame(ctx) {
+      const st = ctx.state, i = ctx.step, run = playing();
+      if (i === 0) {
+        // 今の行が 0.42 秒ごとに 1 つ進み、書き換えた欄が x になる。23 行の後 2.5 秒止まって繰り返す
+        const P = 23 * 0.42 + 2.5;
+        const k = run ? Math.min(22, Math.floor(U.mod(ctx.ts, P) / 0.42)) : 22;
+        st.cur.setAttribute('y', (RY(k) - 13).toFixed(1));
+        st.cur.style.display = run ? '' : 'none';
+        st.chCur.setAttribute('x1', st.CXk(k)); st.chCur.setAttribute('x2', st.CXk(k));
+        st.chCur.style.display = run ? '' : 'none';
+        if (k !== st.lastK) {
+          st.lastK = k;
+          paintTable(st, 0, run ? k : -1);
+          const r = st.rows[k];
+          [r.pc, r.a, r.sum, r.n].forEach((v, j) => {
+            st.now[j].textContent = String(v);
+            const w = ['pc', 'a', 'sum', 'n'][j];
+            st.now[j].setAttribute('class', 't-c t-xl t-mono t-b' + (k > 0 && r.w === w ? ' t-x' : ''));
+          });
+          st.nowIns.textContent = k ? `${k} 回め：${r.at} 番地の ${r.ins}` + (r.w === 'pc' ? '（PC ← 0）' : '') : '始め：PC = 0、sum = 0、n = 3';
+        }
+      } else if (i === 2) {
+        // 行が 1 つずつ現れる。いま置き換えた所が x、新しくできた所が d
+        const k = run ? Math.min(5, Math.floor(U.mod(ctx.ts, 9) / 1.1)) : 5;
+        if (k !== st.lastK) {
+          st.lastK = k;
+          st.E.forEach((e, j) => {
+            op(e.g, j <= k ? '' : 0);
+            e.T.clear();
+            if (j < k && j < 5) { const [a, b] = find(S1E[j], S1R[j]); e.T.mark(a, b).paint(a, b, 't-x'); }
+            if (j === k && j > 0) { const [a, b] = find(S1E[j], S1N[j]); e.T.paint(a, b, 't-d t-b'); }
+          });
+        }
+      }
+    }
+  };
+
+  /* ================================================================
+     場面2 3 つの形
+     木は tree() で項から描く（葉を等間隔、節は子の真ん中）。束縛は「根の方へたどって最初の同じ名前の λ」。
+     JavaScript の f => x => f(f(x)) は Node.js 24.22.1 で (k => k + 1, 0) に 2 を返すことを確かめた
+     ================================================================ */
+  const s2 = {
+    steps: [
+      { title: '変数・抽象・適用', text: '項は 3 つの形のどれか。変数 `x`、抽象 `λx. M`（x を受け取って M を返す関数。JavaScript の `x => M`）、適用 `M N`（関数 M に N を渡す。`M(N)`）。項は木で、[[28-compiler.html#s1.4|第28章 場面1]] の構文木と同じく節が子を指す。関数に名前は付かない。' },
+      { title: '括弧の規約', text: '括弧を減らす規約が 2 つある。適用は左に結合し、`f f x` は `(f f) x` で、`f (f x)` とは別の木になる。λ の本体は右へできるだけ伸び、`λx. x y` は `λx. (x y)` で、`(λx. x) y` とは別。λ は引数を 1 つ取るので、2 引数は `λx. λy. M` と重ねる（[[38-closure.html#s3|第38章 場面3]]）。' },
+      { title: '束縛変数と自由変数', text: '`λx. M` の中の x は、その λ に**束縛**される。変数は、木を根の方へたどって最初に出会う同じ名前の λ に結び付く。どの λ にも結び付かない変数が**自由変数**。`λx. (λy. x y) y` の最後の y は自由で、内側の y とは名前が同じだけの別の変数。' },
+      { title: 'α変換', text: '束縛変数の名前は、束縛する λ と使う所をそろえて付け替えても、項の意味は変わらない（**α変換**）。`λx. x y` と `λz. z y` は同じ項。ただし新しい名前が自由変数と同じだと、自由だった変数が捕まって別の項になる。x を y に替えた `λy. y y` は別物。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      /* 上: 3 つの形 */
+      const FORMS = [
+        ['変数', 'x', 'x', '名前。それだけで項になる', V('x')],
+        ['抽象', 'λx. M', 'x => M', 'x を受け取り M を返す関数', L('x', Mv('M'))],
+        ['適用', 'M N', 'M(N)', '関数 M に N を渡す', Ap(Mv('M'), Mv('N'))]
+      ];
+      st.cards = FORMS.map(([nm, f, js, d, t], k) => {
+        const x0 = 30 + k * 306, g = S.g({}, svg);
+        S.rect(x0, 14, 290, 146, { rx: 8, cls: 'f-sf s-rule w1' }, g);
+        S.text(x0 + 16, 40, nm, { cls: 't-md t-b' }, g);
+        term(g, x0 + 16, 76, f, 't-lg', 't-b');
+        S.text(x0 + 16, 104, 'JavaScript', { cls: 't-xs t-dim' }, g);
+        S.text(x0 + 78, 104, js, { cls: 't-sm t-mono' }, g);
+        S.text(x0 + 16, 140, d, { cls: 't-xs t-mid' }, g);
+        tree(g, t, x0 + 226, 50, 50, 56);
+        return g;
+      });
+      S.line(30, 176, 930, 176, { cls: 's-rule w1' }, svg);
+      const P = st.P = [0, 1, 2, 3].map(() => S.g({ cls: 'fade hide' }, svg));
+
+      /* 段階1: 例の項と木 */
+      S.text(40, 212, '例', { cls: 't-xs t-dim' }, P[0]);
+      term(P[0], 40, 238, 'λf. λx. f (f x)', 't-lg', 't-b');
+      S.text(40, 270, 'JavaScript', { cls: 't-xs t-dim' }, P[0]);
+      S.text(102, 270, 'f => x => f(f(x))', { cls: 't-sm t-mono' }, P[0]);
+      S.text(40, 300, 'f を受け取り、「x を受け取って', { cls: 't-sm' }, P[0]);
+      S.text(40, 320, 'f を 2 回当てる関数」を返す', { cls: 't-sm' }, P[0]);
+      const t1 = tree(P[0], L('f', L('x', Ap(V('f'), Ap(V('f'), V('x'))))), 620, 214, 92, 68);
+      const lab1 = [[t1.list.find((n) => n.t.k === 'l' && n.t.x === 'f'), '抽象（λf）'], [t1.root.kids[0].kids[0], '適用（f に f x を渡す）']];
+      lab1.forEach(([n, s]) => S.text(n.X - 36, n.Y + 5, s, { cls: 't-xs t-mid t-end' }, P[0]));
+      S.text(40, 500, '項は木。簡約（場面3）は、この木の部分木を差し替える', { cls: 't-sm t-mid' }, P[0]);
+      xlink(P[0], 40, 526, '28-compiler.html#s1.4', '第28章 場面1 の構文木');
+
+      /* 段階2: 括弧の規約。4 つの木 */
+      const PAIRS = [
+        ['f f x', '＝ (f f) x', Ap(Ap(V('f'), V('f')), V('x')), 130],
+        ['f (f x)', '', Ap(V('f'), Ap(V('f'), V('x'))), 345],
+        ['λx. x y', '＝ λx. (x y)', L('x', Ap(V('x'), V('y'))), 600],
+        ['(λx. x) y', '', Ap(L('x', V('x')), V('y')), 815]
+      ];
+      PAIRS.forEach(([s, eq, t, cx]) => {
+        const n = Array.from(s).length;
+        term(P[1], cx - n * 4.5, 214, s, 't-lg', 't-b');
+        if (eq) S.text(cx, 236, eq, { cls: 't-c t-sm t-mono t-dim pre' }, P[1]);
+        tree(P[1], t, cx, 274, 58, 56);
+      });
+      S.text(237, 214, '≠', { cls: 't-c t-lg t-x t-b' }, P[1]);
+      S.text(707, 214, '≠', { cls: 't-c t-lg t-x t-b' }, P[1]);
+      S.line(480, 196, 480, 420, { cls: 's-soft w1' }, P[1]);
+      S.text(237, 430, '適用は左に結合する', { cls: 't-c t-sm t-b' }, P[1]);
+      S.text(707, 430, 'λ の本体は右へできるだけ伸びる', { cls: 't-c t-sm t-b' }, P[1]);
+      S.text(40, 478, '2 引数の関数', { cls: 't-sm t-b' }, P[1]);
+      term(P[1], 150, 478, 'λx. λy. M', 't-lg');
+      S.text(260, 478, 'λ を重ねる', { cls: 't-sm t-mid' }, P[1]);
+      S.text(40, 512, '渡すとき', { cls: 't-sm t-b' }, P[1]);
+      term(P[1], 150, 512, 'f a b = (f a) b', 't-lg');
+      S.text(300, 512, '1 つずつ渡す（f a が関数を返す）', { cls: 't-sm t-mid' }, P[1]);
+
+      /* 段階3: 束縛変数と自由変数 */
+      const T3 = term(P[2], 40, 238, 'λx. (λy. x y) y', 't-lg', 't-b');
+      T3.paint(14, 15, 't-b t-x');
+      S.text(40, 270, '最後の y は、どの λ にも束縛されない', { cls: 't-sm' }, P[2]);
+      const t3 = tree(P[2], L('x', Ap(L('y', Ap(V('x'), V('y'))), V('y'))), 560, 214, 110, 66);
+      const lx = t3.leaves[0], ly = t3.leaves[1], lf = t3.leaves[2];
+      bindLine(P[2], lx, -1, mk);
+      bindLine(P[2], ly, 1, mk);
+      lf.box.setAttribute('class', 'f-x-soft s-x w2');
+      lf.lab.setAttribute('class', 't-c t-md t-mono t-b t-x');
+      S.text(lf.X + 20, lf.Y + 5, '自由変数', { cls: 't-sm t-b t-x' }, P[2]);
+      S.text(lx.X - 88, lx.Y - 64, '束縛変数', { cls: 't-sm t-b t-end' }, P[2]);
+      S.text(lx.X - 88, lx.Y - 46, '（λx の x）', { cls: 't-xs t-mid t-end' }, P[2]);
+      S.text(ly.X + 74, ly.Y - 64, '束縛変数', { cls: 't-sm t-b' }, P[2]);
+      S.text(ly.X + 74, ly.Y - 46, '（λy の y）', { cls: 't-xs t-mid' }, P[2]);
+      S.path('M40,520 H76', { cls: 'f-none s-mid w15 dash', 'marker-end': mk('mid') }, P[2]);
+      S.text(86, 524, '束縛：変数から、根の方へたどって最初に出会う同じ名前の λ へ', { cls: 't-xs t-mid' }, P[2]);
+
+      /* 段階4: α変換 */
+      const ROWS4 = [
+        ['λx. x y', [[4, 1]], 6, 'x => x(y)', 'もとの項', 't-sm t-b', ''],
+        ['λz. z y', [[4, 1]], 6, 'z => z(y)', '同じ項：束縛変数の名前を付け替えただけ', 't-sm t-b', '名前を z に'],
+        ['λy. y y', [[4, 1], [6, 1]], -1, 'y => y(y)', '別の項：自由だった y が λy に捕まる', 't-sm t-b t-x', '名前を y に']
+      ];
+      S.text(70, 212, 'λ の項', { cls: 't-xs t-dim' }, P[3]);
+      S.text(260, 212, 'JavaScript', { cls: 't-xs t-dim' }, P[3]);
+      ROWS4.forEach(([s, pairs, free, js, verdict, vc, how], k) => {
+        const y = 268 + k * 98;
+        const T = term(P[3], 70, y, s, 't-xl', 't-b');
+        arcsOver(P[3], T, pairs, 0, mk);
+        if (free >= 0) { T.paint(free, free + 1, 't-b t-x'); S.text(T.at(free), y + 22, '自由', { cls: 't-c t-xs t-x' }, P[3]); }
+        else T.paint(6, 7, 't-b t-x');
+        if (how) S.text(70, y - 58, '↓ ' + how, { cls: 't-xs t-dim' }, P[3]);
+        S.text(260, y, js, { cls: 't-md t-mono' }, P[3]);
+        S.text(420, y, verdict, { cls: vc }, P[3]);
+      });
+      S.text(40, 534, '名前を数に替えて α変換を要らなくする書き方もある（de Bruijn、1972 年。λx. λy. x は λ λ 2）', { cls: 't-xs t-mid' }, P[3]);
+    },
+    onStep(ctx, i) {
+      ctx.state.P.forEach((g, k) => S.fade(g, k === i));
+    }
+  };
+
+  /* ================================================================
+     場面3 β簡約
+     列は lam.mjs（この章のための小さな簡約器）で確かめた: (λx. x + 1) 2 → 2 + 1 → 3。
+     (λx. λy. x) y は、素朴に書き写すと λy. y、捕獲を避けると λy を λz にして λz. y（α同値の確認も簡約器で）
+     ================================================================ */
+  const P3 = 5.2;   // 動きの 1 周（秒）
+  const s3 = {
+    steps: [
+      { title: 'β簡約と簡約基', text: '`(λx. M) N` の形の項を、M の中の自由な x をすべて N で置き換えた項 `M[x := N]` に書き換える。これが**β簡約**で、書き換えられる形（λ への適用）を**簡約基**と呼ぶ。項は木なので、簡約基の部分木を、置き換えた後の木に差し替える操作になる。' },
+      { title: '数を足した例と正規形', text: '数と + は λ計算に無いので、ここでは外から足す（数どうしの足し算を 1 歩とする規則。δ簡約と呼ぶ）。`(λx. x + 1) 2` は β で `2 + 1`、δ で `3`。簡約基が 1 つも無い項を**正規形**と呼び、計算の答えとする。3 は正規形。' },
+      { title: '素朴な置き換えは意味を変える', text: '`λx. λy. x` は 2 つ受け取って 1 つめを返す。自由変数 y を渡せば「何を受け取っても y を返す関数」になるはずだ。本体の x を y と書き写すだけだと `λy. y` になり、受け取った物をそのまま返す別の関数になる。外の y が内側の λy に捕まった（**変数の捕獲**）。' },
+      { title: '先に α変換してから置き換える', text: '置き換える前に、捕まえそうな束縛変数を、引数に出てこない名前へ付け替える。λy を λz にした `(λx. λz. x) y` は同じ項（[[2|3 つの形]] の α変換）で、β簡約すると `λz. y`。β簡約の `M[x := N]` は、この付け替えを含めて定義する。' },
+      { title: '処理系は書き写さず、環境に記録する', text: '多くの処理系は本体を書き写さず、仮引数と引数の対を環境に記録して、本体を評価する途中で名前を引く。[[36-saba-js.html#s4.4|第36章 場面4]] の saba も a と b を新しい環境に結んだ。置き換えと同じ答えを保つには、関数の値に、定義した場所の環境を持たせる（[[38-closure.html#s2|第38章 場面2]]）。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      /* 上: β簡約の形（木） */
+      const gT = st.gT = S.g({}, svg);
+      S.rect(38, 30, 206, 172, { rx: 8, cls: 'f-none s-x w15 dash' }, gT);
+      S.text(46, 24, '簡約基（λ への適用）', { cls: 't-xs t-b t-x' }, gT);
+      const tri = (x, y0, y1, hw, cls, lab, lcls, g) => {
+        S.path(`M${x},${y0} L${x + hw},${y1} H${x - hw} Z`, { cls }, g);
+        if (lab) S.text(x, y1 - (y1 - y0) * 0.32, lab, { cls: 't-c t-mono t-b ' + (lcls || 't-md') }, g);
+      };
+      S.line(150, 62, 100, 112, { cls: 's-mid w15' }, gT);
+      S.line(150, 62, 200, 112, { cls: 's-mid w15' }, gT);
+      S.line(100, 112, 100, 128, { cls: 's-mid w15' }, gT);
+      S.circle(150, 62, 13, { cls: 'f-in s-mid w15' }, gT);
+      S.text(150, 66.5, '@', { cls: 't-c t-sm t-mono t-mid' }, gT);
+      S.rect(80, 100, 40, 24, { rx: 6, cls: 'f-sf s-fg w15' }, gT);
+      S.text(100, 116.5, 'λx', { cls: 't-c t-md t-mono t-b' }, gT);
+      tri(100, 128, 192, 52, 'f-in s-mid w15', 'M', 't-lg', gT);
+      [76, 124].forEach((x) => { S.circle(x, 180, 9, { cls: 'f-sf s-x w15' }, gT); S.text(x, 184, 'x', { cls: 't-c t-sm t-mono t-b t-x' }, gT); });
+      tri(200, 100, 150, 28, 'f-d-soft s-d w15', 'N', 't-lg t-d', gT);
+      S.text(200, 168, '引数', { cls: 't-c t-xs t-d' }, gT);
+      S.path('M262,118 H318', { cls: 'f-none s-fg w2', 'marker-end': mk('fg') }, gT);
+      S.text(290, 108, 'β', { cls: 't-c t-lg t-b' }, gT);
+      tri(410, 60, 132, 56, 'f-in s-mid w15', 'M', 't-lg', gT);
+      st.topN = [384, 436].map((x) => { const g = S.g({}, gT); tri(x, 140, 180, 18, 'f-d-soft s-d w15', 'N', 't-sm t-d', g); S.line(x, 132, x, 140, { cls: 's-mid w15' }, g); return g; });
+      st.topChips = [0, 1].map(() => { const c = chip(gT, 'N', 't-lg'); return c; });
+      S.text(410, 200, 'x のあった所に N', { cls: 't-c t-xs t-mid' }, gT);
+      term(gT, 540, 84, '(λx. M) N', 't-xl', 't-b');
+      S.path('M660,78 H700', { cls: 'f-none s-fg w15', 'marker-end': mk('fg') }, gT);
+      term(gT, 712, 84, 'M[x := N]', 't-xl', 't-b');
+      S.text(540, 120, 'M[x := N] は、M の中の自由な x を', { cls: 't-sm t-mid' }, gT);
+      S.text(540, 140, 'すべて N に置き換えた項', { cls: 't-sm t-mid' }, gT);
+      S.line(30, 222, 930, 222, { cls: 's-rule w1' }, svg);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+      const arrowDown = (g, x, y0, y1, lab, cls) => {
+        S.path(`M${x},${y0} V${y1}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g);
+        if (lab) S.text(x + 12, (y0 + y1) / 2 + 4, lab, { cls: cls || 't-xs t-mid' }, g);
+      };
+
+      /* 段階1: x が 2 か所 */
+      S.text(40, 252, '例：仮引数 x が本体に 2 か所ある', { cls: 't-sm t-b' }, P[0]);
+      const A1 = term(P[0], 80, 310, '(λx. f x x) a', 't-xl', 't-b');
+      A1.paint(7, 8, 't-b t-x').paint(9, 10, 't-b t-x').paint(12, 13, 't-b t-d');
+      arrowDown(P[0], 92, 326, 372, 'β（x := a）');
+      const B1 = term(P[0], 80, 400, 'f a a', 't-xl', 't-b');
+      B1.paint(2, 3, 't-b t-d').paint(4, 5, 't-b t-d');
+      st.ex1 = { A: A1, B: B1, dst: [2, 4], src: 12, chips: [chip(P[0], 'a'), chip(P[0], 'a')] };
+      S.text(360, 286, 'JavaScript', { cls: 't-xs t-dim' }, P[0]);
+      S.text(360, 310, '(x => f(x)(x))(a)', { cls: 't-md t-mono t-mid' }, P[0]);
+      S.text(360, 400, 'f(a)(a)', { cls: 't-md t-mono t-mid' }, P[0]);
+      S.text(40, 470, '本体 f x x の x を 2 つとも a にする。a は書き写されて 2 つになる', { cls: 't-sm t-mid' }, P[0]);
+
+      /* 段階2: (λx. x + 1) 2 → 2 + 1 → 3 */
+      const A2 = term(P[1], 80, 280, '(λx. x + 1) 2', 't-xl', 't-b');
+      A2.paint(5, 6, 't-b t-x').paint(12, 13, 't-b t-d');
+      arrowDown(P[1], 92, 296, 340, 'β（x := 2）');
+      const B2 = term(P[1], 80, 368, '2 + 1', 't-xl', 't-b');
+      B2.paint(0, 1, 't-b t-d');
+      arrowDown(P[1], 92, 384, 428, 'δ（足し算）');
+      const C2 = term(P[1], 80, 456, '3', 't-xl', 't-b t-d');
+      st.b2mark = S.rect(B2.left(0) - 3, 368 - 19 * 0.88, 5 * B2.cw + 6, 19 * 1.22, { rx: 3, cls: 'f-x-soft' }, B2.g.firstChild);
+      st.c2lab = S.g({}, P[1]);
+      S.text(110, 456, '正規形（簡約基が無い）', { cls: 't-sm t-b t-d' }, st.c2lab);
+      st.ex2 = { A: A2, B: B2, C: C2, chip: chip(P[1], '2') };
+      S.text(360, 280, '簡約基：全体（λx. x + 1 に 2 を渡す）', { cls: 't-sm t-mid' }, P[1]);
+      S.text(360, 368, '簡約基：2 + 1（数どうしの足し算）', { cls: 't-sm t-mid' }, P[1]);
+      S.text(40, 520, '数と + は λ計算の外から足した（δ規則）。場面5 では λ だけで書く', { cls: 't-xs t-mid' }, P[1]);
+
+      /* 段階3: 素朴な置き換えと捕獲 */
+      const A3 = term(P[2], 80, 290, '(λx. λy. x) y', 't-xl', 't-b');
+      arcsOver(P[2], A3, [[9, 2]], 0, mk);
+      A3.paint(12, 13, 't-b t-x');
+      S.text(A3.at(12), 312, '自由', { cls: 't-c t-xs t-x' }, P[2]);
+      S.text(300, 282, '2 つ受け取って 1 つめを返す関数に、', { cls: 't-sm' }, P[2]);
+      S.text(300, 302, '自由な y を渡す', { cls: 't-sm' }, P[2]);
+      arrowDown(P[2], 92, 330, 390, '書き写すだけ');
+      const B3 = term(P[2], 80, 430, 'λy. y', 't-xl', 't-b');
+      B3.paint(4, 5, 't-b t-x');
+      st.ex3arc = S.g({}, P[2]);
+      arcsOver(st.ex3arc, B3, [[4, 1]], 0, mk, 'x');
+      st.ex3lab = S.g({}, P[2]);
+      S.text(300, 422, '受け取った物をそのまま返す関数', { cls: 't-sm t-b t-x' }, st.ex3lab);
+      S.text(300, 442, '外の y が λy に捕まり、意味が変わった', { cls: 't-sm t-x' }, st.ex3lab);
+      st.ex3 = { A: A3, B: B3, chip: chip(P[2], 'y') };
+
+      /* 段階4: α変換してから */
+      const A4 = term(P[3], 80, 270, '(λx. λy. x) y', 't-xl', 't-b');
+      A4.paint(12, 13, 't-b t-d');
+      arrowDown(P[3], 92, 286, 322, 'α（λy を λz に）');
+      const M4 = term(P[3], 80, 350, '(λx. λz. x) y', 't-xl', 't-b');
+      M4.paint(6, 7, 't-b t-x').paint(12, 13, 't-b t-d');
+      S.text(300, 350, '同じ項（束縛変数の名前だけを替えた）', { cls: 't-sm t-mid' }, P[3]);
+      arrowDown(P[3], 92, 366, 402, 'β（x := y）');
+      const B4 = term(P[3], 80, 430, 'λz. y', 't-xl', 't-b');
+      B4.paint(4, 5, 't-b t-d');
+      st.ex4lab = S.g({}, P[3]);
+      S.text(B4.at(4), 452, '自由のまま', { cls: 't-c t-xs t-d' }, st.ex4lab);
+      S.text(300, 430, '何を受け取っても y を返す関数', { cls: 't-sm t-b t-d' }, st.ex4lab);
+      st.ex4 = { M: M4, B: B4, chip: chip(P[3], 'y') };
+
+      /* 段階5: 置き換えと環境 */
+      S.text(40, 252, '置き換える（β簡約）', { cls: 't-sm t-b' }, P[4]);
+      term(P[4], 60, 300, '(λx. x + 1) 2', 't-lg', 't-b').paint(12, 13, 't-b t-d');
+      arrowDown(P[4], 70, 314, 346, '本体を書き写す');
+      term(P[4], 60, 372, '2 + 1', 't-lg', 't-b').paint(0, 1, 't-b t-d');
+      arrowDown(P[4], 70, 386, 418, '');
+      term(P[4], 60, 444, '3', 't-lg', 't-b t-d');
+      S.line(380, 236, 380, 500, { cls: 's-soft w1' }, P[4]);
+      S.text(410, 252, '環境に記録する（処理系）', { cls: 't-sm t-b' }, P[4]);
+      S.rect(410, 270, 170, 46, { rx: 6, cls: 'f-sf s-rule w1' }, P[4]);
+      S.text(420, 288, '関数の本体（書き写さない）', { cls: 't-xs t-dim' }, P[4]);
+      const E5 = term(P[4], 430, 308, 'x + 1', 't-lg', 't-b');
+      E5.paint(0, 1, 't-b t-x');
+      S.rect(640, 270, 150, 80, { rx: 6, cls: 'f-in s-rule w1' }, P[4]);
+      S.text(650, 288, '環境（名前と値の対）', { cls: 't-xs t-b' }, P[4]);
+      S.line(650, 296, 780, 296, { cls: 's-rule w1' }, P[4]);
+      S.line(705, 300, 705, 338, { cls: 's-rule w1' }, P[4]);
+      S.text(676, 324, 'x', { cls: 't-c t-md t-mono t-b' }, P[4]);
+      S.text(732, 324, '2', { cls: 't-c t-md t-mono t-b t-d' }, P[4]);
+      S.path(`M${E5.at(0)},${314} C${E5.at(0)},${356} 640,356 668,334`, { cls: 'f-none s-x w15 dash', 'marker-end': mk('x') }, P[4]);
+      S.text(540, 372, 'x を引くと 2', { cls: 't-xs t-x' }, P[4]);
+      arrowDown(P[4], 440, 390, 418, '');
+      const R5 = term(P[4], 430, 444, '2 + 1 → 3', 't-lg', 't-b');
+      R5.paint(0, 1, 't-b t-d').paint(8, 9, 't-b t-d');
+      st.ex5 = { chip: chip(P[4], '2', 't-lg'), from: [732, 324], to: [R5.at(0), 444], R: R5 };
+      xlink(P[4], 410, 494, '36-saba-js.html#s4.4', '第36章 場面4（saba の環境）');
+      xlink(P[4], 410, 516, '38-closure.html#s2', '第38章 場面2（クロージャ）');
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      op(st.gT, i >= 2 ? 0.5 : '');
+      pose3(st, i, playing() ? 0 : P3, playing());
+    },
+    frame(ctx) {
+      const st = ctx.state, run = playing();
+      pose3(st, ctx.step, run ? U.mod(ctx.ts, P3) : P3, run);
+    }
+  };
+  /* 場面3 の段階 i の、1 周の中の時刻 c の姿。止めているときは c = P3（動きの終わり） */
+  function pose3(st, i, c, run) {
+    const F = (t0, d) => U.ease.inOut(U.prog(c, t0, d));
+    const show = (el, on) => { el.style.opacity = on ? '' : 0; };
+    const shown = (T, a, b, on) => { for (let k = a; k < b; k++) if (T.ch[k]) T.ch[k].style.opacity = on ? '' : 0; };
+    // 上の木: N が x の所へ（段階1 だけ動く）
+    const fT = i === 0 ? F(0.6, 1.2) : 1;
+    st.topChips.forEach((ch, k) => ch.fly([200, 134], [[384, 166], [436, 166]][k], run && i === 0 ? fT : 1, k ? 30 : -30));
+    st.topN.forEach((g) => show(g, fT >= 1));
+    // 段階1
+    { const e = st.ex1, f = i === 0 ? F(1.0, 1.2) : 1;
+      e.chips.forEach((ch, k) => ch.fly([e.A.at(e.src), 310], [e.B.at(e.dst[k]), 400], run ? f : 1, k ? 40 : -40));
+      e.dst.forEach((d) => shown(e.B, d, d + 1, f >= 1)); }
+    // 段階2
+    { const e = st.ex2, f = i === 1 ? F(0.8, 1.1) : 1, g = i === 1 ? F(2.6, 0.5) : 1;
+      e.chip.fly([e.A.at(12), 280], [e.B.at(0), 368], run ? f : 1, -40);
+      shown(e.B, 0, 1, f >= 1);
+      shown(e.B, 1, 5, f > 0);
+      show(st.b2mark, f >= 1);
+      shown(e.C, 0, 1, g >= 1);
+      show(st.c2lab, g >= 1); }
+    // 段階3
+    { const e = st.ex3, f = i === 2 ? F(0.8, 1.2) : 1;
+      e.chip.fly([e.A.at(12), 290], [e.B.at(4), 430], run ? f : 1, 50);
+      shown(e.B, 4, 5, f >= 1);
+      show(st.ex3arc, f >= 1); show(st.ex3lab, f >= 1); }
+    // 段階4
+    { const e = st.ex4, f = i === 3 ? F(0.8, 1.2) : 1;
+      e.chip.fly([e.M.at(12), 350], [e.B.at(4), 430], run ? f : 1, 50);
+      shown(e.B, 4, 5, f >= 1);
+      show(st.ex4lab, f >= 1); }
+    // 段階5: 環境から 2 を引く
+    { const e = st.ex5, f = i === 4 ? F(0.8, 1.2) : 1;
+      e.chip.fly(e.from, e.to, run ? f : 1, 0);
+      shown(e.R, 0, 1, f >= 1);
+      shown(e.R, 1, 9, f >= 1); }
+  }
+
+  /* ================================================================
+     場面4 順序と合流性
+     2 つの列は lam.mjs で確かめた: 内側から（適用順序）4 歩、外側から（正規順序）6 歩で、どちらも 3 + 3 を経て 6。
+     Ω は 1 歩で同じ項に戻り、(λx. 3) Ω は正規順序なら 1 歩で 3、適用順序なら Ω を簡約し続ける
+     ================================================================ */
+  const S4 = '(λx. x + x) ((λy. y + 1) 2)';
+  const S4L = [['(λx. x + x) (2 + 1)', '2 + 1', 'δ'], ['(λx. x + x) 3', '(λx. x + x) 3', 'β']];
+  const S4R = [['((λy. y + 1) 2) + ((λy. y + 1) 2)', '(λy. y + 1) 2', 'β'], ['(2 + 1) + ((λy. y + 1) 2)', '2 + 1', 'δ'],
+    ['3 + ((λy. y + 1) 2)', '(λy. y + 1) 2', 'β'], ['3 + (2 + 1)', '2 + 1', 'δ']];
+  const P4 = (i) => (i === 2 ? 9.5 : 7);   // 動きの 1 周（秒）。外側からの道は行が多い
+  const s4 = {
+    steps: [
+      { title: '簡約基が 2 つある項', text: '`(λx. x + x) ((λy. y + 1) 2)` には簡約基が 2 つある。全体（外側）と、引数の `(λy. y + 1) 2`（内側）。β簡約の規則は、どれから簡約するかを決めていない。[[1|状態か、式か]] の命令型では、文の順序そのものが意味の一部だった。' },
+      { title: '内側から（適用順序）', text: '引数を先に簡約すると、`(λy. y + 1) 2` が 3 になってから x に入る。β 2 回と足し算 2 回の 4 歩で 6。中に簡約基を含まない簡約基のうち、最も左のものを先に選ぶ順を**適用順序**と呼ぶ。' },
+      { title: '外側から（正規順序）', text: '全体を先に簡約すると、引数が式のまま x の 2 か所に写り、`(λy. y + 1) 2` を 2 回計算する。6 歩で 6。最も左で最も外側の簡約基を先に選ぶ順を**正規順序**と呼ぶ。歩数は違っても、答えは同じ 6。' },
+      { title: '合流性（Church–Rosser の定理）', text: '1 つの項を 2 通りに簡約しても、それぞれの先をさらに簡約すれば同じ項に着ける（**合流性**。Church と Rosser、1936 年）。だから正規形は、あれば 1 つに決まる。止まる限り、簡約の順序は答えを変えない。' },
+      { title: '止まらない項 Ω', text: '`Ω = (λx. x x) (λx. x x)` の簡約基は全体の 1 つだけで、β簡約すると同じ Ω に戻る。正規形を持たない項もある。項が正規形を持つかどうかを判定する一般的な手続きは無いことを、Church が 1936 年に示した。' },
+      { title: '順序で止まるかどうかが変わる', text: '`(λx. 3) Ω` は、外側から簡約すれば、x を使わない本体の 3 が 1 歩で出る。内側から簡約すると Ω を回り続けて止まらない。正規順序は、正規形がある項なら必ずそこに着く（Curry と Feys、1958 年の標準化定理から導ける）。言語の規則としての順序は[[40-lazy.html#s1|第40章 場面1]]。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      const row = (g, s, x0, y, r) => {
+        const T = term(g, x0, y, s, 't-lg', 't-b');
+        const [a, b] = r ? find(s, r) : [0, 0];
+        const m = r ? S.rect(T.left(a) - 2, y - 13, (b - a) * T.cw + 4, 18, { rx: 3, cls: 'f-x-soft' }, T.g.firstChild) : null;
+        return { T, m, g: T.g };
+      };
+      const arrow = (g, x1, y1, x2, y2, lab, lx, ly, end) => {
+        const a = S.g({}, g);
+        S.path(`M${x1},${y1} L${x2},${y2}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, a);
+        if (lab) S.text(lx, ly, lab, { cls: 't-xs t-mid' + (end ? ' t-end' : '') }, a);
+        return a;
+      };
+      /* 上: ひし形 */
+      const gD = st.gD = S.g({}, svg);
+      st.start = row(gD, S4, 358, 64, null);
+      st.inner = S.rect(st.start.T.left(13) - 2, 64 - 14, 13 * 9 + 4, 19, { rx: 3, cls: 'f-x-soft' }, st.start.T.g.firstChild);
+      st.outer = S.rect(350, 40, 259, 34, { rx: 6, cls: 'f-none s-x w15 dash' }, gD);
+      st.redexLab = S.g({}, gD);
+      S.text(350, 30, '外側の簡約基（全体）', { cls: 't-xs t-b t-x' }, st.redexLab);
+      S.text(st.start.T.at(19), 92, '内側の簡約基（引数）', { cls: 't-c t-xs t-b t-x' }, st.redexLab);
+      // 段階1 だけ: 同じ項の木。外側の簡約基は根、内側の簡約基は引数の部分木の根
+      st.gT4 = S.g({ cls: 'fade hide' }, svg);
+      const t4 = tree(st.gT4, Ap(L('x', Add(V('x'), V('x'))), Ap(L('y', Add(V('y'), Nm('1'))), Nm('2'))), 480, 140, 70, 54);
+      const inner = t4.root.kids[1];
+      S.circle(t4.root.X, t4.root.Y, 18, { cls: 'f-none s-x w15 dash' }, st.gT4);
+      inner.box.setAttribute('class', 'f-x-soft s-x w15');
+      S.text(t4.root.X + 26, t4.root.Y + 4, '外側：根の @', { cls: 't-xs t-b t-x' }, st.gT4);
+      S.text(inner.X + 22, inner.Y + 4, '内側：引数の @', { cls: 't-xs t-b t-x' }, st.gT4);
+      S.text(480, 388, '根に近いほど外側。中に簡約基を含まない簡約基が、最も内側', { cls: 't-c t-sm t-mid' }, st.gT4);
+      // 左の道（内側から）
+      st.gL = S.g({ cls: 'fade' }, gD);
+      st.L = S4L.map(([s, r], k) => row(st.gL, s, 70, [158, 228][k], r));
+      st.Larr = [arrow(st.gL, 380, 78, 200, 140, 'β（内側）', 250, 102, true), arrow(st.gL, 110, 166, 110, 210, 'δ', 120, 192), arrow(st.gL, 150, 236, 446, 312, 'β', 290, 262)];
+      S.text(64, 300, '内側から：4 歩', { cls: 't-sm t-b' }, st.gL);
+      // 右の道（外側から）
+      st.gR = S.g({ cls: 'fade' }, gD);
+      st.R = S4R.map(([s, r], k) => row(st.gR, s, 600, 132 + k * 46, r));
+      st.Rarr = [arrow(st.gR, 580, 78, 660, 116, 'β（外側）', 632, 96)];
+      [0, 1, 2].forEach((k) => st.Rarr.push(arrow(st.gR, 620, 138 + k * 46, 620, 162 + k * 46, S4R[k][2], 630, 154 + k * 46)));
+      st.Rarr.push(arrow(st.gR, 640, 280, 514, 312, S4R[3][2], 594, 306));
+      S.text(896, 300, '外側から：6 歩', { cls: 't-sm t-b t-end' }, st.gR);
+      // 合う所
+      st.gM = S.g({ cls: 'fade' }, gD);
+      st.M = row(st.gM, '3 + 3', 457.5, 328, '3 + 3');
+      st.MF = arrow(st.gM, 480, 336, 480, 360, 'δ', 490, 352);
+      st.F = term(st.gM, 475.5, 382, '6', 't-xl', 't-b t-d');
+      st.mergeLab = S.text(500, 382, 'どちらの道も 3 + 3 を経て 6 に着く', { cls: 't-sm t-b fade hide' }, st.gM);
+      S.line(30, 400, 930, 400, { cls: 's-rule w1' }, svg);
+
+      /* 下左: Ω */
+      st.gO = S.g({ cls: 'fade hide' }, svg);
+      S.text(40, 424, '止まらない項 Ω', { cls: 't-sm t-b' }, st.gO);
+      st.OA = term(st.gO, 50, 462, 'Ω = (λx. x x) (λx. x x)', 't-lg', 't-b');
+      st.OA.paint(9, 10, 't-b t-x').paint(11, 12, 't-b t-x');
+      arrow(st.gO, 70, 470, 70, 500, 'β', 80, 490);
+      st.OB = term(st.gO, 86, 522, '(λx. x x) (λx. x x)', 't-lg', 't-b');
+      st.OB.paint(0, 9, 't-b t-d').paint(10, 19, 't-b t-d');
+      S.path(`M268,516 C318,516 318,458 268,458`, { cls: 'f-none s-x w15', 'marker-end': mk('x') }, st.gO);
+      S.text(324, 492, '同じ項に戻る', { cls: 't-sm t-b t-x' }, st.gO);
+      st.oChips = [0, 1].map(() => chip(st.gO, '(λx. x x)', 't-lg'));
+
+      /* 下右: (λx. 3) Ω */
+      st.gK = S.g({ cls: 'fade hide' }, svg);
+      S.text(500, 424, '(λx. 3) Ω の 2 つの道', { cls: 't-sm t-b' }, st.gK);
+      st.KA = term(st.gK, 520, 470, '(λx. 3) Ω', 't-lg', 't-b');
+      st.KA.paint(5, 6, 't-b t-d');
+      arrow(st.gK, 612, 465, 712, 465, '', 0, 0);
+      S.text(662, 452, '外側から（正規順序）', { cls: 't-c t-xs t-mid' }, st.gK);
+      term(st.gK, 722, 470, '3', 't-xl', 't-b t-d');
+      S.text(744, 470, '1 歩で正規形', { cls: 't-sm t-b t-d' }, st.gK);
+      const ox = st.KA.at(8);
+      st.loop = S.path(`M${ox - 6},${478} C${ox - 26},${512} ${ox + 26},${512} ${ox + 6},${478}`, { cls: 'f-none s-x w15', 'marker-end': mk('x') }, st.gK);
+      st.loopDot = S.circle(ox, 504, 4, { cls: 'f-x' }, st.gK);
+      S.text(ox + 30, 506, '内側から（適用順序）：Ω → Ω → …', { cls: 't-xs t-b t-x' }, st.gK);
+      S.text(ox + 30, 524, '止まらない', { cls: 't-xs t-b t-x' }, st.gK);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      S.fade(st.gL, i >= 1);
+      S.fade(st.gR, i >= 2);
+      S.fade(st.gM, i >= 1);
+      S.fade(st.mergeLab, i === 3);
+      S.fade(st.gO, i >= 4);
+      S.fade(st.gK, i === 5);
+      S.fade(st.gT4, i === 0);
+      op(st.gD, i >= 4 ? 0.35 : '');
+      op(st.gL, i === 2 ? 0.4 : '');
+      st.redexLab.style.opacity = i === 0 ? '' : 0;
+      st.outer.style.opacity = i === 0 || i === 2 ? '' : 0;
+      st.inner.style.opacity = i === 0 || i === 1 ? '' : 0;
+      pose4(st, i, playing() ? 0 : P4(i), playing());
+    },
+    frame(ctx) {
+      const st = ctx.state, run = playing(), i = ctx.step;
+      pose4(st, i, run ? U.mod(ctx.ts, P4(i)) : P4(i), run);
+    }
+  };
+  /* 場面4 の段階 i の時刻 c の姿。道の行は 1.1 秒ごとに 1 つ現れ、いま簡約する所が x の地になる */
+  function pose4(st, i, c, run) {
+    const vis = (o, on) => { o.g.style.opacity = on ? '' : 0; };
+    const kL = i === 1 && run ? Math.floor(c / 1.1) : 9, kR = i === 2 && run ? Math.floor(c / 1.1) : 9;
+    st.L.forEach((r, k) => { vis(r, k < kL); r.m.style.opacity = i <= 2 ? '' : 0; });
+    st.Larr.forEach((a, k) => { a.style.opacity = k < kL || i !== 1 ? '' : 0; });
+    st.R.forEach((r, k) => { vis(r, k < kR); r.m.style.opacity = i <= 2 ? '' : 0; });
+    st.Rarr.forEach((a, k) => { a.style.opacity = k < kR || i !== 2 ? '' : 0; });
+    const mOn = i === 1 ? kL >= 3 : i === 2 ? kR >= 5 : true, fOn = i === 1 ? kL >= 4 : i === 2 ? kR >= 6 : true;
+    vis(st.M, mOn);
+    st.M.m.style.opacity = i <= 2 ? '' : 0;
+    st.F.g.style.opacity = fOn ? '' : 0;
+    st.MF.style.opacity = fOn ? '' : 0;
+    // Ω: 引数が本体の x x の 2 か所へ入り、同じ項になる
+    const f = i === 4 && run ? U.ease.inOut(U.prog(U.mod(c, 5), 0.8, 1.2)) : 1;
+    st.oChips.forEach((ch, k) => ch.fly([st.OA.at(18), 462], [st.OB.at(k ? 14 : 4), 522], f, k ? 30 : -30));
+    for (let k = 0; k < 19; k++) if (st.OB.ch[k]) st.OB.ch[k].style.opacity = f >= 1 ? '' : 0;
+    // (λx. 3) Ω の内側の輪を回る点
+    const ox = st.KA.at(8), a = i === 5 && run ? U.mod(c, 1.6) / 1.6 : 0.5;
+    const th = Math.PI * (1 + 2 * a);
+    st.loopDot.setAttribute('cx', (ox + 14 * Math.cos(th)).toFixed(1));
+    st.loopDot.setAttribute('cy', (494 + 12 * Math.sin(th) * -1).toFixed(1));
+  }
+
+  /* ================================================================
+     場面5 数もデータも関数（Church の符号化）
+     列は lam.mjs で確かめた: true P Q → (λf. P) Q → P、plus 2 1 は正規順序で β簡約 6 回（定義の名前を関数の位置で
+     展開するのは同じ歩に数えた）で λf. λx. f (f (f x))。mult 2 3 は 6 の形。fst (pair 3 5) は 3 歩・1 歩・2 歩で 3。
+     Haskell（GHC 9.6.7）の plus two one (+1) 0 は 3、three (+1) 0 は 3、mult two three (+1) 0 は 6
+     ================================================================ */
+  const DEF5 = [
+    // [文字列, x0, y, 出す段階, 関わる段階]
+    ['true  = λt. λf. t', 56, 62, 0, [0, 4]], ['false = λt. λf. f', 56, 86, 0, [0]],
+    ['pair  = λa. λb. λs. s a b', 56, 126, 4, [4]], ['fst   = λp. p true', 56, 150, 4, [4]],
+    ['0 = λf. λx. x', 500, 62, 1, [1]], ['1 = λf. λx. f x', 500, 86, 1, [1, 2, 3]], ['2 = λf. λx. f (f x)', 500, 110, 1, [1, 2, 3]],
+    ['3 = λf. λx. f (f (f x))', 500, 134, 1, [1, 3, 4]], ['plus = λm. λn. λf. λx. m f (n f x)', 500, 162, 2, [2, 3]]
+  ];
+  const S5 = [
+    ['plus 2 1', 'plus 2', ''],
+    ['(λn. λf. λx. 2 f (n f x)) 1', '(λn. λf. λx. 2 f (n f x)) 1', 'plus を展開、m := 2'],
+    ['λf. λx. 2 f (1 f x)', '2 f', 'n := 1'],
+    ['λf. λx. (λx. f (f x)) (1 f x)', '(λx. f (f x)) (1 f x)', '2 を展開、f := f'],
+    ['λf. λx. f (f (1 f x))', '1 f', 'x := 1 f x'],
+    ['λf. λx. f (f ((λx. f x) x))', '(λx. f x) x', '1 を展開、f := f'],
+    ['λf. λx. f (f (f x))', null, 'x := x']
+  ];
+  const s5 = {
+    steps: [
+      { title: '真偽は「どちらかを選ぶ関数」', text: '`true = λt. λf. t` は 2 つ受け取って 1 つめを、`false = λt. λf. f` は 2 つめを返す。分岐 if b then P else Q は、b に P と Q を渡す適用 `b P Q` で書ける。＝ の左の名前は略記で、関数の位置に来たときに右辺へ置き換える。' },
+      { title: '数 n は「f を n 回当てる関数」', text: '`3 = λf. λx. f (f (f x))` は、関数 f と出発点 x を受け取り、x に f を 3 回当てる。0 は 1 回も当てない `λf. λx. x`。数を、繰り返す回数として表す。f に「1 を足す関数」、x に 0 を渡せば、ふつうの数 3 に戻せる。' },
+      { title: '足し算は回数をつなぐ', text: '`plus = λm. λn. λf. λx. m f (n f x)`。まず `n f x` で x に f を n 回当て、その結果に m がさらに m 回当てる。合わせて m ＋ n 回で、m ＋ n を表す数になる。掛け算は「f を n 回当てる」を m 回繰り返す `λm. λn. λf. m (n f)` で書ける。' },
+      { title: '2 ＋ 1 を簡約する', text: '正規順序で β簡約を 6 回行うと `λf. λx. f (f (f x))`、つまり 3 の形になる。2 と 1 は、関数の位置に来たときに定義へ置き換えた。足し算の命令も数の型も使わず、置き換えだけで答えが出る。列は小さな簡約器で 1 歩ずつ確かめた。' },
+      { title: '対と、実際の言語の数', text: '対も `pair = λa. λb. λs. s a b` と書け、`fst = λp. p true` で 1 つめを取り出す。実際の言語は、数をビットの並びで持ち、足し算を CPU の 1 命令で行う（[[06-cpu.html#s3|第6章 場面3]]、[[26-kata.html#s1|第26章 場面1]]）。符号化が示すのは、3 つの形だけで数もデータも表せること。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      /* 上: 定義 */
+      S.text(40, 36, '真偽と対', { cls: 't-xs t-dim' }, svg);
+      S.text(484, 36, '数と足し算', { cls: 't-xs t-dim' }, svg);
+      st.defs = DEF5.map(([s, x0, y, at, rel]) => ({ T: term(svg, x0, y, s, 't-md', 't-b'), at, rel }));
+      S.line(30, 182, 930, 182, { cls: 's-rule w1' }, svg);
+      const P = st.P = [0, 1, 2, 3, 4].map(() => S.g({ cls: 'fade hide' }, svg));
+
+      /* 段階1: true P Q と false P Q */
+      st.b1 = [['true P Q', '(λf. P) Q', 'P', 'true P', '(λf. P) Q', 60], ['false P Q', '(λf. f) Q', 'Q', 'false P', '(λf. f) Q', 500]].map(([a, b, c, ra, rb, x0]) => {
+        const r = [redexRow(P[0], a, x0, 236, ra, 't-xl'), redexRow(P[0], b, x0, 316, rb, 't-xl'), redexRow(P[0], c, x0, 396, null, 't-xl', 't-b t-d')];
+        const ar = [arrowL(P[0], mk, x0 + 12, 248, x0 + 12, 292, (a[0] === 't' ? 'true' : 'false') + ' を展開、t := P', x0 + 24, 274), arrowL(P[0], mk, x0 + 12, 328, x0 + 12, 372, 'f := Q', x0 + 24, 354)];
+        return { r, ar };
+      });
+      S.text(60, 470, '分岐', { cls: 't-sm t-b' }, P[0]);
+      term(P[0], 110, 470, 'if b then P else Q  =  b P Q', 't-lg', 't-b');
+      S.text(60, 500, 'b が true なら P、false なら Q が残る。if という仕組みは要らない', { cls: 't-sm t-mid' }, P[0]);
+
+      /* 段階2: f を n 回当てる鎖 */
+      const chain = (g, n, y, x0) => {
+        const out = { stages: [] };
+        S.circle(x0, y, 14, { cls: 'f-sf s-mid w15' }, g);
+        S.text(x0, y + 5, 'x', { cls: 't-c t-md t-mono t-b' }, g);
+        out.stages.push(x0);
+        for (let j = 0; j < n; j++) {
+          const x = x0 + 70 + j * 70;
+          S.path(`M${x - 52},${y} H${x - 22}`, { cls: 'f-none s-mid w15', 'marker-end': mk('mid') }, g);
+          S.rect(x - 18, y - 15, 36, 30, { rx: 5, cls: 'f-in s-fg w15' }, g);
+          S.text(x, y + 5, 'f', { cls: 't-c t-md t-mono t-b' }, g);
+          out.stages.push(x);
+        }
+        return out;
+      };
+      const Y2 = (n) => 244 + n * 66;
+      S.text(120, 210, '下の小さな数は、f に「1 を足す関数」、x に 0 を渡したときの値', { cls: 't-xs t-mid' }, P[1]);
+      st.ch2 = [0, 1, 2, 3].map((n) => {
+        const y = Y2(n);
+        S.text(64, y + 7, String(n), { cls: 't-c t-xl t-mono t-b' }, P[1]);
+        const c = chain(P[1], n, y, 120);
+        c.stages.forEach((x, j) => S.text(x, y + 32, String(j), { cls: 't-c t-xs t-mono t-d' }, P[1]));
+        S.text(470, y + 5, '→', { cls: 't-c t-md t-mid' }, P[1]);
+        return c;
+      });
+      st.ch2val = [0, 1, 2, 3].map((n) => S.text(496, Y2(n) + 7, String(n), { cls: 't-xl t-mono t-b t-d' }, P[1]));
+      st.dot2 = S.circle(120, Y2(3) - 24, 6, { cls: 'f-d' }, P[1]);
+      st.Y2 = Y2;
+      S.text(560, Y2(0) + 5, 'ふつうの数に戻した値', { cls: 't-xs t-mid' }, P[1]);
+      S.text(40, 536, 'f と x は何でもよい。数が決めるのは、f を当てる回数だけ', { cls: 't-sm t-mid' }, P[1]);
+
+      /* 段階3: plus 2 1 は x に f を 1 回、さらに 2 回 */
+      term(P[2], 60, 230, 'plus 2 1 f x  ↠  2 f (1 f x)', 't-lg', 't-b');
+      S.text(330, 230, '（↠ は何歩かの簡約）', { cls: 't-xs t-dim' }, P[2]);
+      const c3 = chain(P[2], 3, 320, 120);
+      st.c3 = c3;
+      S.path('M172,350 v8 h36 v-8', { cls: 'f-none s-mid w15' }, P[2]);
+      S.text(190, 374, '1 f x：1 回', { cls: 't-c t-xs t-b t-mid' }, P[2]);
+      S.path('M242,350 v8 h106 v-8', { cls: 'f-none s-mid w15' }, P[2]);
+      S.text(295, 374, '2 f (…)：さらに 2 回', { cls: 't-c t-xs t-b t-mid' }, P[2]);
+      st.c3val = S.text(420, 327, '3', { cls: 't-xl t-mono t-b t-d' }, P[2]);
+      S.text(420, 300, 'f に 1 を足す関数、x に 0 を渡すと', { cls: 't-xs t-mid' }, P[2]);
+      st.dot3 = S.circle(120, 320, 6, { cls: 'f-d' }, P[2]);
+      S.text(60, 450, '掛け算', { cls: 't-sm t-b' }, P[2]);
+      term(P[2], 130, 450, 'mult = λm. λn. λf. m (n f)', 't-lg', 't-b');
+      S.text(130, 476, '「f を n 回当てる関数」n f を、m 回当てる。mult 2 3 は 6 の形になる', { cls: 't-sm t-mid' }, P[2]);
+
+      /* 段階4: 2 ＋ 1 の簡約の列 */
+      S.text(40, 206, '正規順序で 1 歩ずつ（2・1・plus は略記）', { cls: 't-xs t-dim' }, P[3]);
+      st.r5 = S5.map(([s, r, note], k) => {
+        const y = 236 + k * 44;
+        const o = redexRow(P[3], s, 70, y, r, 't-lg', k === 6 ? 't-b t-d' : 't-b');
+        if (k) { S.text(52, y, '→', { cls: 't-c t-md t-mid' }, o.g); S.text(560, y, note, { cls: 't-xs t-mid' }, o.g); }
+        return o;
+      });
+      S.text(560, 236 + 6 * 44 + 20, '3 の形（正規形）', { cls: 't-sm t-b t-d' }, st.r5[6].g);
+
+      /* 段階5: 対と、実際の言語の数 */
+      S.text(40, 206, '対から 1 つめを取り出す（3・5 は何でもよい値）', { cls: 't-xs t-dim' }, P[4]);
+      st.r6 = [['fst (pair 3 5)', 'fst (pair 3 5)', ''], ['(λs. s 3 5) true', '(λs. s 3 5) true', '3 歩'], ['true 3 5', 'true 3', '1 歩'], ['3', null, '2 歩']].map(([s, r, n], k) => {
+        const y = 240 + k * 62;
+        const o = redexRow(P[4], s, 70, y, r, 't-lg', k === 3 ? 't-b t-d' : 't-b');
+        if (k) { S.text(52, y, '↠', { cls: 't-c t-md t-mid' }, o.g); S.text(250, y, n, { cls: 't-xs t-mid' }, o.g); }
+        return o;
+      });
+      S.line(360, 196, 360, 520, { cls: 's-soft w1' }, P[4]);
+      S.text(390, 214, '3 の表し方', { cls: 't-sm t-b' }, P[4]);
+      S.text(390, 250, 'λ計算（Church の数）', { cls: 't-xs t-dim' }, P[4]);
+      term(P[4], 390, 274, 'λf. λx. f (f (f x))', 't-lg', 't-b');
+      S.text(390, 296, '関数：f を 3 回当てる', { cls: 't-xs t-mid' }, P[4]);
+      S.text(390, 336, 'YT-8 のメモリ（第6章）', { cls: 't-xs t-dim' }, P[4]);
+      term(P[4], 390, 360, '0000 0011', 't-lg', 't-b t-d');
+      S.text(390, 382, '8 ビットの並び。足し算は ADD の 1 命令', { cls: 't-xs t-mid' }, P[4]);
+      S.text(390, 432, '足し算 2 ＋ 1', { cls: 't-sm t-b' }, P[4]);
+      S.text(390, 458, 'λ計算：plus 2 1 を β簡約 6 回', { cls: 't-sm' }, P[4]);
+      S.text(390, 482, 'YT-8：ADD 1 命令（5 拍）', { cls: 't-sm' }, P[4]);
+      xlink(P[4], 390, 516, '06-cpu.html#s3', '第6章 場面3（1 命令 ＝ 5 拍）');
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      st.defs.forEach((d) => { d.T.g.style.opacity = i < d.at ? 0 : d.rel.includes(i) ? '' : 0.35; });
+      pose5(st, i, playing() ? 0 : 99, playing());
+    },
+    frame(ctx) {
+      const st = ctx.state, run = playing(), i = ctx.step;
+      pose5(st, i, run ? ctx.ts : 99, run);
+    }
+  };
+  /* 場面5 の段階 i の時刻 t の姿（止めているときは t = 99 で動きの終わり） */
+  function pose5(st, i, t, run) {
+    const vis = (o, on) => { o.g.style.opacity = on ? '' : 0; };
+    // 段階1: 行が 1.2 秒ごとに現れる（7 秒で 1 周）
+    { const k = i === 0 && run ? Math.floor(U.mod(t, 7) / 1.2) : 9;
+      st.b1.forEach((b) => { b.r.forEach((r, j) => vis(r, j <= k)); b.ar.forEach((a, j) => { a.style.opacity = j < k ? '' : 0; }); }); }
+    // 段階2: 点が 3 の鎖を進み、数が増える。各行の右に「f に 1 を足す関数、x に 0」の答え
+    { const c = st.ch2[3], P = 5, u = i === 1 && run ? U.mod(t, P) : P;
+      const pos = U.clamp((u - 0.5) / 0.9, 0, 3);
+      const j = Math.floor(pos), f = pos - j;
+      const x = j >= 3 ? c.stages[3] : U.lerp(c.stages[j], c.stages[j + 1], U.ease.inOut(f));
+      st.dot2.setAttribute('cx', x.toFixed(1));
+      st.dot2.style.opacity = i === 1 && run && u < 3.6 ? '' : 0;
+      st.ch2val.forEach((tx, n) => { tx.style.opacity = n < 3 || !run || i !== 1 || u >= 3.4 ? '' : 0; }); }
+    // 段階3: 点が x から 3 つの f を通る
+    { const c = st.c3, P = 5, u = i === 2 && run ? U.mod(t, P) : P;
+      const pos = U.clamp((u - 0.5) / 0.9, 0, 3);
+      const j = Math.floor(pos), f = pos - j;
+      const x = j >= 3 ? c.stages[3] : U.lerp(c.stages[j], c.stages[j + 1], U.ease.inOut(f));
+      st.dot3.setAttribute('cx', x.toFixed(1));
+      st.dot3.setAttribute('cy', '296');
+      st.dot3.style.opacity = i === 2 && run && u < 3.6 ? '' : 0;
+      st.c3val.textContent = run && i === 2 ? String(Math.min(3, Math.floor(pos))) : '3'; }
+    // 段階4: 行が 1.1 秒ごとに現れる（9.5 秒で 1 周）
+    { const k = i === 3 && run ? Math.floor(U.mod(t, 9.5) / 1.1) : 9;
+      st.r5.forEach((r, j) => vis(r, j <= k)); }
+    // 段階5
+    { const k = i === 4 && run ? Math.floor(U.mod(t, 6) / 1.1) : 9;
+      st.r6.forEach((r, j) => vis(r, j <= k)); }
+  }
+
+  /* ================================================================
+     場面6 再帰と、計算できること
+     列は lam.mjs で確かめた（定数を展開し、どの順でもよい簡約で幅優先に探して、行から次の行へ着くか）:
+     Y G → W（1 歩）、W → G W（1 歩）、以後 3 + W 2、3 + (2 + W 1)、3 + (2 + (1 + W 0))、3 + (2 + (1 + 0))、6。
+     Θ G → G (Θ G) は 2 歩。JavaScript（Node.js 24.22.1）の Y(G) は RangeError: Maximum call stack size exceeded、
+     x(x) を v => x(x)(v) と包んだ版は 6。Haskell（GHC 9.6.7 の ghci）: sumTo 3 は 6、fix (\s n -> …) 3 は 6、
+     :t fix は fix :: (a -> a) -> a、(\x y -> x + y) 1 2 は 3
+     ================================================================ */
+  const S6H = [
+    ['sumTo = λn. if n == 0 then 0 else n + sumTo (n - 1)', 34, 0, '右辺の sumTo は、まだ項として無い'],
+    ['G     = λs. λn. if n == 0 then 0 else n + s (n - 1)', 60, 0, '自分に当たる関数を s で受け取る'],
+    ['Y     = λf. (λx. f (x x)) (λx. f (x x))', 86, 1, '不動点コンビネータ'],
+    ['W     = (λx. G (x x)) (λx. G (x x))', 112, 1, 'Y G を 1 歩簡約した項']
+  ];
+  const S6U = [['Y G', 'Y G', ''], ['W', 'W', 'Y を展開し f := G（β）'], ['G W', 'W', 'W の β：x := λx. G (x x)'], ['G (G W)', 'W', '中の W をもう 1 歩'], ['G (G (G W))', null, '…']];
+  const S6Q = [
+    ['Y G 3', 'Y G', ''], ['W 3', 'W', '→'], ['G W 3', 'G W', '→'], ['if 3 == 0 then 0 else 3 + W (3 - 1)', '3 == 0', '↠'],
+    ['3 + W 2', 'W', '↠'], ['3 + (2 + W 1)', 'W', '↠'], ['3 + (2 + (1 + W 0))', 'W', '↠'], ['3 + (2 + (1 + 0))', '1 + 0', '↠'], ['6', null, '↠']
+  ];
+  const S6C = [
+    ['38-closure.html', '第38章 高階関数とクロージャ', '関数を値にする。機械の上ではコードの番地と環境の組'],
+    ['39-immutable.html', '第39章 不変データ', '書き換えないデータを共有する。代償は割り当てとごみ集め'],
+    ['40-lazy.html', '第40章 遅延評価', 'いつ計算するかを、書き手から処理系へ移す'],
+    ['41-inference.html', '第41章 型推論と多相', '型は書かなくても決まり、多相な型が振る舞いを縛る'],
+    ['42-monad.html', '第42章 モナド', '言語から外した状態と順序を、型に現れる形で戻す'],
+    ['43-curry-howard.html', '第43章 カリー＝ハワード対応', '型は命題、プログラムは証明']
+  ];
+  const s6 = {
+    steps: [
+      { title: '名前が無いと自分を呼べない', text: 'λ計算の関数には名前が無い。`sumTo = λn. … sumTo (n - 1)` の右辺の sumTo は定義しようとしている物自身で、まだ項として無い。そこで、自分に当たる関数を引数 s で受け取る形 G に書き直す。欲しい sumTo は `G sumTo` と等しくなる項で、これを G の**不動点**と呼ぶ。' },
+      { title: '不動点コンビネータ Y', text: '`Y = λf. (λx. f (x x)) (λx. f (x x))`。`Y G` は 1 歩で W になり、W は 1 歩で `G W` になる。W は簡約のたびに G を 1 枚外へ出し、自分の写しを G に渡す。`Y G` と `G (Y G)` はどちらも `G W` に簡約されるので等しく、Y G が G の不動点になる。' },
+      { title: 'Y で sumTo を書く', text: 'W に 3 を渡すと、G が n == 0 を調べ、3 ＋ W 2 を作る。W は要るたびに G を出すので、n が 0 になるまで続いて 6 に着く。列の形は [[1|状態か、式か]] の sumTo 3 と同じ。引数を先に計算する JavaScript で Y を書くと、x(x) を先に呼び続けてスタックがあふれる。' },
+      { title: 'λ で計算できること', text: 'Church は 1936 年、実際に計算できる正の整数の関数を、λ で定義できる関数と定めることを提案した。Turing は 1937 年、λ で定義できる関数とチューリング機械で計算できる関数が一致することを示した。第6章の CPU が計算できることは、3 つの形と β簡約で書ける。' },
+      { title: 'Haskell の記法', text: 'Haskell は λx. M を `\\x -> M`、適用を `f x` と書く。`f x = …` の形の定義は名前を付けた λ で、本体で自分の名前を使える（再帰）。標準の `fix` は Y と同じ役をする関数。Y そのものは Haskell では型が付かない（[[41-inference.html#s2|第41章 場面2]]）。' },
+      { title: '章の答えと、第X部の道', text: '関数型が立つのは、状態の書き換えではなく、式の置き換えという計算のモデル。実際の関数型言語は、これに、関数を値として機械で扱う仕組み・変えないデータ・評価の時期・型・作用の扱いを足したもので、第38〜43章で 1 つずつ見る。機械は第6章の状態機械のままで、差はコンパイラとランタイムが埋める。' }
+    ],
+    setup(ctx) {
+      const svg = ctx.svg, st = ctx.state, mk = S.markers(svg);
+      /* 段階1〜3 の上: 定義 */
+      st.gH = S.g({ cls: 'fade' }, svg);
+      st.H = S6H.map(([s, y, at, note]) => {
+        const g = S.g({}, st.gH);
+        const T = term(g, 46, y, s, 't-md', 't-b');
+        S.text(470, y, note, { cls: 't-xs t-mid' }, g);
+        return { g, T, at };
+      });
+      st.H[0].T.mark(...find(S6H[0][0], 'sumTo', 1)).paint(...find(S6H[0][0], 'sumTo', 1), 't-b t-x');
+      [find(S6H[1][0], 'λs')[0] + 1, find(S6H[1][0], 's (n')[0]].forEach((a) => st.H[1].T.paint(a, a + 1, 't-b t-d'));
+      st.hLine = S.line(30, 128, 930, 128, { cls: 's-rule w1' }, st.gH);
+      const P = st.P = [0, 1, 2, 3, 4, 5].map(() => S.g({ cls: 'fade hide' }, svg));
+
+      /* 段階1: 不動点 */
+      term(P[0], 210, 200, 'sumTo = G sumTo', 't-xl', 't-b');
+      S.text(210, 230, 'G に渡しても変わらない項を、G の不動点と呼ぶ', { cls: 't-sm t-mid' }, P[0]);
+      const box = (g, x, y, w, s, cls, tcls) => { S.rect(x, y, w, 44, { rx: 8, cls }, g); S.text(x + w / 2, y + 28, s, { cls: 't-c t-mono t-b ' + (tcls || 't-lg') }, g); };
+      box(P[0], 150, 290, 120, 'sumTo', 'f-d-soft s-d w15', 't-lg t-d');
+      S.path('M276,312 H368', { cls: 'f-none s-mid w2', 'marker-end': mk('mid') }, P[0]);
+      S.circle(410, 312, 36, { cls: 'f-in s-fg w2' }, P[0]);
+      S.text(410, 320, 'G', { cls: 't-c t-xl t-mono t-b' }, P[0]);
+      S.path('M452,312 H544', { cls: 'f-none s-mid w2', 'marker-end': mk('mid') }, P[0]);
+      box(P[0], 550, 290, 120, 'sumTo', 'f-d-soft s-d w15', 't-lg t-d');
+      S.text(410, 376, '入れた物と、出てくる物が同じ', { cls: 't-c t-sm t-b t-d' }, P[0]);
+      S.text(46, 450, '＝ の左の名前は略記で、項の中で自分を指すことはできない。', { cls: 't-sm t-mid' }, P[0]);
+      S.text(46, 474, '名前を使わずに不動点を作る項が、次の段階の Y。', { cls: 't-sm t-mid' }, P[0]);
+
+      /* 段階2: Y G を開いていく */
+      st.U = S6U.map(([s, r, note], k) => {
+        const y = 178 + k * 52;
+        const o = redexRow(P[1], s, 80, y, r, 't-xl');
+        if (k) { S.text(60, y, '→', { cls: 't-c t-md t-mid' }, o.g); S.text(300, y, note, { cls: 't-xs t-mid' }, o.g); }
+        return o;
+      });
+      st.U.forEach((o, k) => { if (k >= 2) o.T.paint(0, 1, 't-b t-d'); if (k >= 3) o.T.paint(3, 4, 't-b t-d'); if (k >= 4) o.T.paint(6, 7, 't-b t-d'); });
+      S.text(560, 230, 'W は G を 1 枚ずつ外へ出す。', { cls: 't-sm' }, P[1]);
+      S.text(560, 252, '中の W は、G がそれを使うときだけ開く。', { cls: 't-sm' }, P[1]);
+      S.text(560, 316, 'Y G も G (Y G) も G W に簡約される', { cls: 't-sm t-b' }, P[1]);
+      S.text(560, 338, '→ 2 つは等しい。Y G は G の不動点', { cls: 't-sm t-b' }, P[1]);
+
+      /* 段階3: W 3 の列と、場面1 の列 */
+      st.Q = S6Q.map(([s, r, a], k) => {
+        const y = 160 + k * 36;
+        const o = redexRow(P[2], s, 80, y, r, 't-lg');
+        if (a) S.text(62, y, a, { cls: 't-c t-md t-mid' }, o.g);
+        return o;
+      });
+      st.Q[8].T.paint(0, 1, 't-b t-d');
+      S.text(520, 160 + 3 * 36, '場面1 の列', { cls: 't-xs t-dim' }, P[2]);
+      ['3 + sumTo 2', '3 + (2 + sumTo 1)', '3 + (2 + (1 + sumTo 0))', '3 + (2 + (1 + 0))', '6'].forEach((s, k) => term(st.Q[k + 4].g, 520, 160 + (k + 4) * 36, s, 't-md', 't-mid'));
+      S.rect(40, 486, 880, 62, { rx: 6, cls: 'f-in s-rule w1' }, P[2]);
+      S.text(52, 504, 'JavaScript（値呼び）で書いた Y。Node.js 24.22.1', { cls: 't-xs t-dim' }, P[2]);
+      S.text(52, 522, 'const Y = (f) => ((x) => f(x(x)))((x) => f(x(x)));   Y(G)', { cls: 't-sm t-mono pre' }, P[2]);
+      S.text(52, 540, 'RangeError: Maximum call stack size exceeded', { cls: 't-sm t-mono t-b t-x' }, P[2]);
+      S.text(908, 540, 'x(x) を先に呼び続け、G に届かない', { cls: 't-xs t-x t-end' }, P[2]);
+
+      /* 段階4: 計算できる関数 */
+      S.text(40, 40, '「計算できる関数」の 3 つの定義', { cls: 't-md t-b' }, P[3]);
+      [['λ で定義できる関数', 'Church（1932〜36 年）', '3 つの形と β簡約'], ['チューリング機械で計算できる関数', 'Turing（1936〜37 年）', 'テープと、状態の表'], ['一般再帰関数', 'Gödel・Herbrand・Kleene', '関数の組み立ての規則']].forEach(([a, b, c], k) => {
+        const x = 40 + k * 300;
+        S.rect(x, 60, 260, 96, { rx: 8, cls: k === 0 ? 'f-sf s-fg w2' : 'f-sf s-rule w1' }, P[3]);
+        S.text(x + 14, 86, a, { cls: 't-sm t-b' }, P[3]);
+        S.text(x + 14, 110, b, { cls: 't-xs t-mid' }, P[3]);
+        S.text(x + 14, 136, c, { cls: 't-xs t-dim' }, P[3]);
+        if (k) S.text(x - 20, 116, '＝', { cls: 't-c t-xl t-b t-x' }, P[3]);
+      });
+      S.text(480, 184, 'どれも同じ関数の集まりになる（λ と機械の一致を Turing が 1937 年に示した）', { cls: 't-c t-sm t-b' }, P[3]);
+      S.text(40, 232, 'Church の提案（1936 年）：「実際に計算できる」を「λ で定義できる」と同じ意味にする', { cls: 't-sm' }, P[3]);
+      S.rect(40, 282, 880, 70, { rx: 8, cls: 'f-in s-rule w1' }, P[3]);
+      S.text(60, 310, '第6章の YT-8、x86-64 の CPU', { cls: 't-sm t-b' }, P[3]);
+      S.text(60, 334, 'できる計算は、どれもこの集まりに入る。記憶は有限なので、その一部', { cls: 't-xs t-mid' }, P[3]);
+      S.text(480, 430, '計算できる範囲は、関数型の言語も命令型の言語も同じ。', { cls: 't-c t-md t-b' }, P[3]);
+      S.text(480, 456, '違うのは、計算を状態の書き換えで書くか、式の置き換えで書くか。', { cls: 't-c t-md t-b' }, P[3]);
+
+      /* 段階5: Haskell の記法 */
+      [['λ計算', 60], ['Haskell', 320], ['JavaScript', 580]].forEach(([s, x]) => S.text(x, 40, s, { cls: 't-xs t-dim' }, P[4]));
+      S.line(40, 48, 920, 48, { cls: 's-rule w1' }, P[4]);
+      [['λx. x + 1', '\\x -> x + 1', 'x => x + 1'], ['M N', 'f x', 'f(x)'], ['λx. λy. M', '\\x y -> M', 'x => y => M']].forEach(([a, b, c], k) => {
+        const y = 76 + k * 30;
+        term(P[4], 60, y, a, 't-lg', 't-b');
+        S.text(320, y, b, { cls: 't-lg t-mono t-b t-d pre' }, P[4]);
+        S.text(580, y, c, { cls: 't-md t-mono t-mid pre' }, P[4]);
+      });
+      S.rect(40, 168, 420, 76, { rx: 6, cls: 'f-in s-rule w1' }, P[4]);
+      S.text(52, 186, 'ファイルに書いた定義（場面1 の等式と同じ）', { cls: 't-xs t-dim' }, P[4]);
+      code(P[4], 52, 210, ['sumTo 0 = 0', 'sumTo n = n + sumTo (n - 1)'], 22, 't-mono t-md');
+      S.text(480, 210, '定義 f x = … は、名前を付けた λ。', { cls: 't-sm' }, P[4]);
+      S.text(480, 232, '本体の中で自分の名前を使える（再帰）', { cls: 't-sm' }, P[4]);
+      S.rect(40, 264, 880, 150, { rx: 6, cls: 'f-in s-rule w1' }, P[4]);
+      S.text(52, 282, 'GHC 9.6.7 の ghci（fix は Data.Function から import した）', { cls: 't-xs t-dim' }, P[4]);
+      code(P[4], 52, 306, ['ghci> sumTo 3', '6', 'ghci> fix (\\s n -> if n == 0 then 0 else n + s (n - 1)) 3', '6', 'ghci> :t fix', 'fix :: (a -> a) -> a'], 18.5, 't-mono t-md');
+      S.text(500, 343, '← s が sumTo 自身に当たる', { cls: 't-xs t-mid' }, P[4]);
+      S.text(52, 448, 'fix は関数を受け取り、その不動点を返す関数。Y を Haskell でそのまま書くと、型検査が x x を拒む。', { cls: 't-sm' }, P[4]);
+      xlink(P[4], 52, 476, '41-inference.html#s2', '第41章 場面2（型の付かない項）');
+
+      /* 段階6: 第X部の道 */
+      S.rect(40, 150, 270, 150, { rx: 10, cls: 'f-sf s-fg w2' }, P[5]);
+      S.text(60, 186, '第37章 ラムダ計算', { cls: 't-md t-b' }, P[5]);
+      S.text(60, 216, '計算 ＝ 式の置き換え', { cls: 't-lg t-b' }, P[5]);
+      S.text(60, 246, '状態の書き換えを、', { cls: 't-sm' }, P[5]);
+      S.text(60, 268, '計算のモデルから外す', { cls: 't-sm' }, P[5]);
+      S6C.forEach(([href, title, sub], k) => {
+        const y = 52 + k * 58;
+        S.path(`M312,225 C350,225 350,${y + 6} 372,${y + 6}`, { cls: 'f-none s-rule w15' }, P[5]);
+        S.rect(372, y - 16, 548, 46, { rx: 6, cls: 'f-sf s-rule w1' }, P[5]);
+        const a = S.el('a', { href, 'aria-label': title }, P[5]);
+        S.text(386, y + 2, title + ' ↗', { cls: 't-sm t-b' }, a);
+        S.text(386, y + 21, sub, { cls: 't-xs t-mid' }, P[5]);
+      });
+      S.rect(40, 412, 880, 92, { rx: 10, cls: 'f-in s-rule w1' }, P[5]);
+      S.text(60, 442, '機械は第6章の状態機械のまま', { cls: 't-md t-b' }, P[5]);
+      S.text(60, 468, '式の置き換えも、最後は CPU が命令で書き換えて実行する。クロージャ・ごみ集め・末尾呼び出しなど、', { cls: 't-sm' }, P[5]);
+      S.text(60, 490, '差を埋めるのはコンパイラとランタイム。', { cls: 't-sm' }, P[5]);
+      xlink(P[5], 900, 442, '06-cpu.html#s4', '第6章 場面4', true);
+    },
+    onStep(ctx, i) {
+      const st = ctx.state;
+      st.P.forEach((g, k) => S.fade(g, k === i));
+      S.fade(st.gH, i <= 2);
+      st.H.forEach((h, k) => { h.g.style.opacity = i < h.at ? 0 : (k === 0 && i >= 1 ? 0.45 : ''); });
+      pose6(st, i, playing() ? 0 : 99, playing());
+    },
+    frame(ctx) {
+      const st = ctx.state, run = playing(), i = ctx.step;
+      pose6(st, i, run ? ctx.ts : 99, run);
+    }
+  };
+  /* 場面6 の段階 i の時刻 t の姿 */
+  function pose6(st, i, t, run) {
+    const vis = (o, on) => { o.g.style.opacity = on ? '' : 0; };
+    { const k = i === 1 && run ? Math.floor(U.mod(t, 7.5) / 1.2) : 9;
+      st.U.forEach((o, j) => vis(o, j <= k)); }
+    { const k = i === 2 && run ? Math.floor(U.mod(t, 11) / 1.0) : 9;
+      st.Q.forEach((o, j) => vis(o, j <= k)); }
+  }
+
+  YT.chapter({
+    meta: {
+      eyebrow: '第X部 関数型 ／ 第37章',
+      title: 'ラムダ計算',
+      home: '../index.html',
+      prev: { href: '36-saba-js.html', title: 'JavaScript エンジン' },
+      next: { href: '38-closure.html', title: '高階関数とクロージャ', lead: '第37章のλ計算では、関数を引数に渡すのも、関数を返すのも、ふつうの式だった。' },
+      legend: [{ c: 'd', label: 'データ（値・項）' }, { c: 'x', label: '注目・変化（いま簡約する所・書き換わる所）' }]
+    },
+    scenes: { s1, s2, s3, s4, s5, s6 }
+  });
+})();
+</script>
+</body>
+</html>
