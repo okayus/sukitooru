@@ -35,7 +35,7 @@
   var RE_ID = /^[a-z][a-z0-9_]{0,15}$/;
   var RE_PART = /^[a-z][a-z0-9-]{0,23}$/;
   var RE_TO = /^(\d\d-[a-z0-9-]+\.html)#s(\d+)(?:\.(\d+))?$/;
-  var SITE_CH = 'https://okayus.github.io/youtube-ga-mieru-made/chapters/';
+  var SITE_CH = 'https://sukitooru.shiraoka.workers.dev/chapters/';
   var OPS = ['show', 'hide', 'x', 'bad', 'ok', 'set', 'point', 'send', 'down'];
   var RE_OP = new RegExp('^(' + OPS.join('|') + ')\\s*:\\s*(.*)$');
   var RE_OP_WIDE = new RegExp('^(' + OPS.join('|') + ')\\s*：');

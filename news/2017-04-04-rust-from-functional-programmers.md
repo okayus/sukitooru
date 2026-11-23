@@ -160,25 +160,25 @@ let b = Cons(0, Box::new(t));
 - 関数型とパラダイム: Backus [Can Programming Be Liberated from the von Neumann Style?](https://dl.acm.org/doi/10.1145/359576.359579)（1978）、Hughes [Why Functional Programming Matters](https://www.cs.kent.ac.uk/people/staff/dat/miranda/whyfp90.pdf)（1989）、Van Roy [Programming Paradigms for Dummies](https://webperso.info.ucl.ac.be/~pvr/VanRoyChapter.pdf)（2009）
 - 言語の成り立ち: Ritchie [The Development of the C Language](https://www.nokia.com/bell-labs/about/dennis-m-ritchie/chist.html)、Gordon [From LCF to HOL: a short history](https://www.cl.cam.ac.uk/archive/mjcg/papers/HolHistory.pdf)、Eich [Popularity](https://brendaneich.com/2008/04/popularity/)（2008-04-03）、[Go の FAQ](https://go.dev/doc/faq)
 
-[6-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/06-cpu.html#s2
-[10-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/10-browser.html#s5
-[26-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s2
-[26-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s5
-[26-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s6
-[27-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/27-algorithm.html#s1
-[27-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/27-algorithm.html#s3
-[27-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/27-algorithm.html#s6
-[28-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s1
-[28-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s2
-[28-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s3
-[28-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s4
-[28-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s5
-[28-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s6
-[29-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/29-imi.html#s2
-[29-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/29-imi.html#s4
-[30-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/30-gbemu-desktop.html#s1
-[30-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/30-gbemu-desktop.html#s5
-[31-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/31-saba-http.html#s1
-[32-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/32-saba-tokenizer.html#s1
-[33-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/33-saba-dom.html#s1
-[34-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/34-saba-css.html#s5
+[6-2]: https://sukitooru.shiraoka.workers.dev/chapters/06-cpu.html#s2
+[10-5]: https://sukitooru.shiraoka.workers.dev/chapters/10-browser.html#s5
+[26-2]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s2
+[26-5]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s5
+[26-6]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s6
+[27-1]: https://sukitooru.shiraoka.workers.dev/chapters/27-algorithm.html#s1
+[27-3]: https://sukitooru.shiraoka.workers.dev/chapters/27-algorithm.html#s3
+[27-6]: https://sukitooru.shiraoka.workers.dev/chapters/27-algorithm.html#s6
+[28-1]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s1
+[28-2]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s2
+[28-3]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s3
+[28-4]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s4
+[28-5]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s5
+[28-6]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s6
+[29-2]: https://sukitooru.shiraoka.workers.dev/chapters/29-imi.html#s2
+[29-4]: https://sukitooru.shiraoka.workers.dev/chapters/29-imi.html#s4
+[30-1]: https://sukitooru.shiraoka.workers.dev/chapters/30-gbemu-desktop.html#s1
+[30-5]: https://sukitooru.shiraoka.workers.dev/chapters/30-gbemu-desktop.html#s5
+[31-1]: https://sukitooru.shiraoka.workers.dev/chapters/31-saba-http.html#s1
+[32-1]: https://sukitooru.shiraoka.workers.dev/chapters/32-saba-tokenizer.html#s1
+[33-1]: https://sukitooru.shiraoka.workers.dev/chapters/33-saba-dom.html#s1
+[34-5]: https://sukitooru.shiraoka.workers.dev/chapters/34-saba-css.html#s5

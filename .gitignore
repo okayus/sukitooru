@@ -1,2 +1,6 @@
 # wrangler dev が作る
 .wrangler/
+
+# tools/build-news.mjs が news/*.md から作る。公開のときは Workers Builds が wrangler.jsonc の build で作る
+/news/*.html
+/news/news-data.js

@@ -3,6 +3,9 @@
   "name": "sukitooru",
   // 手元の wrangler dev（kokemusu の wrangler 4.125.0）が読める最新の日付。新しくするときは、手元の wrangler も新しくする。
   "compatibility_date": "2026-08-27",
+  // news/*.html と news/news-data.js はコミットしない（.gitignore）。wrangler deploy と wrangler dev が、配る前にこのコマンドで news/*.md から作る。
+  // Workers Builds のデプロイ（npx wrangler@4 deploy）もここを通る。ダッシュボードのビルドのコマンドは空のままにする。
+  "build": { "command": "node tools/build-news.mjs" },
   // Worker のコードは持たず、リポジトリの root を静的アセットとして配る。配る範囲は .assetsignore、ディレクトリの URL は _redirects。
   "assets": {
     "directory": ".",

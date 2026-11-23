@@ -109,9 +109,9 @@ down: conn -> 26-kata.html#s6: 解放した区画は、別の型の物に使い�
 - 出典どうしの食い違い: CVE-2026-123633 の深刻度は、nginx.org の一覧では medium（CVE-2026-123007 は major）で、F5 の CVE の記録の 9.2（Critical）と違う。謝辞も違い、nginx の変更の記録は CVE-2026-123633 を「Albert of Vexera AI」、CVE-2026-123007 を Xint.io に帰し、CVE の記録はそれぞれ 3 組と 4 組を挙げる。
 - 確かめていないこと: 攻撃のコードは公開されておらず、コードを実行できることは Wiz と F5 の説明だけによる。CVE-2026-123007 で数を負にするのに要る WINDOW_UPDATE の数と時間は調べていない。F5 の勧告のページ（K000163926・K000163928）は、中身をスクリプトで読み込むので機械的な取得では読めず、CVE の記録で代えた。
 
-[9-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s4
-[19-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/19-tcp.html#s4
-[21-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/21-http.html#s3
-[22-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/22-server.html#s3
-[26-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s1
-[26-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s6
+[9-4]: https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s4
+[19-4]: https://sukitooru.shiraoka.workers.dev/chapters/19-tcp.html#s4
+[21-3]: https://sukitooru.shiraoka.workers.dev/chapters/21-http.html#s3
+[22-3]: https://sukitooru.shiraoka.workers.dev/chapters/22-server.html#s3
+[26-1]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s1
+[26-6]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s6

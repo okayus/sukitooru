@@ -192,5 +192,5 @@ Go 1.26.5 は修正の前の版だが、OS の一覧からルートが外れて�
 - [The Register（2026-10-20）](https://www.theregister.com/security/2026/10/20/indian-certification-authority-emudhras-private-keys-compromised-one-of-them-was-the-number-4/5304312): 鍵の値
 - [BleepingComputer](https://www.bleepingcomputer.com/news/security/mozilla-google-apple-block-compromised-emudhra-ca-certificates/): 各社の対応
 
-[20-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/20-tls.html#s3
-[20-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/20-tls.html#s4
+[20-3]: https://sukitooru.shiraoka.workers.dev/chapters/20-tls.html#s3
+[20-4]: https://sukitooru.shiraoka.workers.dev/chapters/20-tls.html#s4

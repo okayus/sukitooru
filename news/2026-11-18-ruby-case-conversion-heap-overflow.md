@@ -109,8 +109,8 @@ x: to nxt buf
 - 出典どうしの食い違い: 勧告の投稿の日は 2026-11-18、履歴の欄は 2026-11-19 00:00:00 (UTC)。勧告は当たる版の下限を書かず（3.3.13 以前）、Veria Labs は 2.4.0 からと書く。
 - 確かめていないこと: Rails と Sinatra で、要求のどこからこの変換に届くか（Veria Labs は書いていない）。コードを実行できることは、勧告と Veria Labs の説明だけによる。GitHub の勧告と修正のコミット（ruby/ruby@d582f8f）は、この実行の環境からは開けなかった（403）。3.4.13 と 3.3.14 のソースと、ほかの 6 件は読んでいない。
 
-[10-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/10-browser.html#s2
-[22-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/22-server.html#s5
-[26-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s1
-[26-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s6
-[32-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/32-saba-tokenizer.html#s3
+[10-2]: https://sukitooru.shiraoka.workers.dev/chapters/10-browser.html#s2
+[22-5]: https://sukitooru.shiraoka.workers.dev/chapters/22-server.html#s5
+[26-1]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s1
+[26-6]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s6
+[32-3]: https://sukitooru.shiraoka.workers.dev/chapters/32-saba-tokenizer.html#s3

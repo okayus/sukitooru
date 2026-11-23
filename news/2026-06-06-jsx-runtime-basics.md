@@ -154,17 +154,17 @@ JSX は ECMAScript の提案ではないので、TC39 の段階は無い。段�
 - React: [Why did we build React?](https://legacy.reactjs.org/blog/2013/06/05/why-react.html)（2013-06-05）、[Introducing the New JSX Transform](https://legacy.reactjs.org/blog/2020/09/22/introducing-the-new-jsx-transform.html)（2020-09-22）、[React 19 Upgrade Guide](https://react.dev/blog/2024/04/25/react-19-upgrade-guide)（2024-04-25）、[createRoot](https://react.dev/reference/react-dom/client/createRoot)
 - ほかのランタイム: [hyperscript](https://github.com/hyperhype/hyperscript)、Vue.js の [Render Functions & JSX](https://vuejs.org/guide/extras/render-function.html)、[hono/jsx](https://hono.dev/docs/guides/jsx)、[jsx-slack](https://github.com/yhatt/jsx-slack)
 
-[10-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/10-browser.html#s2
-[10-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/10-browser.html#s3
-[10-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/10-browser.html#s5
-[22-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/22-server.html#s5
-[26-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s4
-[27-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/27-algorithm.html#s4
-[28-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s1
-[28-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s2
-[29-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/29-imi.html#s5
-[30-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/30-gbemu-desktop.html#s5
-[33-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/33-saba-dom.html#s6
-[36-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/36-saba-js.html#s2
-[36-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/36-saba-js.html#s3
-[36-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/36-saba-js.html#s5
+[10-2]: https://sukitooru.shiraoka.workers.dev/chapters/10-browser.html#s2
+[10-3]: https://sukitooru.shiraoka.workers.dev/chapters/10-browser.html#s3
+[10-5]: https://sukitooru.shiraoka.workers.dev/chapters/10-browser.html#s5
+[22-5]: https://sukitooru.shiraoka.workers.dev/chapters/22-server.html#s5
+[26-4]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s4
+[27-4]: https://sukitooru.shiraoka.workers.dev/chapters/27-algorithm.html#s4
+[28-1]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s1
+[28-2]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s2
+[29-5]: https://sukitooru.shiraoka.workers.dev/chapters/29-imi.html#s5
+[30-5]: https://sukitooru.shiraoka.workers.dev/chapters/30-gbemu-desktop.html#s5
+[33-6]: https://sukitooru.shiraoka.workers.dev/chapters/33-saba-dom.html#s6
+[36-2]: https://sukitooru.shiraoka.workers.dev/chapters/36-saba-js.html#s2
+[36-3]: https://sukitooru.shiraoka.workers.dev/chapters/36-saba-js.html#s3
+[36-5]: https://sukitooru.shiraoka.workers.dev/chapters/36-saba-js.html#s5

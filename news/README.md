@@ -1,6 +1,6 @@
 # ニュースから層へ
 
-tech ニュースを 1 件ずつ調べ、この教材のどの層（章・場面）の話かに結びつけるノート。サイトでは [ニュースの一覧](https://okayus.github.io/youtube-ga-mieru-made/news/index.html) で読める（目次の表紙から入れる）。
+tech ニュースを 1 件ずつ調べ、この教材のどの層（章・場面）の話かに結びつけるノート。サイトでは [ニュースの一覧](https://sukitooru.shiraoka.workers.dev/news/index.html) で読める（目次の表紙から入れる）。
 
 ## 一覧
 
@@ -23,11 +23,11 @@ tech ニュースを 1 件ずつ調べ、この教材のどの層（章・場面
 <!-- news-months:start -->
 | 月 | ノート | うち日刊 |
 |---|---|---|
-| [2026-11](https://okayus.github.io/youtube-ga-mieru-made/news/2026-11.html) | 9 件 | 9 件 |
-| [2026-10](https://okayus.github.io/youtube-ga-mieru-made/news/2026-10.html) | 4 件 | 0 件 |
-| [2026-09](https://okayus.github.io/youtube-ga-mieru-made/news/2026-09.html) | 1 件 | 0 件 |
-| [2026-06](https://okayus.github.io/youtube-ga-mieru-made/news/2026-06.html) | 1 件 | 0 件 |
-| [2017-04](https://okayus.github.io/youtube-ga-mieru-made/news/2017-04.html) | 1 件 | 0 件 |
+| [2026-11](https://sukitooru.shiraoka.workers.dev/news/2026-11.html) | 9 件 | 9 件 |
+| [2026-10](https://sukitooru.shiraoka.workers.dev/news/2026-10.html) | 4 件 | 0 件 |
+| [2026-09](https://sukitooru.shiraoka.workers.dev/news/2026-09.html) | 1 件 | 0 件 |
+| [2026-06](https://sukitooru.shiraoka.workers.dev/news/2026-06.html) | 1 件 | 0 件 |
+| [2017-04](https://sukitooru.shiraoka.workers.dev/news/2017-04.html) | 1 件 | 0 件 |
 <!-- news-months:end -->
 
 ## 書き方
@@ -56,7 +56,7 @@ tech ニュースを 1 件ずつ調べ、この教材のどの層（章・場面
   6. いつ使えるか（タブは「段階」）: 提案・仕様・実装・出荷・普及のどこにあるかを日付つきで書き、誰が何をすれば効くかを書く。
   7. 予想との差・追って確かめること・出典: 調べる前に書いた予想（層・前提・解決する問題）と、ノートとの差を残す。
 - 更新ではない記事（比較・感想・解説）も更新の型で書く。2 は「どの層の話か」にして、違いが働くのがビルド時か実行時かで分ける。予想に問いが含まれるときは、答える場面を 1 つ足し、「いつ使えるか」は「記事の後に変わったこと」として 7 に入れる。手本は [関数型プログラマからみた Rust](2017-04-04-rust-from-functional-programmers.md)。
-- 章へのリンクは公開版の場面を指す（`https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s3` は第9章 場面3）。ページを作るときに相対パスに直り、表紙と一覧の全 43 章の帯に印が付く。章のその場面の見出しには「この場面のニュース N ›」の札が出る。
+- 章へのリンクは公開版の場面を指す（`https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s3` は第9章 場面3）。ページを作るときに相対パスに直り、表紙と一覧の全 43 章の帯に印が付く。章のその場面の見出しには「この場面のニュース N ›」の札が出る。
 - 「層」のタブの場面の表（列は「層 | 起きること | 章と場面」の 3 つ）は、ページでは層の歩きになる。1画面版では表の行が段階になり、説明欄に行の文と章と場面、右の層の図に、いまの行の層（x の枠）と、前の行の層から伸びる線が出る。縦読み版では表を縦に並べ、図には全部の行の道筋を出す。
   - 行の 1 列目は、段階の題と行の一覧に出る。短く書く。太字の行は一覧でも太字になる。
   - 章と場面の欄のリンクと、図の ↓ の札は、章の場面を板に開く（章へ移らない）。リンクの直後に「の段階4」と書くと、板はその段階から開く。
@@ -73,7 +73,7 @@ tech ニュースを 1 件ずつ調べ、この教材のどの層（章・場面
 
 ## 動きの場面（台本）
 
-`##` の場面の中に台本（```` ```anim 部品 ```` のブロック）を書くと、その場面が動きの場面になる。1画面版では左に台本より前の文（リード）・段階の説明欄・台本より後の文（補足）、右に部品が描く図が出る。縦読み版は章の動く場面と同じ並び。ノートには JS を書かない。台本は登場する物と、段階ごとに出す・変える物だけを書き、手で書いた部品（`assets/parts/`）が描く。見本の台本は [部品の見本の「台本の部品」](https://okayus.github.io/youtube-ga-mieru-made/parts.html?set=anim) で動かせる。手本は [Linux の TCP のノート](2026-10-15-linux-ipv4-tcp-uaf.md) の場面「仕組み」（mem）と、[eMudhra のノート](2026-10-20-emudhra-ca-key-compromise.md) の場面「連鎖」（tree）・「経緯」（timeline）。
+`##` の場面の中に台本（```` ```anim 部品 ```` のブロック）を書くと、その場面が動きの場面になる。1画面版では左に台本より前の文（リード）・段階の説明欄・台本より後の文（補足）、右に部品が描く図が出る。縦読み版は章の動く場面と同じ並び。ノートには JS を書かない。台本は登場する物と、段階ごとに出す・変える物だけを書き、手で書いた部品（`assets/parts/`）が描く。見本の台本は [部品の見本の「台本の部品」](https://sukitooru.shiraoka.workers.dev/parts.html?set=anim) で動かせる。手本は [Linux の TCP のノート](2026-10-15-linux-ipv4-tcp-uaf.md) の場面「仕組み」（mem）と、[eMudhra のノート](2026-10-20-emudhra-ca-key-compromise.md) の場面「連鎖」（tree）・「経緯」（timeline）。
 
 | 部品 | 描くもの | 合うニュース | 登場する物（数の上限） |
 |---|---|---|---|

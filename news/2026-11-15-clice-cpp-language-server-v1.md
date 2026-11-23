@@ -65,8 +65,8 @@
 - clangd の保守の状況は作者の見方である。記事は LLVM の Discourse の呼びかけに触れるが、その投稿は開いていない。
 - 確かめていないこと: GitHub のリリースの一覧とリリースノートは、機械的な取得が拒まれて読めなかった。1.0 のタグの日付と、記事にある機能が 1.0 の版に入っていることは、記事からの孫引きである。clice を入れて動かしてはいない。
 
-[9-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s2
-[28-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s1
-[28-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s2
-[28-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s3
-[28-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s6
+[9-2]: https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s2
+[28-1]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s1
+[28-2]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s2
+[28-3]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s3
+[28-6]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s6

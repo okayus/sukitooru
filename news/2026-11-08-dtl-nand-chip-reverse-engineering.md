@@ -70,15 +70,15 @@
 - 記事はダイオードの電流を「カソード（p 型）からアノード（n 型）へ」と書く。通常の呼び方では p 型の側がアノード、n 型の側がカソードである（[2章 場面5][2-5]）。順方向の電流が p 型から n 型へ流れる点は同じ。
 - 確かめていないこと: データシート（Signetics Condensed Catalog 1969 など）は開いていない。2.5 mA とピンの番号は、記事からの孫引きである。
 
-[1-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/01-denshi.html#s3
-[2-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/02-handoutai.html#s2
-[2-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/02-handoutai.html#s3
-[2-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/02-handoutai.html#s4
-[2-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/02-handoutai.html#s5
-[3-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/03-transistor.html#s1
-[3-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/03-transistor.html#s3
-[3-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/03-transistor.html#s4
-[3-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/03-transistor.html#s6
-[4-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/04-ronri.html#s1
-[4-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/04-ronri.html#s2
-[4-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/04-ronri.html#s3
+[1-3]: https://sukitooru.shiraoka.workers.dev/chapters/01-denshi.html#s3
+[2-2]: https://sukitooru.shiraoka.workers.dev/chapters/02-handoutai.html#s2
+[2-3]: https://sukitooru.shiraoka.workers.dev/chapters/02-handoutai.html#s3
+[2-4]: https://sukitooru.shiraoka.workers.dev/chapters/02-handoutai.html#s4
+[2-5]: https://sukitooru.shiraoka.workers.dev/chapters/02-handoutai.html#s5
+[3-1]: https://sukitooru.shiraoka.workers.dev/chapters/03-transistor.html#s1
+[3-3]: https://sukitooru.shiraoka.workers.dev/chapters/03-transistor.html#s3
+[3-4]: https://sukitooru.shiraoka.workers.dev/chapters/03-transistor.html#s4
+[3-6]: https://sukitooru.shiraoka.workers.dev/chapters/03-transistor.html#s6
+[4-1]: https://sukitooru.shiraoka.workers.dev/chapters/04-ronri.html#s1
+[4-2]: https://sukitooru.shiraoka.workers.dev/chapters/04-ronri.html#s2
+[4-3]: https://sukitooru.shiraoka.workers.dev/chapters/04-ronri.html#s3

@@ -20,7 +20,7 @@
 
    読める Markdown は、ノートで使う分だけ: 見出し（# ## ###）、段落、箇条書き（入れ子は 1 段）、
    表、`コード`、**太字**、[リンク](URL) と [リンク][参照]・参照の定義、> 引用、``` で囲んだコード。
-   公開版の URL（https://okayus.github.io/youtube-ga-mieru-made/…）へのリンクは、ページから見た相対パスに直す。
+   公開版の URL（https://sukitooru.shiraoka.workers.dev/…）へのリンクは、ページから見た相対パスに直す。
 
    台本（```anim <部品> のブロック。docs/layers-plan.md §3 P6）: 台本のある ## の場面は動きの場面になる。左に台本より前の文（リード）・
    段階の説明欄・台本より後の文、右に部品（assets/parts/<部品>.js、詳しいノートだけは news/anim/<部品>.js も）が描く図。
@@ -36,8 +36,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const L = createRequire(import.meta.url)('../assets/layers.js');
 const AS = createRequire(import.meta.url)('../assets/anim-script.js');
 const NEWS = path.join(ROOT, 'news');
-const SITE = 'https://okayus.github.io/youtube-ga-mieru-made/';
-const REPO = 'https://github.com/okayus/youtube-ga-mieru-made/blob/main/news/';
+const SITE = 'https://sukitooru.shiraoka.workers.dev/';
+const REPO = 'https://github.com/okayus/sukitooru/blob/main/news/';
 const PER_SCENE = 6;   // 一覧の 1 場面に並べるノートの数（1画面版で収まる数）
 const PER_MONTHS = 24;   // 「月ごと」の 1 場面に並べる月の数（4 列 × 6 行）
 const PER_MISSING = 24;   // 「教材に無い」の 1 場面に並べる概念の数（3 列 × 8 行）

@@ -1,6 +1,7 @@
 name: 日刊のノートの検査とマージ
 
-# 毎朝の自動の実行（docs/daily-news.md）が出す claude/news-* のプルリクエストを検査し、通ればマージして公開する。
+# 毎朝の自動の実行（docs/daily-news.md）が出す claude/news-* のプルリクエストを検査し、通ればマージする。
+# 公開は、マージによる main への push で Workers Builds が行う（ページは wrangler.jsonc の build が news/*.md から作る）。
 #
 # pull_request_target で動かすので、このファイルも tools/ も main の版が使われる。
 # プルリクエストの側のファイルは実行しない（データとして読むだけ）。検査の中身は tools/news-pr-check.mjs の頭の説明。
@@ -64,12 +65,13 @@ jobs:
         run: node base/tools/news-pr-check.mjs work
 
       # ここから先は作業ツリーの tools/ を使う。上の検査が、プルリクエストが news/ の外を変えていないことを確かめている
-      - name: ページを作り直し、プルリクエストの中身と一致するか確かめる
+      # news/ の .html と news-data.js はコミットしない（.gitignore）。ここで作り、次の段で検証する。コミットした物で比べるのは README.md の表だけ
+      - name: ページを作り、README.md の表がプルリクエストの中身と一致するか確かめる
         working-directory: work
         run: |
           node tools/build-news.mjs
           if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
-            echo "::error::news/ のページか README.md が tools/build-news.mjs の出力と一致しない"
+            echo "::error::news/README.md の表が tools/build-news.mjs の出力と一致しない"
             git status --short
             git diff --stat
             exit 1
@@ -90,7 +92,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      pages: write
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -99,7 +100,3 @@ jobs:
     steps:
       - name: 検査した先頭のままならマージする
         run: gh pr merge "$PR" --repo "$REPO" --squash --delete-branch --match-head-commit "$HEAD_SHA"
-
-      # GITHUB_TOKEN による push は、ブランチから公開する GitHub Pages のビルドを起動しないことがある。明示して頼む
-      - name: GitHub Pages を作り直させる
-        run: gh api --method POST "repos/${REPO}/pages/builds"

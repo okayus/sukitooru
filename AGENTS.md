@@ -1,4 +1,4 @@
-# youtube-ga-mieru-made
+# sukitooru（透き通る）
 
 このリポジトリの決まりは [CLAUDE.md](CLAUDE.md) に書いてある。作業の前に読む。このファイルは、Codex のコードレビューに向けた決まりだけを持つ。
 

@@ -166,21 +166,21 @@ nodejs.org の配布物（mise などが入れるもの）は、次のライブ�
 - Brotli: [v1.2.1](https://github.com/google/brotli/releases/tag/v1.2.1)、[コミット 0ed4268](https://github.com/google/brotli/commit/0ed4268a4401abcb4472096340477cf4af7d1a2b)、[Chromium の README.chromium](https://github.com/chromium/chromium/blob/main/third_party/brotli/README.chromium)
 - 同梱: [c-ares 1.34.9](https://github.com/c-ares/c-ares/releases/tag/v1.34.9)、[undici の勧告](https://github.com/nodejs/undici/security/advisories)、[OpenSSL 3.5.9](https://github.com/openssl/openssl/releases/tag/openssl-3.5.9)、[eMudhra の公開サイト](https://emudhra.we-have-a-problem.com/)
 
-[6-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/06-cpu.html#s1
-[9-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s2
-[9-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s3
-[9-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s4
-[9-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s6
-[10-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/10-browser.html#s1
-[10-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/10-browser.html#s2
-[10-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/10-browser.html#s5
-[17-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/17-dns.html#s1
-[17-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/17-dns.html#s2
-[18-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/18-ip.html#s2
-[19-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/19-tcp.html#s1
-[19-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/19-tcp.html#s6
-[20-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/20-tls.html#s3
-[20-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/20-tls.html#s4
-[21-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/21-http.html#s1
-[21-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/21-http.html#s3
-[23-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/23-codec.html#s3
+[6-1]: https://sukitooru.shiraoka.workers.dev/chapters/06-cpu.html#s1
+[9-2]: https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s2
+[9-3]: https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s3
+[9-4]: https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s4
+[9-6]: https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s6
+[10-1]: https://sukitooru.shiraoka.workers.dev/chapters/10-browser.html#s1
+[10-2]: https://sukitooru.shiraoka.workers.dev/chapters/10-browser.html#s2
+[10-5]: https://sukitooru.shiraoka.workers.dev/chapters/10-browser.html#s5
+[17-1]: https://sukitooru.shiraoka.workers.dev/chapters/17-dns.html#s1
+[17-2]: https://sukitooru.shiraoka.workers.dev/chapters/17-dns.html#s2
+[18-2]: https://sukitooru.shiraoka.workers.dev/chapters/18-ip.html#s2
+[19-1]: https://sukitooru.shiraoka.workers.dev/chapters/19-tcp.html#s1
+[19-6]: https://sukitooru.shiraoka.workers.dev/chapters/19-tcp.html#s6
+[20-3]: https://sukitooru.shiraoka.workers.dev/chapters/20-tls.html#s3
+[20-4]: https://sukitooru.shiraoka.workers.dev/chapters/20-tls.html#s4
+[21-1]: https://sukitooru.shiraoka.workers.dev/chapters/21-http.html#s1
+[21-3]: https://sukitooru.shiraoka.workers.dev/chapters/21-http.html#s3
+[23-3]: https://sukitooru.shiraoka.workers.dev/chapters/23-codec.html#s3

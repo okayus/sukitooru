@@ -95,7 +95,7 @@ show: next
 - 確かめたこと: g++ 13.3.0（`-std=c++23`）と clang++ 18.1.3（`-std=c++2c`）で、`042` は 34 になった。`0o42` は、g++ が `operator""o42` が無いと、clang++ が `o42` は整数の正しくない接尾辞だと出して止まった。`break outer;` は、どちらも `break` の後に `;` が要るという誤りになった。
 - 確かめていないこと: P4451R2 など今回採った論文は、isocpp.org が機械的な取得を拒み（403）、読んでいない。印の細かい規則は、報告の引用の範囲でしか分からない。承認の投票の日付と、反対した国の名前は報告に無い。
 
-[28-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s1
-[28-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s2
-[28-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s3
-[29-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/29-imi.html#s3
+[28-1]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s1
+[28-2]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s2
+[28-3]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s3
+[29-3]: https://sukitooru.shiraoka.workers.dev/chapters/29-imi.html#s3

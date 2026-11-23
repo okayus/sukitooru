@@ -65,11 +65,11 @@ AT Protocol（ATProto。Bluesky などが使う）について、プログラマ
 - 確かめていないこと: ハンドルの移り変わりとフォロワーの数（記事の問い合わせの結果）、Spaces の提案、リレーと AppView の動き。255 バイトと 253 字の差は、このノートでの計算である。
 - 出典どうしの差: XRPC の仕様は、無い API を 404 で示せると書く。Bluesky の PDS は 401 を返した（記事と、このノートの問い合わせ）。
 
-[17-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/17-dns.html#s1
-[17-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/17-dns.html#s4
-[20-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/20-tls.html#s4
-[21-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/21-http.html#s1
-[21-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/21-http.html#s2
-[26-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s1
-[27-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/27-algorithm.html#s3
-[29-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/29-imi.html#s5
+[17-1]: https://sukitooru.shiraoka.workers.dev/chapters/17-dns.html#s1
+[17-4]: https://sukitooru.shiraoka.workers.dev/chapters/17-dns.html#s4
+[20-4]: https://sukitooru.shiraoka.workers.dev/chapters/20-tls.html#s4
+[21-1]: https://sukitooru.shiraoka.workers.dev/chapters/21-http.html#s1
+[21-2]: https://sukitooru.shiraoka.workers.dev/chapters/21-http.html#s2
+[26-1]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s1
+[27-3]: https://sukitooru.shiraoka.workers.dev/chapters/27-algorithm.html#s3
+[29-5]: https://sukitooru.shiraoka.workers.dev/chapters/29-imi.html#s5

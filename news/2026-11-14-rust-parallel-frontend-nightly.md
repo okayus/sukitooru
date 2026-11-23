@@ -64,8 +64,8 @@
 - 記事は、並列のフロントエンドで後半（LLVM）も速くなることがあると書き、理由は 2023 年の記事（[Faster compilation with the parallel front-end in nightly](https://blog.rust-lang.org/2023/11/09/parallel-rustc/)）に譲る。その記事は開いていない。
 - 確かめていないこと: 記事は既定を変えたプルリクエストを示しておらず、変更の中身は読んでいない。GitHub のページはこの環境から取得できなかった。nightly を入れて動かしてはいない。依存の木全体の改善は、36.7 秒と 30.8 秒から計算すると約 16 % で、記事の「約 15 %」と少しずれる。
 
-[9-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s2
-[9-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s5
-[28-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s2
-[28-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s3
-[28-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s6
+[9-2]: https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s2
+[9-5]: https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s5
+[28-2]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s2
+[28-3]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s3
+[28-6]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s6

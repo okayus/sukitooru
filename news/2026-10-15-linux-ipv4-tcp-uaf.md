@@ -205,15 +205,15 @@ SYN が落ちることを確かめただけで、欠陥を防げることは確�
 - [Go の告知（oss-security への転送、10-29）](https://www.openwall.com/lists/oss-security/2026/10/30/1): MPTCP の既定と切り方。
 - [Go の issue 82717](https://go.dev/issue/82717): IP オプションを落とす案と、既定を変えるかの議論。
 
-[6-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/06-cpu.html#s1
-[9-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s1
-[9-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s5
-[9-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/09-os.html#s6
-[14-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/14-router.html#s5
-[18-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/18-ip.html#s1
-[19-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/19-tcp.html#s1
-[19-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/19-tcp.html#s2
-[19-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/19-tcp.html#s3
-[19-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/19-tcp.html#s6
-[26-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s6
-[27-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/27-algorithm.html#s3
+[6-1]: https://sukitooru.shiraoka.workers.dev/chapters/06-cpu.html#s1
+[9-1]: https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s1
+[9-5]: https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s5
+[9-6]: https://sukitooru.shiraoka.workers.dev/chapters/09-os.html#s6
+[14-5]: https://sukitooru.shiraoka.workers.dev/chapters/14-router.html#s5
+[18-1]: https://sukitooru.shiraoka.workers.dev/chapters/18-ip.html#s1
+[19-1]: https://sukitooru.shiraoka.workers.dev/chapters/19-tcp.html#s1
+[19-2]: https://sukitooru.shiraoka.workers.dev/chapters/19-tcp.html#s2
+[19-3]: https://sukitooru.shiraoka.workers.dev/chapters/19-tcp.html#s3
+[19-6]: https://sukitooru.shiraoka.workers.dev/chapters/19-tcp.html#s6
+[26-6]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s6
+[27-3]: https://sukitooru.shiraoka.workers.dev/chapters/27-algorithm.html#s3

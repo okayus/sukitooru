@@ -5,9 +5,11 @@
 
 ## 開き方
 
-公開版は https://okayus.github.io/youtube-ga-mieru-made/ （GitHub Pages）。手元では次のように配信する。
+公開版は https://sukitooru.shiraoka.workers.dev/ （Cloudflare Workers の静的アセット。main に push すると Workers Builds が配り直す）。
+手元では次のように配信する。ニュースのページ（`news/*.html`・`news/news-data.js`）はコミットしていないので、先に作る。
 
 ```bash
+node tools/build-news.mjs # news/*.md からニュースのページを作る
 tools/serve.sh            # http://127.0.0.1:8766/ で配信
 # ブラウザで http://127.0.0.1:8766/index.html を開く
 tools/serve.sh stop
@@ -35,7 +37,7 @@ tools/verify.mjs      ヘッドレス Chrome で JS エラー・はみ出し・�
 tools/shot.mjs        場面・段階・時刻を指定して写真を撮る（動く札の止まる位置の確認）
 tools/build-glossary.mjs  用語索引のデータを作り直す（章の用語表を直したら走らせる）
 tools/build-parts.mjs  部品の見本の「使う所」を章の印から作り直す（部品の印を足したら走らせる）
-news/                 ニュースから層へ。tech ニュースを章・場面に結びつけたノート（*.md が元、*.html と index.html は作ったもの）。
+news/                 ニュースから層へ。tech ニュースを章・場面に結びつけたノート（*.md が元。*.html と news-data.js は build-news.mjs が作り、コミットしない）。
                       ノートの台本（```anim）は動きの場面になる（書き方は news/README.md）
 tools/build-news.mjs  news/*.md からページと一覧を作る（ノートを足したり直したりしたら走らせる）
 tools/lencheck.mjs    本文の字数の目安（段階 160・リード 110・補足 140）を超える所を出す

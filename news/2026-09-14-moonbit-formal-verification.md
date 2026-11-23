@@ -159,20 +159,20 @@ MoonBit は、IDEA（International Digital Economy Academy、深圳）が開発�
 - MoonBit: [Formal Verification](https://docs.moonbitlang.com/en/latest/language/verification.html)（公式文書）、[MoonBit 0.9: Introducing First-Class Formal Verification](https://www.moonbitlang.com/blog/moonbit-0-9-release)（2026-04-08）、[更新の記録](https://www.moonbitlang.com/updates/)（v0.9、v0.10.9、v0.10.19）、[文書の表紙](https://docs.moonbitlang.com/en/latest/)（バックエンド）
 - 道具: [Why3](https://www.why3.org/)（演繹的検証の基盤。Inria の Toccata チーム）、[Z3](https://github.com/Z3Prover/z3)（Microsoft Research）、[cvc5](https://cvc5.github.io/)、[SMT-LIB の FloatingPoint の理論](https://smt-lib.org/theories-FloatingPoint.shtml)
 
-[4-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/04-ronri.html#s3
-[4-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/04-ronri.html#s4
-[4-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/04-ronri.html#s6
-[10-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/10-browser.html#s5
-[26-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s1
-[26-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s3
-[26-4]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s4
-[26-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s5
-[26-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/26-kata.html#s6
-[27-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/27-algorithm.html#s1
-[27-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/27-algorithm.html#s6
-[28-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s2
-[28-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s3
-[28-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/28-compiler.html#s6
-[29-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/29-imi.html#s2
-[29-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/29-imi.html#s3
-[29-6]: https://okayus.github.io/youtube-ga-mieru-made/chapters/29-imi.html#s6
+[4-3]: https://sukitooru.shiraoka.workers.dev/chapters/04-ronri.html#s3
+[4-4]: https://sukitooru.shiraoka.workers.dev/chapters/04-ronri.html#s4
+[4-6]: https://sukitooru.shiraoka.workers.dev/chapters/04-ronri.html#s6
+[10-5]: https://sukitooru.shiraoka.workers.dev/chapters/10-browser.html#s5
+[26-1]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s1
+[26-3]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s3
+[26-4]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s4
+[26-5]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s5
+[26-6]: https://sukitooru.shiraoka.workers.dev/chapters/26-kata.html#s6
+[27-1]: https://sukitooru.shiraoka.workers.dev/chapters/27-algorithm.html#s1
+[27-6]: https://sukitooru.shiraoka.workers.dev/chapters/27-algorithm.html#s6
+[28-2]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s2
+[28-3]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s3
+[28-6]: https://sukitooru.shiraoka.workers.dev/chapters/28-compiler.html#s6
+[29-2]: https://sukitooru.shiraoka.workers.dev/chapters/29-imi.html#s2
+[29-3]: https://sukitooru.shiraoka.workers.dev/chapters/29-imi.html#s3
+[29-6]: https://sukitooru.shiraoka.workers.dev/chapters/29-imi.html#s6

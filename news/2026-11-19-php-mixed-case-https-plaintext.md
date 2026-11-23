@@ -100,9 +100,9 @@ down: m5 -> 21-http.html#s2: 307 の転送は、状態コードの 3xx が示す
 - 出典どうしの食い違い: 勧告の直った版は 8.2.36・8.3.37・8.4.28・8.5.13 で、8.6.0 は無い。変更の記録は 8.6.0 にも同じ項目を載せる。
 - 確かめていないこと: 転送（307・308）と FTP は試しておらず、勧告と 8.5.12 のソースを読んだだけ。8.2〜8.4 の修正版と 8.6.0 のソースは読んでいない。当たり始めた版（5.2.0・4.3.0）は勧告の値で、確かめていない。
 
-[19-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/19-tcp.html#s1
-[20-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/20-tls.html#s1
-[21-1]: https://okayus.github.io/youtube-ga-mieru-made/chapters/21-http.html#s1
-[21-2]: https://okayus.github.io/youtube-ga-mieru-made/chapters/21-http.html#s2
-[31-3]: https://okayus.github.io/youtube-ga-mieru-made/chapters/31-saba-http.html#s3
-[31-5]: https://okayus.github.io/youtube-ga-mieru-made/chapters/31-saba-http.html#s5
+[19-1]: https://sukitooru.shiraoka.workers.dev/chapters/19-tcp.html#s1
+[20-1]: https://sukitooru.shiraoka.workers.dev/chapters/20-tls.html#s1
+[21-1]: https://sukitooru.shiraoka.workers.dev/chapters/21-http.html#s1
+[21-2]: https://sukitooru.shiraoka.workers.dev/chapters/21-http.html#s2
+[31-3]: https://sukitooru.shiraoka.workers.dev/chapters/31-saba-http.html#s3
+[31-5]: https://sukitooru.shiraoka.workers.dev/chapters/31-saba-http.html#s5

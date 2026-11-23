@@ -16,7 +16,7 @@
      ・変わるのは news/ の直下のふつうのファイルだけ。消すファイルが無い
      ・足す .md はちょうど 1 つで、日刊のノート（名前の形、<!-- kind: daily --> の印）
      ・既にあるノートの .md を変えていない（変えてよい .md は、一覧の表を持つ news/README.md だけ）
-     ・ほかに変わるのは news/ の .html と news/news-data.js だけ（tools/build-news.mjs が作るファイル）
+     ・ほかのファイルは変えない。tools/build-news.mjs が作る news/ の .html と news-data.js もコミットしない（.gitignore。公開のときに作る）
      ・ノートの中身: 大きさ、題と「要点」と場面の数、日付が未来でない、
        リンクが https:// か http:// だけ、章の場面へのリンクが 2 つ以上の場面にある、
        <!-- tags: … --> の id が層の登録簿（この検査と同じ側の assets/layers.js）にある、
@@ -24,7 +24,7 @@
        「層」の場面の表が「層 | 起きること | 章と場面」の 3 列で 2〜6 行（ページでは行が層の歩きの段階になる）、
        台本（```anim。任意）は 1 つまでで、部品が seq・mem・stack・boxes・tree・timeline のどれか、形・段階 2〜6・本文 160 字・
        down: の行き先が正しく段階の番号を書いていない（assets/anim-script.js の checkNote。tools/build-news.mjs と同じ検査に、日刊だけの決まりを足す）
-   .html・news-data.js・README.md が build-news.mjs の出力と一致するか、ページが 1 画面に収まるかは、
+   README.md の表が build-news.mjs の出力と一致するか、作ったページが 1 画面に収まるかは、
    ワークフローがこの後に build-news.mjs と verify.mjs を走らせて確かめる。
 
    通ったら、環境変数 GITHUB_OUTPUT のファイルに note（ノートのページ）と month（月のページ）を書く。
@@ -42,7 +42,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');  
 const MAX_BYTES = 16000;
 const MAX_MISSING = 8, MAX_MISSING_LEN = 40;
 const MAX_LAYER_ROWS = 6;   // 「層」の場面の表の行（news/README.md の日刊の型）
-const SITE = 'https://okayus.github.io/youtube-ga-mieru-made/';
+const SITE = 'https://sukitooru.shiraoka.workers.dev/';
 const work = process.argv[2];
 if (!work || !fs.existsSync(path.join(work, '.git'))) { console.error('usage: node tools/news-pr-check.mjs <作業ツリー>'); process.exit(2); }
 
@@ -65,7 +65,8 @@ for (const { status, file } of diff) {
     if (status === 'A' && RE_NOTE.test(file)) added.push(file);
     else if (status === 'A') bad(`ノートの名前の形（YYYY-MM-DD-題.md。題は英小文字・数字・ハイフン）でない: ${file}`);
     else if (file !== 'news/README.md') bad(`既にあるノートを変えている: ${file}`);
-  } else if (!/^news\/[0-9a-z-]+\.html$/.test(file) && file !== 'news/news-data.js') bad(`ノートでもページでもないファイル: ${file}`);
+  } else if (/^news\/[0-9a-z-]+\.html$/.test(file) || file === 'news/news-data.js') bad(`tools/build-news.mjs が作るファイルをコミットしている（.gitignore にある。公開のときに作る）: ${file}`);
+  else bad(`ノートでないファイル: ${file}`);
 }
 if (added.length !== 1) bad(`足すノートは 1 つだけ（今は ${added.length} つ: ${added.join('、') || 'なし'}）`);
 
