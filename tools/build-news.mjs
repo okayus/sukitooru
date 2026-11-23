@@ -538,7 +538,7 @@ function page({ title, description, body, meta, graph, walk, anims = [] }) {
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:type" content="article">
 <meta property="og:locale" content="ja_JP">
-<meta property="og:site_name" content="YouTubeが見えるまで">
+<meta property="og:site_name" content="透き通る">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
@@ -834,8 +834,8 @@ function indexPage(notes, ms) {
 
 ${all.map((s) => s.html).join('\n\n')}`;
   return page({
-    title: 'ニュースから層へ — YouTubeが見えるまで',
-    description: 'tech ニュースを 1 件ずつ調べ、教材「YouTubeが見えるまで」のどの層（章・場面）の話かに結びつけたノートの一覧。',
+    title: 'ニュースから層へ — 透き通る',
+    description: 'tech ニュースを 1 件ずつ調べ、教材「透き通る」のどの層（章・場面）の話かに結びつけたノートの一覧。',
     body,
     meta: { eyebrow: 'ニュースから層へ', title: 'ニュースの一覧', home: '../index.html', actions: [{ href: '../index.html', label: '教材の目次' }] },
     graph: { k: 1, opts: { period: true } }
@@ -870,7 +870,7 @@ function monthPage(x, older, newer) {
 ${scenes.map((s) => s.html).join('\n\n')}`;
   return page({
     title: `${label}のニュース — ニュースから層へ`,
-    description: `${label}に出た tech ニュースを、教材「YouTubeが見えるまで」のどの層（章・場面）の話かに結びつけたノート ${x.notes.length} 件の一覧。`,
+    description: `${label}に出た tech ニュースを、教材「透き通る」のどの層（章・場面）の話かに結びつけたノート ${x.notes.length} 件の一覧。`,
     body,
     meta: { eyebrow: `ニュースから層へ ／ ${x.m}`, title: `${label}のニュース`, home: 'index.html', actions: [{ href: 'index.html', label: 'ニュースの一覧' }] },
     graph: { k: 1, opts: { month: x.m } }
