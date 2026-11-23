@@ -859,7 +859,7 @@
     steps: [
       { title: 'RuntimeValue — 値に型の札を付ける', text: '評価の結果は `RuntimeValue` で、`Number(u64)`・`StringLiteral(String)`・`HtmlElement { object, property }` の 3 種。値が自分の種類を持ち歩く**動的な型**（[[26-kata.html#s4.2|第26章 場面4]]）で、V8 が Smi の印と Map で持つものを、enum の札で持つ。' },
       { title: 'Environment — 名前と値の対の列と outer', text: '`Environment` は名前と値の対の `Vec` と `outer` を持つ。`get_variable` は列を先頭から比べ（線形探索。[[27-algorithm.html#s2.1|第27章 場面2]]）、無ければ `outer` をたどる。`add_variable` は push、`update_variable` は消して積み直す。' },
-      { title: 'eval — 木を歩く評価器', text: '`JsRuntime` は `dom_root`・`env`・`functions` を持つ。`execute` は文を順に `eval` し、`eval` は `match node.borrow()` で腕に分かれ、子を再帰で評価する。`borrow()` は `core::borrow::Borrow` で `&Node` を取り出す。' },
+      { title: 'eval — 木を歩く評価器', text: '`JsRuntime` は `dom_root`・`env`・`functions` を持つ。`execute` は文を順に `eval` し、`eval` は `match node.borrow()` で腕に分かれ、子を再帰で評価する（式の簡約として見るなら[[37-lambda.html#s3|第37章 場面3]]）。`borrow()` は `&Node` を取り出す。' },
       { title: '未定義の名前は、その名前の文字列になる', text: '`Identifier` の腕は `get_variable` で引き、無ければ `StringLiteral(name)` を返す。`document`・`getElementById`・`add`、仮引数の `a`・`b` はこの規則で名前の文字列として渡る。`var` は `add_variable`、`=` は `update_variable`。' },
       { title: 'impl Add — 数どうしなら和、違えば連結', text: '`+` は `impl Add for RuntimeValue`。両方 `Number` なら `Number(left + right)`、そうでなければ `to_string()`（`Display`）して連結し `StringLiteral`。`-` は数どうし以外を `Number(u64::MIN)` ＝ 0 にする（コメントは NaN）。' }
     ],
@@ -1136,7 +1136,7 @@
       { title: 'ブラウザ API を先に、次に functions を名前で', text: '`call_browser_api` が名前を見て、`"document.getElementById"` なら DOM の API を呼ぶ（[[5|DOM に触る]]）。違えば `functions` を先頭から比べ、`id` が `"add"` の `Function` を clone して取る。無ければ `panic!`。' },
       { title: '引数を新しい環境に結ぶ', text: '`assert!` で引数と仮引数の数（2 と 2）を確かめる。`params[0]` の `Identifier("a")` は評価すると `StringLiteral("a")` なので、名前 `"a"` と `Number(1)` を `add_variable`。`b` も同じく `Number(2)`。環境は `{ a: 1, b: 2 }`。' },
       { title: '本体を評価し、戻り値を返す', text: '`function.body`（`BlockStatement`）を新しい環境で評価する。`BlockStatement` は文を順に評価し**最後の文の値**を返す。`ReturnStatement` は `argument` の値。`a + b` ＝ `Number(3)`。`return` の後に文があっても評価は続く、と読める。' },
-      { title: 'スコープ — ECMAScript との違い', text: '新しい環境の `outer` は呼び出した側の環境なので、関数の中で見つからない名前は**呼び出し元**の変数に届く（動的スコープ、と読める）。ECMAScript の関数は定義した場所の環境を持つ（字句的スコープ）。test.html では差は出ない。関数は env ではなく `functions` にあり、変数とは別の表。' }
+      { title: 'スコープ — ECMAScript との違い', text: '新しい環境の `outer` は呼び出した側の環境なので、関数の中で見つからない名前は**呼び出し元**の変数に届く（動的スコープと読める）。ECMAScript の関数は定義した場所の環境を持つ（字句的スコープ。[[38-closure.html#s2.6|第38章 場面2]]）。test.html では差は出ない。関数は変数とは別の表 `functions` にある。' }
     ],
     setup(ctx) {
       const svg = ctx.svg, st = ctx.state;

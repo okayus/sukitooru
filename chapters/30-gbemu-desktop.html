@@ -735,7 +735,7 @@
   const s3 = {
     steps: [
       { title: 'イベントを取り出す：poll_iter と match', text: '`poll_iter()` は溜まった OS のイベントを順に返す反復子で、無ければすぐ終わる。`match event` で種類ごとに腕を分ける。`Event::KeyDown { keycode: Some(k), .. }` は「キーが押され、番号が分かる」場合だけに合い、`k` に番号が入る。`..` は残りの欄を見ない印。' },
-      { title: 'key2joy：キーを Option<Button> に写す', text: '`key2joy` は `match` で W → `Some(Button::Up)`、1 → `Some(Button::A)` と写し、どれでもなければ `None`。型 `Option<Button>` が「無いことがある」と宣言する。呼ぶ側の `.map(|j| …)` は `Some` のときだけ閉包を動かし、`None` なら何もしない。' },
+      { title: 'key2joy：キーを Option<Button> に写す', text: '`key2joy` は `match` で W → `Some(Button::Up)`、1 → `Some(Button::A)` と写し、ほかは `None`。型 `Option<Button>` が「無いことがある」と示す。`.map(|j| …)` は `Some` なら閉包を呼び、`None` なら何もしない（つなぎ方は[[42-monad.html#s2|第42章 場面2]]）。' },
       { title: 'button_down：ビットを 0 に倒し、割り込みを要求する', text: '入力は負論理で、0 が「押されている」。`Button::Up` の `as_direction()` は 0b0100。`direction &= !0b0100` で 0xFF → **0xFB**。同時に `interrupts.irq(JOYPAD)` が IF（$FF0F）のビット 4 を立てる。[[07-shuuhen.html#s3|第7章 場面3]]の割り込み線の代わり。' },
       { title: 'ゲームが P1（$FF00）を読む', text: 'ゲームはビット 5・4 に 0 を書いて読む組を選ぶ。十字キーなら 0x20 を書き（`mode` ＝ 0x20）、読むと `0xCF | 0x20` ＝ 0xEF、ビット 4 が 0 なので `& direction` ＝ 0xEF & 0xFB ＝ **0xEB**。ビット 2 が 0 なので、ゲームは「上」と知る。' },
       { title: '離す・Escape・Enter', text: '`KeyUp` では `button_up` が `|=` でビットを 1 に戻す。同じ腕で `Enter`（`Keycode::Return`）ならセーブ（[[6|セーブとケーブル]]）。`KeyDown` の `Escape` は `break \'running` でループを抜ける。押す・離すが別のイベントなので、押している間はビットが 0 のまま。' },
@@ -1146,7 +1146,7 @@
   const s5 = {
     steps: [
       { title: 'キューを開く：48,000 Hz・2 ch・f32', text: '`AudioSpecDesired` は希望の形。`freq` 48,000、`channels` 2、`samples` は装置側のバッファで 512 × 2 ＝ 1,024 組（左右をまとめた組の数）。`AudioQueue<f32>` の `f32` が 1 サンプルの型。`resume()` で装置が鳴り始め、空なら無音を出す。' },
-      { title: '閉包を作り、Box に入れ、Rc で渡す', text: '`move |buffer| { … }` は `audio_queue` を中に**移した**閉包。`Box::new` でヒープに置くと `Box<dyn Fn(&[f32])>`（&[f32] を受け取る関数の箱）。`Audio(…)` は 1 欄の構造体で `audio.0` が中身。`Rc::new` で共有の `Rc` にして渡す。' },
+      { title: '閉包を作り、Box に入れ、Rc で渡す', text: '`move |buffer| { … }` は `audio_queue` を中に**移した**閉包。`Box::new` でヒープに置くと `Box<dyn Fn(&[f32])>`（関数の箱）。`Audio(…)` は 1 欄の構造体で `audio.0` が中身。`Rc::new` で共有の `Rc` にして渡す（中身は[[38-closure.html#s2.4|第38章 場面2]]）。' },
       { title: '本体が呼ぶとき：512 組で 1 回', text: 'APU は 87 T サイクル（4,194,304 ÷ 48,000 の整数除算）ごとに左右 1 組を `samples` に書き、512 組で `callback` を呼ぶ。`as_ref().map(|f| f(…))` は閉包があるときだけ呼ぶ書き方。1 回 ＝ 1,024 個の f32 ＝ 4,096 バイト。' },
       { title: '背圧：8,192 バイトを超えたら 1 ms 寝る', text: '`queue_audio` は中身を写してキューに足すだけで待たない。そこで閉包は、積む前に `size()`（未再生のバイト数）が 8,192 を超えている間 `sleep(1 ms)` する。8,192 バイトは 1,024 組 ＝ 21.3 ms ぶん。寝ている間は `run` も止まるので、本体全体が音の消費に合わせて進む。' },
       { title: '速さの主導権は音の装置へ（計算上）', text: '本体はサンプルを 87 T サイクルごとに作る。式どおりに数えると 1 秒に 48,640 組で、装置が使う 48,000 組より 1.3% 多い。キューは 1〜2 秒で 8,192 バイトに届き、以後は寝る時間が差を埋める。本体は実機の約 98.7% の速さで進み、音は 1.3% 低い（式から求めた推定）。' },
