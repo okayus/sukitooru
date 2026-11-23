@@ -36,7 +36,7 @@
 | 2 | タグの決め方 | 語彙から選ぶ。語彙に無い語は候補として出し、持ち主が足す | P3 |
 | 3 | kokemusu に積む石 | 内容のタグと、出所の石「透き通る」。前提のタグは積まない | P4 |
 | 4 | クイズが無い前提タグの扱い | 章の場面へのリンク（今もある）と、クイズ待ちの一覧。クイズは持ち主が mazuoboeru-quizzes で作る | P4 |
-| 5 | 古い URL（`okayus.github.io/youtube-ga-mieru-made/`）を転送するか | 外からのリンクが惜しければ転送する。決めるのは切り替えの前 | P1 の切り替え |
+| 5 | 古い URL（`okayus.github.io/youtube-ga-mieru-made/`）を転送するか | 決まった（2026-11-23）: 転送しない。持ち主はリポジトリの外に古い URL を書いていない | P1 の切り替え（済み） |
 
 4 は、依頼文が「クイズがあれば、そのリンクを乗せるか、youtube-ga-mieru-made 」で切れていたので、続きを聞いていない。
 
@@ -140,10 +140,10 @@ kokemusu の側で決めること（grill-with-docs）:
 
 ## 8. 確かめていないこと
 
-| 点 | 確かめる段 | 結果（2026-11-22。詳細は [log/2026-11-22-p1.md](../log/2026-11-22-p1.md)） |
+| 点 | 確かめる段 | 結果（詳細は [log/2026-11-22-p1.md](../log/2026-11-22-p1.md)・[log/2026-11-23-p1-cutover.md](../log/2026-11-23-p1-cutover.md)） |
 |---|---|---|
-| `GITHUB_TOKEN` によるマージで Workers Builds が起動するか（GitHub の文書は、新しいワークフローの実行を作らない、とだけ書く） | P1 の並走 | 11-23 朝の日刊のマージで見る |
+| `GITHUB_TOKEN` によるマージで Workers Builds が起動するか（GitHub の文書は、新しいワークフローの実行を作らない、とだけ書く） | P1 の並走 | 起動する。11-23 朝の日刊のマージ（#8、`77044eb`）に check-run が success で付き、新しいノートが新しい URL で 200 |
 | `html_handling` を `none` にしたとき、`/` が `index.html` を返すか | P1 の並走 | 返さない。`_redirects` の `/ /index.html 200` で返す |
 | 静的アセットのディレクトリにリポジトリの root を指定できるか | P1 の並走 | できる（`"directory": "."`。配る範囲は `.assetsignore`） |
-| リポジトリの改名の後に、Workers Builds の接続が残るか | P1 の切り替え | — |
+| リポジトリの改名の後に、Workers Builds の接続が残るか | P1 の切り替え | 残る。改名の後の push（`4d4fc0f`）でビルドが起動し、デプロイまで通った（check-run success） |
 | SessionStart hook が、日刊のクラウドの実行でも発火するか | P0 か P1 の並走 | 確かめなくてよくなった。hook はクラウドの実行（`CLAUDE_CODE_REMOTE=true`）では何も出さない |
