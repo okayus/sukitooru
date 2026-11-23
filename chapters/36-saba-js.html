@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="icon" href="data:,">
 <title>JavaScript エンジン — YouTubeが見えるまで</title>
-<meta name="description" content="Rust で書かれた小さなブラウザ saba の JavaScript エンジン（字句解析・構文解析・評価の 3 ファイル、テストを除いて 1,011 行）を読む。test.html の script の 6 行が 37 個のトークンと 3 つの文の木になり、木を歩く評価器が add(1, 2) を呼び、document.getElementById で DOM の Text を差し替えるまでを、具体的な値を入れて 1 行ずつ追う。教材の最後の章。">
+<meta name="description" content="Rust で書かれた小さなブラウザ saba の JavaScript エンジン（字句解析・構文解析・評価の 3 ファイル、テストを除いて 1,011 行）を読む。test.html の script の 6 行が 37 個のトークンと 3 つの文の木になり、木を歩く評価器が add(1, 2) を呼び、document.getElementById で DOM の Text を差し替えるまでを、具体的な値を入れて 1 行ずつ追う。第IX部の最後の章。">
 <meta property="og:title" content="JavaScript エンジン — YouTubeが見えるまで">
 <meta property="og:description" content="Rust で書かれた小さなブラウザ saba の JavaScript エンジン（テストを除いて 1,011 行）を読む。script の 6 行が 37 個のトークンと木になり、評価器が DOM の Text を差し替えるまで。">
 <meta property="og:type" content="article">
@@ -30,7 +30,7 @@
 <!-- ================= 表紙 ================= -->
 <section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
   <div class="a-main">
-    <p class="eyebrow">第IX部 ブラウザを読む ／ 第36章 ／ 全36章</p>
+    <p class="eyebrow">第IX部 ブラウザを読む ／ 第36章 ／ 全43章</p>
     <h1 id="h-s0">JavaScript エンジン</h1>
     <p class="standfirst">第35章の画面の最後の行 "Answer? 1 + 2 = 3" は HTML には無く、JavaScript が "original text" を書き換えて作る。saba の JS エンジンは字句解析・構文解析・評価の 3 つのファイルで、テストを除いて 1,011 行。test.html の script の 6 行が 37 個のトークンと 3 つの文の木になり、木を歩く評価器が関数を呼び、document.getElementById で DOM の Text を差し替えるまでを、具体的な値を入れて 1 行ずつ追う。最後に、第10章で見た Chromium と V8 との距離を測り、第IX部で追った道を 1 枚に重ねる。</p>
     <p class="legend" data-auto></p>
@@ -45,7 +45,7 @@
       <li><a href="#s4" data-go="4"><span class="n">4</span>関数を呼ぶ</a><p>add(1, 2)。新しい Environment に a ＝ 1、b ＝ 2 を結び、本体を評価して Number(3)。outer は呼び出し側。</p></li>
       <li><a href="#s5" data-go="5"><span class="n">5</span>DOM に触る</a><p>"document.getElementById" という文字列、HtmlElement、textContent への代入が Text ノードを差し替える。</p></li>
       <li><a href="#s6" data-go="6"><span class="n">6</span>全体を通す</a><p>receive_response の順、Chromium・V8 との距離、この版が扱わないもの、第IX部の道と最後の画面。</p></li>
-      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。この教材の最後の章。</p></li>
+      <li><a href="#s7" data-go="7"><span class="n">7</span>まとめ</a><p>要点と用語。次の部（関数型）へ。</p></li>
     </ol>
   </nav>
   <footer class="cover-foot a-foot">
@@ -200,7 +200,7 @@
     </table>
   </div>
   <div class="a-after">
-    <p class="note">この章で教材は終わり。saba の全体は <a href="https://github.com/d0iasm/sababook">d0iasm/sababook</a>（ch7/saba）で読める。書籍で扱わない実験的なコードと最新の変更は <a href="https://github.com/d0iasm/saba">d0iasm/saba</a> にある（sababook の README）。<a href="../index.html">目次</a>の地図から気になる層へ戻るか、<a href="01-denshi.html">第1章</a>から通して読み直せる。</p>
+    <p class="note">第IX部はここまで。saba の全体は <a href="https://github.com/d0iasm/sababook">d0iasm/sababook</a>（ch7/saba）で読める。書籍で扱わない実験的なコードと最新の変更は <a href="https://github.com/d0iasm/saba">d0iasm/saba</a> にある（sababook の README）。次の第X部「関数型」は、この章の評価器が書き換えていた環境を出発点に、状態を書き換えずに計算する考え方を見る。</p>
     <nav class="chnav" data-auto aria-label="章の移動"></nav>
   </div>
 </section>
@@ -1915,6 +1915,7 @@
       title: 'JavaScript エンジン',
       home: '../index.html',
       prev: { href: '35-saba-layout.html', title: 'レイアウトと描画' },
+      next: { href: '37-lambda.html', title: 'ラムダ計算', lead: '関数型は、計算機の何に立ち向かうのか。' },
       legend: [{ c: 'd', label: 'データ（文字列・トークン・値・ノード）' }, { c: 'x', label: '注目・変化' }]
     },
     scenes: { s1, s2, s3, s4, s5, s6 }

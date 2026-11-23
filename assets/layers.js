@@ -53,7 +53,8 @@
       9: ['os'], 10: ['browser'], 11: ['ip'], 12: ['link'], 13: ['link'], 14: ['ip'], 15: ['link'], 16: ['ip'],
       17: ['http'], 18: ['ip'], 19: ['transport'], 20: ['tls'], 21: ['http'], 22: ['delivery'], 23: ['codec'], 24: ['streaming'],
       25: ['streaming'], 26: ['type'], 27: ['algo'], 28: ['compiler'], 29: ['type'], 30: ['os'],
-      31: ['browser', 'http'], 32: ['browser'], 33: ['browser'], 34: ['browser'], 35: ['browser'], 36: ['runtime']
+      31: ['browser', 'http'], 32: ['browser'], 33: ['browser'], 34: ['browser'], 35: ['browser'], 36: ['runtime'],
+      37: ['runtime'], 38: ['runtime'], 39: ['algo'], 40: ['runtime'], 41: ['type', 'compiler'], 42: ['type', 'runtime'], 43: ['type']
     },
     // 第11章（層モデル）・第25章（通しで見る）・第30章（エミュレータの外側）は、場面ごとに扱う層へ振り分ける
     scenes: {
@@ -74,7 +75,11 @@
       '25-4': ['transport', 'ip'], '25-5': ['player', 'browser'], '25-6': ['browser', 'streaming'],
       '30-2': ['cpu', 'os'], '30-3': ['io'], '30-4': ['display'], '30-5': ['display'], '30-6': ['os', 'io'],
       '31-1': ['browser'], '31-2': ['browser'],
-      '36-5': ['runtime', 'browser'], '36-6': ['runtime', 'browser']
+      '36-5': ['runtime', 'browser'], '36-6': ['runtime', 'browser'],
+      // 第X部（関数型）は新しい層を立てず、言語処理系・データ構造・型・コンパイラに振り分ける
+      '38-2': ['runtime', 'type'], '38-6': ['runtime', 'compiler', 'cpu'],
+      '39-5': ['runtime'], '39-6': ['algo', 'os'],
+      '41-4': ['type'], '41-6': ['type']
     }
   };
 

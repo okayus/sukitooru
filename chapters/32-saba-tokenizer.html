@@ -30,7 +30,7 @@
 <!-- ================= 表紙 ================= -->
 <section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
   <div class="a-main">
-    <p class="eyebrow">第IX部 ブラウザを読む ／ 第32章 ／ 全36章</p>
+    <p class="eyebrow">第IX部 ブラウザを読む ／ 第32章 ／ 全43章</p>
     <h1 id="h-s0">HTML トークナイザ</h1>
     <p class="standfirst">第31章で応答の本文として受け取った HTML の文字列は、まず 1 文字ずつ読まれてトークンの列になる。それをするのが saba_core/src/renderer/html/token.rs の HtmlTokenizer で、HTML Standard の 84 の状態のうち 17 を写した状態機械が、開始タグ・終了タグ・文字のトークンを返す（4 種めの EOF は定義だけ）。この章は test.html の 810 文字がどの状態でどう切られるかを 1 文字ずつ追いながら、enum に値を持たせる書き方、Iterator トレイト、reconsume の仕組みを読む。コメント・DOCTYPE・文字参照をこの版が扱わないことと、script の中身も Data 状態で切られることも確かめる。</p>
     <p class="legend" data-auto></p>

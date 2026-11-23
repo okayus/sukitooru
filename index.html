@@ -49,8 +49,8 @@
   .fit .part-card li a { padding: 0.12rem 0; line-height: 1.5; grid-template-columns: 1.6rem auto minmax(0, 1fr); gap: 0 0.6rem; }
   .fit .part-card li small { grid-column: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fit .part-card { padding: 0.5rem 0.9rem 0.4rem; gap: 0.2rem; }
-  .fit .part-card.wide { grid-column: span 3; }   /* 第IX部（ブラウザを読む。6 章）は 3 列ぶんにし、章を 3 列 × 2 行に並べて 1 画面に収める */
-  .fit .part-card.wide ol { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 20px; }
+  .fit .part-card.wide { grid-column: span 2; }   /* 第IX部（6 章）と第X部（7 章）は 2 列ぶんずつ横に並べ、章を 2 列に並べて 1 画面に収める */
+  .fit .part-card.wide ol { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
 
   .fit #start-nav { display: none; }   /* 1画面版では同じボタンを上部バーに置く（縦読み版には上部バーが無いので表紙に残す） */
 
@@ -76,19 +76,19 @@
 <!-- ================= 表紙 ================= -->
 <section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
   <div class="a-main">
-    <p class="eyebrow">動く図で追う ／ 全36章・9部</p>
+    <p class="eyebrow">動く図で追う ／ 全43章・10部</p>
     <h1 id="h-s0">YouTubeが見えるまで</h1>
-    <p class="standfirst">動画をクリックしてから最初の画が出るまでの約 2.4 秒に、電線の中の電子、トランジスタ、CPU、OS、ブラウザ、Wi-Fi の電波、ルーター、光ファイバーの光、ISP の中や国内にある Google のサーバー、動画の圧縮と復号が、すべて順番に働く。この教材はその全部を、途中を飛ばさずに1本の道としてつなぐ。第1章の「電子が押される」から第25章の「画素が光る」まで、各章は前の章の部品を使って次の部品を組み立てる。第VII部では、型とデータ構造のように、どの層にも出てくるものを層を横切って見直し、各層のプログラムを作るコンパイラと、型で意味を表す設計まで進む。第VIII部と第IX部では、公開されている実際のプログラム（Rust のゲームボーイのエミュレータと小さなブラウザ）を、この層に当てはめて 1 行ずつ読む。</p>
+    <p class="standfirst">動画をクリックしてから最初の画が出るまでの約 2.4 秒に、電線の中の電子、トランジスタ、CPU、OS、ブラウザ、Wi-Fi の電波、ルーター、光ファイバーの光、ISP の中や国内にある Google のサーバー、動画の圧縮と復号が、すべて順番に働く。この教材はその全部を、途中を飛ばさずに1本の道としてつなぐ。第1章の「電子が押される」から第25章の「画素が光る」まで、各章は前の章の部品を使って次の部品を組み立てる。第VII部では、型とデータ構造のように、どの層にも出てくるものを層を横切って見直し、各層のプログラムを作るコンパイラと、型で意味を表す設計まで進む。第VIII部と第IX部では、公開されている実際のプログラム（Rust のゲームボーイのエミュレータと小さなブラウザ）を、この層に当てはめて 1 行ずつ読む。第X部では、関数型の概念を、状態を書き換える機械と比べて見る。</p>
     <p class="legend" data-auto></p>
     <p class="keys fit-only">右上の <kbd>›</kbd>（または<kbd>→</kbd>）だけを押していけば、第1章の場面1から、段階・場面・章の順に全ページを通して見られる。章のまとめの次は、次の章の場面1。<kbd>‹</kbd>（<kbd>←</kbd>）で戻り、<kbd>スペース</kbd>で動きを止める。「自動で進む」で全章を自動で通す。</p>
-    <p class="keys fit-only">用語は <a href="glossary.html">用語索引</a> から探せる。全 36 章の用語表を 1 か所に集めてあり、各章のまとめにも入口がある。</p>
+    <p class="keys fit-only">用語は <a href="glossary.html">用語索引</a> から探せる。全 43 章の用語表を 1 か所に集めてあり、各章のまとめにも入口がある。</p>
     <div class="latest" id="latest" hidden>
       <p class="latest-h"><b>最新のニュース</b><a href="news/index.html#s1">層の地図で見る ›</a></p>
       <ol></ol>
     </div>
   </div>
   <nav class="toc a-toc" aria-labelledby="h-toc">
-    <h2 id="h-toc">9 部の構成</h2>
+    <h2 id="h-toc">10 部の構成</h2>
     <ol>
       <li><a href="chapters/01-denshi.html"><span class="n">I</span>電気（第1〜3章）</a><p>電子と電流、半導体とダイオード、トランジスタ。電気で動くスイッチができるまで。</p></li>
       <li><a href="chapters/04-ronri.html"><span class="n">II</span>計算機（第4〜8章）</a><p>論理ゲート、記憶、CPU、入出力、画面と音。スイッチの組み合わせが計算し、覚え、表示する。</p></li>
@@ -99,10 +99,11 @@
       <li><a href="chapters/26-kata.html"><span class="n">VII</span>横断（第26〜29章）</a><p>型とメモリ、データ構造とアルゴリズム、コンパイラ、型で意味を表す。どの層にも出てくる約束と道具を、層を横切って見る。</p></li>
       <li><a href="chapters/30-gbemu-desktop.html"><span class="n">VIII</span>実物を読む（第30章）</a><p>Rust で書かれたゲームボーイのエミュレータの外側を、具体的な値を入れて 1 行ずつ読む。</p></li>
       <li><a href="chapters/31-saba-http.html"><span class="n">IX</span>ブラウザを読む（第31〜36章）</a><p>Rust の小さなブラウザ saba を、URL と HTTP、トークン、DOM、CSS、レイアウトと描画、JavaScript の順に 1 行ずつ読む。</p></li>
+      <li><a href="chapters/37-lambda.html"><span class="n">X</span>関数型（第37〜43章）</a><p>ラムダ計算、クロージャ、不変データ、遅延評価、型推論、モナド、カリー＝ハワード対応。書き換えと順序に、式の簡約で向き合う。</p></li>
     </ol>
   </nav>
   <footer class="cover-foot a-foot">
-    <nav class="chnav" id="start-nav" aria-label="始める"><a class="next" href="chapters/01-denshi.html"><small>第1章から</small> 最初から通して見る ›</a><a href="#s1" data-go="1">全体の地図を見る</a><a href="#s2" data-go="2">36章の一覧</a><a href="glossary.html">用語索引</a><a href="news/index.html">ニュースから層へ</a></nav>
+    <nav class="chnav" id="start-nav" aria-label="始める"><a class="next" href="chapters/01-denshi.html"><small>第1章から</small> 最初から通して見る ›</a><a href="#s1" data-go="1">全体の地図を見る</a><a href="#s2" data-go="2">43章の一覧</a><a href="glossary.html">用語索引</a><a href="news/index.html">ニュースから層へ</a></nav>
     <p>図はすべて模式図。大きさ・個数・速さは見やすく誇張してあり、本文に書いた数値だけが実際の値。</p>
   </footer>
 </section>
@@ -114,16 +115,16 @@
     <p class="sh-meta"><span class="chip">箱を押すと章が開く</span><a class="chip" href="news/index.html#s1">ニュースを層で見る ›</a></p>
   </header>
   <figure class="map-fig a-fig">
-    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 1400 696" role="img" aria-label="パソコンの中の層、家の中の機器、光回線とインターネット、YouTubeのサーバーを並べた地図。要求が右へ、映像が左へ流れる。下の帯は、どの層にも出てくる型・データ構造・コンパイラの章と、実物のプログラムを読む章"></svg></div>
-    <figcaption>図1　左がパソコンの中（下が物理、上がソフトウェア）、中央が家の中の機器と回線、右が YouTube 側。濃い緑の四角は再生の要求、薄い緑の四角は帰ってくる映像の断片（どちらもデータ）。上の帯は、どの区間でも同じ「約束ごと」で包まれていることを表す。下の帯は、どの層にも出てくる型・データ構造・コンパイラの章（第VII部）と、実物のプログラムを読む章（第VIII部のエミュレータと第IX部のブラウザ。破線）。</figcaption>
+    <div class="fig-scroll" data-scroll-x><svg viewBox="0 0 1400 736" role="img" aria-label="パソコンの中の層、家の中の機器、光回線とインターネット、YouTubeのサーバーを並べた地図。要求が右へ、映像が左へ流れる。下の帯は、どの層にも出てくる型・データ構造・コンパイラの章と、実物のプログラムを読む章、関数型の概念の章"></svg></div>
+    <figcaption>図1　左がパソコンの中（下が物理、上がソフトウェア）、中央が家の中の機器と回線、右が YouTube 側。濃い緑の四角は再生の要求、薄い緑の四角は帰ってくる映像の断片（どちらもデータ）。上の帯は、どの区間でも同じ「約束ごと」で包まれていることを表す。下の帯は、どの層にも出てくる型・データ構造・コンパイラの章（第VII部）と、実物のプログラムを読む章（第VIII部のエミュレータと第IX部のブラウザ。破線）、関数型の概念の章（第X部）。</figcaption>
   </figure>
   <p class="map-foot a-text"><span><i class="sw d"></i>要求（クリック → HTTP）が右へ</span><span><i class="sw d" style="opacity: 0.4"></i>映像の断片（セグメント）が左へ</span><span><i class="sw e"></i>電気信号の区間</span><span><i class="sw r"></i>電波の区間</span><span><i class="sw p"></i>光の区間</span></p>
 </section>
 
-<!-- ================= 2 36章の一覧 ================= -->
+<!-- ================= 2 43章の一覧 ================= -->
 <section class="scene sc-list" id="s2" data-tab="章の一覧" aria-labelledby="h-s2">
   <header class="sh a-sh">
-    <h2 id="h-s2"><span class="n">2</span>36章の一覧</h2>
+    <h2 id="h-s2"><span class="n">2</span>43章の一覧</h2>
     <p class="sh-meta"><a class="chip" href="glossary.html">用語索引を開く</a><a class="chip" href="news/index.html">ニュースから層へ</a></p>
   </header>
   <div class="parts a-tbl" id="parts">
@@ -181,6 +182,15 @@
       <li><a href="chapters/35-saba-layout.html"><span class="n">35</span><b>レイアウトと描画</b><small>レイアウトの木、大きさと位置、表示項目、窓、クリック</small></a></li>
       <li><a href="chapters/36-saba-js.html"><span class="n">36</span><b>JavaScript エンジン</b><small>字句、構文木、環境、関数、DOM を触る、全体を通す</small></a></li>
     </ol></section>
+    <section class="part-card wide"><h3><span class="n">第X部</span>関数型</h3><p class="part-lead">書き換えできる状態と、書き換えの順序に、式の簡約で向き合う。関数型の概念を、機械の上の姿と一緒に 1 つずつ見る。</p><ol>
+      <li><a href="chapters/37-lambda.html"><span class="n">37</span><b>ラムダ計算</b><small>状態か式か、β簡約、順序と合流性、Church の符号化、不動点</small></a></li>
+      <li><a href="chapters/38-closure.html"><span class="n">38</span><b>高階関数とクロージャ</b><small>関数は値、環境、カリー化、合成、畳み込み、末尾呼び出し</small></a></li>
+      <li><a href="chapters/39-immutable.html"><span class="n">39</span><b>不変データ</b><small>別名、構造共有、経路コピー、HAMT、ごみ集め</small></a></li>
+      <li><a href="chapters/40-lazy.html"><span class="n">40</span><b>遅延評価</b><small>評価戦略、サンク、無限リスト、スペースリーク</small></a></li>
+      <li><a href="chapters/41-inference.html"><span class="n">41</span><b>型推論と多相</b><small>単一化、主要型、パラメトリシティ、型クラス、Functor</small></a></li>
+      <li><a href="chapters/42-monad.html"><span class="n">42</span><b>モナド</b><small>作用、Maybe、モナド則、State、IO、ほかの言語の姿</small></a></li>
+      <li><a href="chapters/43-curry-howard.html"><span class="n">43</span><b>カリー＝ハワード対応</b><small>型は命題、証明はプログラム、直観主義論理、依存型</small></a></li>
+    </ol></section>
   </div>
 </section>
 
@@ -207,7 +217,7 @@
         <tr><td>下の層へ掘り下げる</td><td><kbd>Enter</kbd>（札で）／<kbd>Esc</kbd></td><td>図の角の <span class="tag x">↓</span> の札か、説明欄の下の「下の層へ」。場面の上に板が重なり、その仕組みを下の章の場面で見せる。板の中の札でさらに下へ。Esc か「閉じる」で 1 段ずつ戻る。板に出る部品は <a href="parts.html">部品の見本</a> で 1 つずつ見られる</td></tr>
         <tr><td>章の移動</td><td>—</td><td>まとめで › を押すと次の章へ。表紙とまとめの「前の章」、上部バーの題で目次へ。目次の上部バーの「続きから」で前回の場面へ</td></tr>
         <tr><td>特定の場面を開く</td><td>—</td><td>URL の末尾に <code>#s3</code>（場面3）や <code>#s3.2</code>（場面3 の段階2）を付ける。‹ › で移ると URL も今の場所に書き換わる</td></tr>
-        <tr><td>用語を探す</td><td>—</td><td><a href="glossary.html">用語索引</a>。全 36 章の用語表を 1 か所に集め、同じ語の別の意味も並べる。各章のまとめからも開ける</td></tr>
+        <tr><td>用語を探す</td><td>—</td><td><a href="glossary.html">用語索引</a>。全 43 章の用語表を 1 か所に集め、同じ語の別の意味も並べる。各章のまとめからも開ける</td></tr>
         <tr><td>ニュースから学ぶ</td><td>—</td><td><a href="news/index.html">ニュースから層へ</a>。tech ニュースを調べ、どの章・場面の話かを表とリンクで示したノート。層の地図で、どの層のニュースかを見る。章の場面の見出しには、その場面のニュースの札が出る</td></tr>
       </tbody>
     </table>
@@ -302,7 +312,7 @@
       S.text(44, 596, '↑ ソフトウェア　↓ 物理（電子・半導体）', { cls: 't-xs t-dim' }, svg);
 
       // 下の帯: 横断（第VII部）。特定の区間ではなく、どの層にも出てくるもの
-      S.rect(20, 608, 1360, 82, { rx: 8, cls: 'f-in s-mid w1 dash' }, svg);
+      S.rect(20, 608, 1360, 122, { rx: 8, cls: 'f-in s-mid w1 dash' }, svg);
       S.text(34, 625, 'VII 横断 ／ VIII 実物を読む', { cls: 't-b t-sm' }, svg);
       S.text(34, 640, 'どの層にも出てくるもの。実物のプログラム', { cls: 't-xs t-dim' }, svg);
       S.text(34, 665, 'IX ブラウザを読む', { cls: 't-b t-sm' }, svg);
@@ -314,6 +324,11 @@
       node(svg, 1152, 614, 203, 26, '30 エミュレータの外側', null, ch('30', 'gbemu-desktop'), 'f-sf s-fg w1 dash');
       [['31', 'saba-http', '31 URL と HTTP'], ['32', 'saba-tokenizer', '32 HTML トークナイザ'], ['33', 'saba-dom', '33 HTML パーサと DOM'], ['34', 'saba-css', '34 CSS とスタイル'], ['35', 'saba-layout', '35 レイアウトと描画'], ['36', 'saba-js', '36 JavaScript エンジン']].forEach(([n, f, t], k) => {
         node(svg, 300 + k * 177.5, 654, 168, 26, t, null, ch(n, f), 'f-sf s-fg w1 dash');
+      });
+      S.text(34, 705, 'X 関数型', { cls: 't-b t-sm' }, svg);
+      S.text(34, 720, '書き換えと順序に、式の簡約で向き合う', { cls: 't-xs t-dim' }, svg);
+      [['37', 'lambda', '37 ラムダ計算'], ['38', 'closure', '38 クロージャ'], ['39', 'immutable', '39 不変データ'], ['40', 'lazy', '40 遅延評価'], ['41', 'inference', '41 型推論と多相'], ['42', 'monad', '42 モナド'], ['43', 'curry-howard', '43 カリー＝ハワード']].forEach(([n, f, t], k) => {
+        node(svg, 300 + k * 152, 694, 143, 26, t, null, ch(n, f), 'f-sf s-fg w1');
       });
       // 家の機器
       node(svg, 440, 200, 120, 56, '14 ルーター', 'NAT・DHCP', ch('14', 'router'), 'f-sf s-rule w15');
@@ -397,7 +412,7 @@
         { href: 'chapters/01-denshi.html#s1', sub: '第1章から', label: '最初から通して見る ›', primary: true },
         resume && { href: resume.href, sub: '続きから' + (resume.no ? ' ' + resume.no : ''), label: resume.title, tail: resume.tail, title: '続きから ' + resume.label, primary: true },
         { href: '#s1', go: 1, label: '全体の地図を見る' },
-        { href: '#s2', go: 2, label: '36章の一覧' },
+        { href: '#s2', go: 2, label: '43章の一覧' },
         { href: 'news/index.html', label: 'ニュースから層へ' }
       ].filter(Boolean),
       legend: [{ c: 'e', label: '電子・電気信号' }, { c: 'h', label: '＋の電荷' }, { c: 'p', label: '光' }, { c: 'r', label: '電波' }, { c: 'd', label: 'データ' }, { c: 'x', label: '注目' }]

@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="icon" href="data:,">
 <title>用語索引 — YouTubeが見えるまで</title>
-<meta name="description" content="教材「YouTubeが見えるまで」全 36 章の用語表を 1 か所に集めた索引。部ごとの一覧、検索、同じ語の別の意味。">
+<meta name="description" content="教材「YouTubeが見えるまで」全 43 章の用語表を 1 か所に集めた索引。部ごとの一覧、検索、同じ語の別の意味。">
 <meta property="og:title" content="用語索引 — YouTubeが見えるまで">
-<meta property="og:description" content="全 36 章の用語表を 1 か所に集めた索引。">
+<meta property="og:description" content="全 43 章の用語表を 1 か所に集めた索引。">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="ja_JP">
 <meta property="og:site_name" content="YouTubeが見えるまで">
@@ -19,7 +19,7 @@
 <script src="assets/glossary-data.js"></script>
 <style>
   /* 用語索引だけのスタイル */
-  .fit .sc-cover .toc li { padding-block: 0.22rem; }   /* 構成が 11 項目（探す・9 部・同じ語）なので詰めて 1 画面に収める */
+  .fit .sc-cover .toc li { padding-block: 0.22rem; }   /* 構成が 12 項目（探す・10 部・同じ語）なので詰めて 1 画面に収める */
   .fit .sc-cover .toc li p { font-size: 0.76rem; line-height: 1.5; }
   .sc-gl { grid-template-areas: "sh" "tbl" "text"; }
   .fit .sc-gl { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: "sh" "tbl" "text"; }   /* 定義の箱は一覧のすぐ下 */
@@ -78,7 +78,7 @@
 <!-- ================= 表紙 ================= -->
 <section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
   <div class="a-main">
-    <p class="eyebrow">用語索引 ／ 全36章の用語表から</p>
+    <p class="eyebrow">用語索引 ／ 全43章の用語表から</p>
     <h1 id="h-s0">用語索引</h1>
     <p class="standfirst">各章のまとめにある用語表を 1 か所に集めた。用語を押すと定義が出て、その章のまとめへ飛べる。「探す」では全章から部分一致で引ける。「同じ語」には、章によって別の物を指す語（断片・TTL・フレーム・ポートなど）を並べた。定義は章の用語表と同じ文で、章を直せば <code>node tools/build-glossary.mjs</code> で作り直す。</p>
     <p class="legend" data-auto></p>
@@ -119,10 +119,12 @@
 <section class="scene sc-gl" id="s9" data-tab="VIII 実物" aria-labelledby="h-s9" data-part="VIII"><header class="sh a-sh"><h2 id="h-s9"><span class="n">9</span>第VIII部 実物を読む（第30章）</h2></header><div class="parts a-tbl"></div><div class="defbox a-text"></div></section>
 <section class="scene sc-gl" id="s10" data-tab="IX ブラウザ" aria-labelledby="h-s10" data-part="IX"><header class="sh a-sh"><h2 id="h-s10"><span class="n">10</span>第IX部 ブラウザを読む（第31〜36章）</h2></header><div class="parts a-tbl"></div><div class="defbox a-text"></div></section>
 
-<!-- ================= 11 同じ語の別の意味 ================= -->
-<section class="scene sc-homo" id="s11" data-tab="同じ語" aria-labelledby="h-s11">
+<section class="scene sc-gl" id="s11" data-tab="X 関数型" aria-labelledby="h-s11" data-part="X"><header class="sh a-sh"><h2 id="h-s11"><span class="n">11</span>第X部 関数型（第37〜43章）</h2></header><div class="parts a-tbl"></div><div class="defbox a-text"></div></section>
+
+<!-- ================= 12 同じ語の別の意味 ================= -->
+<section class="scene sc-homo" id="s12" data-tab="同じ語" aria-labelledby="h-s12">
   <header class="sh a-sh">
-    <h2 id="h-s11"><span class="n">11</span>同じ語の別の意味</h2>
+    <h2 id="h-s12"><span class="n">12</span>同じ語の別の意味</h2>
   </header>
   <div class="prose a-text">
     <p>この教材は定着した用語をそのまま使うので、章によって同じ語が別の物を指すことがある。読んでいて意味が合わないと感じたら、ここで章を確かめる。各章の本文では、初出の所に「〜とは別」と添えてある。</p>
@@ -151,6 +153,7 @@
         <tr><td>タグ</td><td><b>HTML のタグ</b>（開始タグ・終了タグ）<small> 第10・27・32章</small> ／ <b>VLAN タグ</b><small> 第13章</small> ／ <b>改ざん検出のタグ</b>（AEAD）<small> 第20章</small> ／ <b>直和型のタグ</b>（どの場合かを示す欄）<small> 第28・29章・第36章（RuntimeValue）</small></td></tr>
         <tr><td>リンク</td><td><b>ページのリンク</b>（他の章・場面へ移る）<small> 各章</small> ／ <b>リンカがオブジェクトファイルをつなぐこと</b><small> 第28章 場面6</small></td></tr>
         <tr><td>ノード</td><td><b>DOM の木の要素・文字</b>（saba では Node）<small> 第10章 場面2・第33章</small> ／ <b>レイアウトの木の箱</b>（LayoutObject）<small> 第35章</small> ／ <b>JavaScript の構文木の節</b>（ast.rs の Node）<small> 第36章 場面2</small> ／ <b>木の節一般</b><small> 第27章 場面4</small></td></tr>
+        <tr><td>別名</td><td><b>同じ物を指す 2 つの名前</b>（エイリアシング）<small> 第28章 場面4・第39章 場面1</small> ／ <b>型の別名</b>（C の typedef、Rust・TypeScript の type。新しい型は作らない）<small> 第29章 場面1</small></td></tr>
       </tbody>
     </table>
   </div>
@@ -163,20 +166,20 @@
 (() => {
   const G = window.YT_GLOSSARY || { chapters: [], total: 0, built: '' };
   const esc = YT.esc;
-  const partOrder = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
+  const partOrder = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
   const chapterOf = new Map(G.chapters.map((c) => [c.n, c]));
   const summaryHref = (c) => 'chapters/' + c.file + '#s7';
 
   /* 表紙の構成 */
   const toc = document.getElementById('cover-toc');
-  const partTitle = { I: '電気', II: '計算機', III: 'ソフトウェア', IV: 'つながる', V: '約束ごと', VI: 'YouTube', VII: '横断', VIII: '実物を読む', IX: 'ブラウザを読む' };
+  const partTitle = { I: '電気', II: '計算機', III: 'ソフトウェア', IV: 'つながる', V: '約束ごと', VI: 'YouTube', VII: '横断', VIII: '実物を読む', IX: 'ブラウザを読む', X: '関数型' };
   const items = [['探す', '全章の用語と定義を部分一致で引く。', 1]];
   partOrder.forEach((p, i) => {
     const cs = G.chapters.filter((c) => c.part === p);
     const n = cs.reduce((a, c) => a + c.terms.length, 0);
     items.push([`第${p}部 ${partTitle[p]}`, `第${cs[0] ? cs[0].n : '?'}〜${cs.length ? cs[cs.length - 1].n : '?'}章の用語 ${n} 件。`, i + 2]);
   });
-  items.push(['同じ語の別の意味', '断片・TTL・フレーム・ポートなど、章によって別の物を指す語。', 11]);
+  items.push(['同じ語の別の意味', '断片・TTL・フレーム・ポートなど、章によって別の物を指す語。', 12]);
   toc.innerHTML = items.map(([t, d, go], i) => `<li><a href="#s${go}" data-go="${go}"><span class="n">${i + 1}</span>${esc(t)}</a><p>${esc(d)}</p></li>`).join('');
   document.getElementById('built-note').textContent = `用語 ${G.total} 件（${G.built} に全章の用語表から作成）。定義は各章のまとめの用語表と同じ。`;
 

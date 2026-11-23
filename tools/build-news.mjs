@@ -48,7 +48,7 @@ const RE_TAGS = /^<!--\s*tags:\s*([^>]*?)\s*-->\s*$/m;   // 層の指定。先�
 const RE_MISSING = /^<!--\s*missing:\s*([^>]*?)\s*-->\s*$/m;   // 教材に無い概念（「、」で区切る）
 
 /* ---------- 章の一覧（帯に使う） ---------- */
-const PARTS = [['I', '電気'], ['II', '計算機'], ['III', 'ソフト'], ['IV', 'つながる'], ['V', '約束ごと'], ['VI', 'YouTube'], ['VII', '横断'], ['VIII', ''], ['IX', 'ブラウザ']];
+const PARTS = [['I', '電気'], ['II', '計算機'], ['III', 'ソフト'], ['IV', 'つながる'], ['V', '約束ごと'], ['VI', 'YouTube'], ['VII', '横断'], ['VIII', ''], ['IX', 'ブラウザ'], ['X', '関数型']];
 const chapters = fs.readdirSync(path.join(ROOT, 'chapters')).filter((f) => /^\d\d-[a-z0-9-]+\.html$/.test(f)).sort().map((file) => {
   const html = fs.readFileSync(path.join(ROOT, 'chapters', file), 'utf8');
   const title = (html.match(/<title>([^<]*)/) || [, ''])[1].replace(/\s*—.*$/, '').trim();
@@ -415,7 +415,7 @@ const STYLE = `<style>
 
   /* 全章の帯 */
   .nw-strip { display: flex; flex-wrap: wrap; gap: 6px 6px; margin-top: 1rem; }
-  .nw-grp { flex: var(--n) 1 calc(var(--n) * 17px); min-width: 0; display: grid; gap: 2px; }
+  .nw-grp { flex: var(--n) 1 calc(var(--n) * 15px); min-width: 0; display: grid; gap: 2px; }
   .nw-part { font-size: 0.68rem; line-height: 1.5; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 2px solid var(--rule); padding-left: 3px; }
   .nw-cells { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; }
   .nw-cell { font-family: var(--mono); font-size: 0.68rem; line-height: 1.75rem; text-align: center; border-radius: 3px; background: var(--inset); color: var(--fg-dim); text-decoration: none; }
