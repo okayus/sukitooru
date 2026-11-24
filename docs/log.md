@@ -3,6 +3,8 @@
 1 行が 1 つの節目（push・マージ・持ち主の作業の完了・公開の状態の変化）。形は `- YYYY-MM-DD 何を（コミット・記録）`。記録は `docs/log/` からの相対パス。
 自動では全体を読まない（SessionStart hook が新しい 5 行を出す）。作業中の試行錯誤は書かない（git log と `docs/log/` の作業記録にある）。
 
+- 2026-11-24 okayus-skills の cloudflare-workers-builds-keyless-deploy に静的サイトの版を還元した（0.4.2 → 0.5.0。references/static-site.md、「接続」が出ない罠、GITHUB_TOKEN のマージでの起動、改名の後の接続。okayus-skills #52、32971f7、2026-11-23-p1-cutover.md）
+- 2026-11-24 11-24 朝の日刊（#9、5f0a81d）で P1 の出口を満たした。差はノートの md と README.md の表だけで、news-pr.yml が success、マージのコミットに check-run `Workers Builds: sukitooru` success、新しいノートが新しい URL で 200。クラウドの実行は改名したリポジトリで動いた（2026-11-23-p1-cutover.md）
 - 2026-11-23 日刊の手順 5 で、missing の名前を揃える先をノートの md の grep にした（news/index.html はコミットしなくなり、クラウドの clone に無いため）。ルーティンのプロンプトは手順書を指すだけで、改名の影響は無かった（d6f27f3、2026-11-23-p1-cutover.md）
 - 2026-11-23 日刊のルーティンのリポジトリを okayus/sukitooru に替えた（名前「日刊のノート（sukitooru）」。effort max・モデル・環境はそのまま）
 - 2026-11-23 公開を Worker sukitooru に切り替えた。GitHub Pages を止め、リポジトリを okayus/sukitooru に改名し、サイトの名前を「透き通る」にした。古い URL は転送しない。news/ のページはコミットせず、デプロイのときに作る。全 68 ページが新しい URL で ✓（9fb1b1b・4d4fc0f、2026-11-23-p1-cutover.md）

@@ -91,7 +91,7 @@ P1 と P2 は並行できる。P3 は P1 の切り替えの後に行う（名前
 - ローカルのディレクトリ名（`learning/youtube-ga-mieru-made`）は変えない。Claude Code の記憶と履歴がこのパスに結びついている。
 - ビルドの出力や検査を変える変更は、その朝の日刊のプルリクエストがマージされた後に push する。
 
-okayus-skills の `cloudflare-workers-builds-keyless-deploy` の、新しい Worker をつなぐ手順が使える。次の 3 点はこのリポジトリと合わない: md をビルドの条件から外す勧め、pnpm と D1 の migration を前提にしたコマンド、main を ruleset で守る前提（ここは main への直接の push と、ワークフローによる自動のマージ）。移行で確かめたことは、終わってから静的サイトの版として okayus-skills に還元する。
+okayus-skills の `cloudflare-workers-builds-keyless-deploy` の、新しい Worker をつなぐ手順が使える。次の 3 点はこのリポジトリと合わない: md をビルドの条件から外す勧め、pnpm と D1 の migration を前提にしたコマンド、main を ruleset で守る前提（ここは main への直接の push と、ワークフローによる自動のマージ）。移行で確かめたことは、終わってから静的サイトの版として okayus-skills に還元する（還元した。okayus-skills #52、0.5.0、2026-11-24）。
 
 ### P2 kokemusu への依頼
 
@@ -142,7 +142,7 @@ kokemusu の側で決めること（grill-with-docs）:
 
 | 点 | 確かめる段 | 結果（詳細は [log/2026-11-22-p1.md](../log/2026-11-22-p1.md)・[log/2026-11-23-p1-cutover.md](../log/2026-11-23-p1-cutover.md)） |
 |---|---|---|
-| `GITHUB_TOKEN` によるマージで Workers Builds が起動するか（GitHub の文書は、新しいワークフローの実行を作らない、とだけ書く） | P1 の並走 | 起動する。11-23 朝の日刊のマージ（#8、`77044eb`）に check-run が success で付き、新しいノートが新しい URL で 200 |
+| `GITHUB_TOKEN` によるマージで Workers Builds が起動するか（GitHub の文書は、新しいワークフローの実行を作らない、とだけ書く） | P1 の並走 | 起動する。11-23 朝の日刊のマージ（#8、`77044eb`）に check-run が success で付き、新しいノートが新しい URL で 200。改名の後の 11-24 のマージ（#9、`5f0a81d`）でも同じ |
 | `html_handling` を `none` にしたとき、`/` が `index.html` を返すか | P1 の並走 | 返さない。`_redirects` の `/ /index.html 200` で返す |
 | 静的アセットのディレクトリにリポジトリの root を指定できるか | P1 の並走 | できる（`"directory": "."`。配る範囲は `.assetsignore`） |
 | リポジトリの改名の後に、Workers Builds の接続が残るか | P1 の切り替え | 残る。改名の後の push（`4d4fc0f`）でビルドが起動し、デプロイまで通った（check-run success） |
