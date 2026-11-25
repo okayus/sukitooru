@@ -3,6 +3,10 @@
 1 行が 1 つの節目（push・マージ・持ち主の作業の完了・公開の状態の変化）。形は `- YYYY-MM-DD 何を（コミット・記録）`。記録は `docs/log/` からの相対パス。
 自動では全体を読まない（SessionStart hook が新しい 5 行を出す）。作業中の試行錯誤は書かない（git log と `docs/log/` の作業記録にある）。
 
+- 2026-11-25 日刊の候補の 3 語（ファイアウォール、Cookie、疑似乱数）を持ち主が語彙に足した（aeff2c5。語彙 95 個）。候補はノートを直さずに内容のタグになるが、札が増え、Check Point のノートの表紙の余りが 1280×688 で 29px から 2px に減った（CI は新しいノートしか検証しないので、足したら手元で verify.mjs にかける）
+- 2026-11-25 手で起こした日刊（#11、fd3ebeb）で P3 の出口を満たした。語彙のタグ 5 個・前提 2 個・候補 3 語で出て、news-pr.yml（タグの strict の検査を含む）と Workers Builds が success、本番の tags.html とタグのページが verify.mjs で ✓（plans/learning-loop.md §6 P3）
+- 2026-11-25 透き通るの P3（タグ）を push した（681c010）。語彙 `assets/tags.js`（92 個）、既存の 18 件のタグ（担当が付けた）、タグの札・`news/tag-<id>.html`・`news/tags.html`、日刊の型・手順・検査。層の指定の印を `tags` から `layer` に改めた
+- 2026-11-25 持ち主が決めた: 日刊の動きの場面は任意のまま（試しの 7 件のうち 6 件が台本を足した。2c24df6）、learning-loop.md §3 の 2（タグは語彙から選び、無い語は候補として出して持ち主が足す）。取り込み済みの手元のブランチ `wip/fp-part-x` を消した
 - 2026-11-25 透き通るの P2 を終えた。kokemusu に「リンクで渡す」入口 `/積む#post=…` が入り（kokemusu #87・ADR-0009、11-24 に merge）、本番を持ち主の端末で確かめた。契約は kokemusu の docs/senders.md「リンクで渡す」（plans/learning-loop.md §6 P2）
 - 2026-11-24 learning-loop.md §3 の 1（記録の形）を、持ち主が推奨の「kokemusu が開き、積むを押す」に決めた
 - 2026-11-24 kokemusu のサンドボックスの GitHub の PAT（期限切れ）を持ち主が再生成し、1Password の `github-pat-kokemusu-sandbox` を書き換えた（期限 2026-12-24、30 日。`./shell.sh gh auth status` で確認）
