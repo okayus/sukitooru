@@ -86,6 +86,7 @@
       { id: 'ip', name: 'IP', layer: 'ip', alias: ['IPv4'] },
       { id: 'ipv6', name: 'IPv6', layer: 'ip' },
       { id: 'routing', name: '経路制御', layer: 'ip', alias: ['ルーティング'] },
+      { id: 'firewall', name: 'ファイアウォール', layer: 'ip', alias: ['firewall', 'パケットフィルタ'] },   // mazuoboeru: ファイアウォール 1
       { id: 'tcp', name: 'TCP', layer: 'transport' },   // mazuoboeru: tcp 2
       { id: 'udp', name: 'UDP', layer: 'transport' },
       { id: 'quic', name: 'QUIC', layer: 'transport' },
@@ -95,11 +96,13 @@
       { id: 'revocation', name: '証明書の失効', layer: 'tls', alias: ['失効', 'CRL'] },
       { id: 'certificate-transparency', name: 'Certificate Transparency', layer: 'tls', alias: ['CT'] },
       { id: 'crypto', name: '暗号', layer: 'tls', alias: ['公開鍵暗号', 'cryptography'] },
+      { id: 'prng', name: '疑似乱数', layer: 'tls', alias: ['擬似乱数', '乱数', 'PRNG'] },
       { id: 'http', name: 'HTTP', layer: 'http' },   // mazuoboeru: http・HTTP 8
       { id: 'http2', name: 'HTTP/2', layer: 'http', alias: ['h2'] },
       { id: 'http3', name: 'HTTP/3', layer: 'http', alias: ['h3'] },
       { id: 'dns', name: 'DNS', layer: 'http' },   // mazuoboeru: dns 3
       { id: 'url', name: 'URL', layer: 'http', alias: ['URI'] },   // mazuoboeru: URL 1
+      { id: 'cookie', name: 'Cookie', layer: 'http', alias: ['クッキー', 'HTTP Cookie'] },   // mazuoboeru: cookie 2
       { id: 'web-server', name: 'Webサーバー', layer: 'delivery', alias: ['Web サーバー', 'HTTPサーバー', 'HTTP サーバー'] },
       { id: 'nginx', name: 'nginx', layer: 'delivery' },
       { id: 'cdn', name: 'CDN', layer: 'delivery' },
