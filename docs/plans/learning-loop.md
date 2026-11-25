@@ -32,7 +32,7 @@
 
 | # | 決めること | 推奨 | 止まる段 |
 |---|---|---|---|
-| 1 | 記録の形 | kokemusu が開き、積むを押す（§6 P2） | P2 |
+| 1 | 記録の形 | 決まった（2026-11-24）: kokemusu が開き、積むを押す（§6 P2） | P2 |
 | 2 | タグの決め方 | 語彙から選ぶ。語彙に無い語は候補として出し、持ち主が足す | P3 |
 | 3 | kokemusu に積む石 | 内容のタグと、出所の石「透き通る」。前提のタグは積まない | P4 |
 | 4 | クイズが無い前提タグの扱い | 章の場面へのリンク（今もある）と、クイズ待ちの一覧。クイズは持ち主が mazuoboeru-quizzes で作る | P4 |
@@ -108,6 +108,8 @@ kokemusu の側で決めること（grill-with-docs）:
 - 契約の置き場。送る側（このサイト）が読む文書を kokemusu が公開する。
 
 動かさない前提: 自動では投稿しない。kokemusu は送る側を知らない。契約は受ける側（kokemusu）が持つ。
+
+結果（2026-11-24、kokemusu #87・ADR-0009）: 入口は「リンクで渡す」（`/積む#post=…`。中身は fragment に入れ、サーバーに届かない）。契約は kokemusu の `docs/senders.md`「リンクで渡す」（https://github.com/okayus/kokemusu/blob/main/docs/senders.md#リンクで渡す 、raw は https://raw.githubusercontent.com/okayus/kokemusu/main/docs/senders.md ）で、上限とキーの正本は同じ所の `docs/senders/posts.schema.json`。P4 はこの 2 つを読んで作り、ここには写さない（kokemusu ADR-0008: 写した契約は古くなる）。P4 で導線ができたら、kokemusu の `docs/senders.md` の送り側一覧に実装の場所を足してもらう。本番に入り、持ち主の端末でも確かめた（P2 の出口を満たした）。
 
 ### P3 タグ
 
