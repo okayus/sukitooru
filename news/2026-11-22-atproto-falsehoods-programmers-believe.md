@@ -1,6 +1,8 @@
 # AT Protocol について、プログラマが信じがちな誤りの一覧（2026-11-22）
 <!-- kind: daily -->
-<!-- tags: http -->
+<!-- layer: http -->
+<!-- tags: AT Protocol、DNS、HTTP、DID -->
+<!-- prereqs: 暗号 -->
 <!-- missing: DID（分散識別子）、内容アドレス（CID） -->
 
 - 出典: [Falsehoods Programmers Believe About ATProto](https://reiver.link/atproto/falsehoods-programmers-believe/)（Charles Iliya Krempeaux。日付が無く、2026-11-22 は投稿の日）。ATProto を実装してきた本人の記事。仕様は [Handle](https://atproto.com/specs/handle) など。

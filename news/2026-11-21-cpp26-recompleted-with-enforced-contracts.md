@@ -1,6 +1,7 @@
 # C++26 を完成させ直した 2026 年 11 月の ISO C++ の会合（2026-11-21）
 <!-- kind: daily -->
-<!-- tags: compiler -->
+<!-- layer: compiler -->
+<!-- tags: C++、契約プログラミング、標準化 -->
 <!-- missing: 契約 -->
 
 - 出典: [会合の報告](https://herbsutter.com/2026/11/21/c26-is-done-again-trip-report-november-2026-iso-c-standards-meeting-buzios-brazil/)（Herb Sutter、2026-11-21）。2025 年まで委員会の議長だった本人が、委員会の一員として書いた記事。契約の評価の仕方は論文 [P2900R14](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2025/p2900r14.pdf)（2025-02-13）。

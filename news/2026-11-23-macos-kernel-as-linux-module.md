@@ -1,6 +1,8 @@
 # macOS のカーネルを Linux のモジュールとして動かす xnulinux（2026-11-23）
 <!-- kind: daily -->
-<!-- tags: os -->
+<!-- layer: os -->
+<!-- tags: macOS、Linux、カーネルモジュール、kernel -->
+<!-- prereqs: 仮想化 -->
 <!-- missing: カーネルモジュール、仮想マシン（ハイパーバイザ） -->
 
 - 出典: [AFK-surf/xnulinux](https://github.com/AFK-surf/xnulinux) の README（Heyang Zhou ほか。日付が無く、2026-11-23 は投稿の日）。作った本人たちのリポジトリ。

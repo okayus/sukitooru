@@ -1,6 +1,7 @@
 # Rust のコンパイラの並列フロントエンドを nightly の既定にする変更（2026-11-14）
 <!-- kind: daily -->
-<!-- tags: compiler -->
+<!-- layer: compiler -->
+<!-- tags: Rust、コンパイラ、並列処理 -->
 <!-- missing: 再現可能なビルド、インクリメンタルコンパイル -->
 
 - 出典: [Enabling the parallel frontend on nightly](https://blog.rust-lang.org/2026/11/16/enabling-parallel-frontend-on-nightly/)（Rust Blog、Jakub Beránek、コンパイラチームの名で、2026-11-16）。既定になったのは nightly-2026-11-14 から。

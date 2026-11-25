@@ -1,4 +1,6 @@
 # MoonBit の形式検証をアルゴリズムの実装に使った報告（2026-09-14）
+<!-- tags: MoonBit、形式検証、契約プログラミング、SMTソルバ -->
+<!-- prereqs: メモリ安全、WebAssembly -->
 <!-- missing: 契約、SMT ソルバ、WebAssembly、浮動小数点数と丸め、差分テスト、貪欲法と局所探索 -->
 
 - 出典: [アルゴリズムの実装に MoonBit の Formal Verification を活用する](https://eng.mates.education/blog/b-moonbit-formal-verification/)（株式会社メイツ エンジニアリングチーム、ubugeeei、2026-09-14）と、公開サンプル [MatesEngineer/moon-formal-examples](https://github.com/MatesEngineer/moon-formal-examples)（コミット c52ffac、CC BY-NC-SA 4.0）

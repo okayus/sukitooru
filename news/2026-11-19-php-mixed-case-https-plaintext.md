@@ -1,6 +1,7 @@
 # PHP が大文字の HTTPS:// を平文で送っていた脆弱性（2026-11-19）
 <!-- kind: daily -->
-<!-- tags: tls -->
+<!-- layer: tls -->
+<!-- tags: PHP、TLS、URL、セキュリティ -->
 <!-- missing: PHP 本体（サーバーの言語処理系）、FTP -->
 
 - 出典: PHP の勧告 [GHSA-f6gg-rchx-xw8j](https://github.com/php/php-src/security/advisories/GHSA-f6gg-rchx-xw8j)（CVE-2026-128064、2026-11-19）と、同じ日の 8.2.36・8.3.37・8.4.28・8.5.13・8.6.0 の[変更の記録](https://www.php.net/ChangeLog-8.php)。

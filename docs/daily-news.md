@@ -97,7 +97,9 @@ node tools/news-candidates.mjs
 - 型は [news/README.md](../news/README.md) の「日刊の型」。手本もそこにある。
 - ファイル名は `YYYY-MM-DD-題.md`。日付はニュースが出た日（実行した日ではない）。題は、記事の主題を英語の 3〜6 語にして、小文字とハイフンで書く。
 - 1 行目の題は、何が起きたか（解説の記事なら、何を説明する記事か）が分かる名詞句にする（例: 「Node.js の 2026 年 10 月のセキュリティリリース」）。
-- 印 `<!-- kind: daily -->` の次の行に、中心の層を `<!-- tags: id -->` で書く。id は `node tools/layercheck.mjs --list` の左の列から、要点の最初の文で書いた層を選ぶ。教材に無い概念を挙げたら、その次の行に `<!-- missing: 名前、名前 -->` を書く。名前は、前のノートの `missing` に同じ概念があれば同じ名前にする（`grep -h '^<!-- missing:' news/*.md` で一覧できる）。書き方は news/README.md の「書き方」。
+- 印 `<!-- kind: daily -->` の次の行に、中心の層を `<!-- layer: id -->` で書く。id は `node tools/layercheck.mjs --list` の左の列から、要点の最初の文で書いた層を選ぶ。
+- その次の行に、内容のタグを `<!-- tags: 名前、名前 -->` で 1〜5 個書く。名前は `node tools/tagcheck.mjs --list` が出す語彙の正規の名前（「別名」の括弧の前）だけで、ノートの話題の中心の語から並べる。前提知識の表の概念のうち、層の名前より細かい語が語彙にあれば、続けて `<!-- prereqs: 名前、名前 -->`（4 個まで）に書く。内容のタグにしたいが語彙に無い語は、`<!-- tag-candidates: 名前 -->`（3 個まで）に書く（語彙 `assets/tags.js` は変えない。足すかは持ち主が決める）。書き方は news/README.md の「書き方」のタグの項。
+- 教材に無い概念を挙げたら、タグの行の次に `<!-- missing: 名前、名前 -->` を書く。名前は、前のノートの `missing` に同じ概念があれば同じ名前にする（`grep -h '^<!-- missing:' news/*.md` で一覧できる）。書き方は news/README.md の「書き方」。
 - 動きの場面は任意。起きたことの順や形が、news/README.md「動きの場面（台本）」の 6 つの部品のどれかで描けるときだけ、場面「動き」を足して台本を書く。描けないとき・迷うときは足さない。台本に描くのは、一次情報で確かめたことだけ。書いたら `node tools/build-news.mjs` が台本を検査する（誤りは行番号つきで止まる）。
 - 文章は [authoring.md](authoring.md) §8。確かめていないことは書かないか、確かめていないと書く。
 
@@ -134,6 +136,7 @@ git push -u origin "claude/news-<実行した日>"
   - 確かめたことと、確かめていないこと。
   - 検証の結果（`verify.mjs` と `news-pr-check.mjs`）。
   - 動きの場面を置かなかったときは、その理由（1 文）。
+  - タグの候補（tag-candidates）を置いたときは、語ごとに、語彙に足すなら勧める正規の名前と別名、対応する層（1 文）。
 - GitHub Actions の結果は待たなくてよい。
 
 ### 8. 報告
@@ -147,7 +150,7 @@ git push -u origin "claude/news-<実行した日>"
 
 `claude/news-*` から持ち主の名前で出たプルリクエストだけを扱う。main の側の道具で次を確かめ、通ればスカッシュでマージする。main に入ると、Workers Builds がページを作って https://sukitooru.shiraoka.workers.dev/ に公開する。
 
-1. 変わるのは `news/` の直下だけ。足す `.md` は日刊のノート 1 つ。既にあるノートを変えていない。`tools/build-news.mjs` が作るファイルをコミットしていない。ノートの中身（場面の数、リンク、`tags`・`missing`、「層」の場面の表が 3 列で 2〜6 行、台本があれば 1 つで形が正しい）が型どおり（`tools/news-pr-check.mjs`）。
+1. 変わるのは `news/` の直下だけ。足す `.md` は日刊のノート 1 つ。既にあるノートを変えていない。`tools/build-news.mjs` が作るファイルをコミットしていない。ノートの中身（場面の数、リンク、`layer`・`missing`、タグが語彙の正規の名前で数が収まり、候補が語彙に無い、「層」の場面の表が 3 列で 2〜6 行、台本があれば 1 つで形が正しい）が型どおり（`tools/news-pr-check.mjs`）。
 2. `tools/build-news.mjs` で作り直した `news/README.md` の表が、プルリクエストの中身と一致する。ページはここで作る。
 3. `tools/verify.mjs --sizes all` が、一覧・月のページ・ノートのページで通る。
 

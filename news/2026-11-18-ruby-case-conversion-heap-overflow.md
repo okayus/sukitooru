@@ -1,6 +1,7 @@
 # Ruby の大文字・小文字の変換にあったヒープのあふれ（2026-11-18）
 <!-- kind: daily -->
-<!-- tags: type -->
+<!-- layer: type -->
+<!-- tags: Ruby、バッファオーバーフロー、メモリ安全、セキュリティ、リモートコード実行 -->
 <!-- missing: Web アプリの枠組み（Rails・Sinatra） -->
 
 - 出典: Ruby の[セキュリティ勧告](https://www.ruby-lang.org/en/news/2026/11/18/multiple-vulnerabilities-in-regexp-and-string/)（2026-11-18。直した 7 件の 1 つ、GHSA-34m4-m9fh-gqp5）。仕組みは Veria Labs の[解説](https://verialabs.com/ruby2shell/)（2026-11-19 に更新）。

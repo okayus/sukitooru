@@ -1,6 +1,7 @@
 # hex.pm に偽の構造体を送り、サーバーでコマンドを動かした侵入（2026-11-24）
 <!-- kind: daily -->
-<!-- tags: type -->
+<!-- layer: type -->
+<!-- tags: Elixir、デシリアライズ、パッケージ管理、セキュリティ、リモートコード実行 -->
 <!-- missing: Web アプリの枠組み（Rails・Sinatra） -->
 
 - 出典: hex.pm の記事 [Security incident on hex.pm](https://hex.pm/blog/security-incident-on-hexpm)（Peter Ullrich・Jonatan Männchen・Eric Meadows-Jönsson、2026-11-24）と、EEF の CNA の [CVE-2026-129514](https://cna.erlef.org/cves/CVE-2026-129514.html) の記録（同じ日）。前者は当事者の記事、後者は勧告。

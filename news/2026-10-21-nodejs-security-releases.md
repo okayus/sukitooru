@@ -1,4 +1,5 @@
 # Node.js の 2026 年 10 月のセキュリティリリース（2026-10-21）
+<!-- tags: Node.js、HTTP、TLS、DNS、セキュリティ -->
 <!-- missing: SQLite、ZIP（zlib.ZipFile） -->
 
 - 出典: [Wednesday, October 21, 2026 Security Releases](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases)（Node.js、10-14 に予告、10-21 に公開）と、[22.23.4](https://nodejs.org/en/blog/release/v22.23.4)・[24.22.1](https://nodejs.org/en/blog/release/v24.22.1)・[26.12.1](https://nodejs.org/en/blog/release/v26.12.1) のリリースノート

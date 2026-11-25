@@ -1,4 +1,5 @@
 # Linux の IPv4 TCP の解放後の使用 CVE-2026-98432（2026-10-15）
+<!-- tags: Linux、TCP、解放後の使用、kernel、セキュリティ、リモートコード実行、RCU -->
 <!-- missing: MPTCP、KASLR、RCU -->
 
 - 出典: [CVE の記録](https://www.cve.org/CVERecord?id=CVE-2026-98432)（Linux カーネルの CNA、2026-10-15）、[修正のコミット e3f33b0a1d89](https://git.kernel.org/linus/e3f33b0a1d89d738e2b913dab519226eaf76e15b)、[Ubuntu の CVE のページ](https://ubuntu.com/security/CVE-2026-98432)

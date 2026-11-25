@@ -3,8 +3,8 @@
    ニュースのページを作る (tools/build-news.mjs)
 
    news/*.md（README.md を除く）を、場面に分けたページ news/<同じ名前>.html にし、
-   一覧のページ news/index.html、月ごとのページ news/YYYY-MM.html、ノートのデータ news/news-data.js、
-   news/README.md の一覧の表（印の行の間）を作り直す。
+   一覧のページ news/index.html、月ごとのページ news/YYYY-MM.html、タグの一覧 news/tags.html、タグごとのページ news/tag-<id>.html、
+   ノートのデータ news/news-data.js、news/README.md の一覧の表（印の行の間）を作り直す。
    ノートを足したり直したりしたら走らせる:  node tools/build-news.mjs
    news/ の .html と news-data.js はすべてこの道具が作る（手で置かない。元のノートが無い .html は消す）。
    ノートの書き方（どの見出しが場面になるか）は news/README.md。
@@ -14,9 +14,11 @@
    日刊のノート（毎朝 1 件を自動で書くノート。行だけの印 <!-- kind: daily --> を持つ）は、新着と月のページに出る。
 
    ノートの層（assets/layers.js の id）は、章へのリンクと、要点の最初の文の「第N章」の層の和。中心の層は、
-   行だけの印 <!-- tags: id, id --> の先頭。無ければ、要点の最初の文に出る章で最も多い層（同数は「層」の場面の表で多い方）、
+   行だけの印 <!-- layer: id, id --> の先頭。無ければ、要点の最初の文に出る章で最も多い層（同数は「層」の場面の表で多い方）、
    それも無ければ「層」の場面の表で最も多い層。教材に無い概念は <!-- missing: 名前、名前 --> に書く。
    近い場面は、その名前（「（」より前）と「教材に無い」を含む表の行・箇条書き・段落の、章の場面へのリンクから拾う。
+   タグは <!-- tags: … -->（内容のタグ）・<!-- prereqs: … -->（前提のタグ）・<!-- tag-candidates: … -->（語彙に無い語）に書く。
+   読み方と語彙は assets/tags.js（日刊の検査と同じ checkNote）。別名は正規の名前に読み替え、語彙に入った候補は内容のタグにする。
 
    読める Markdown は、ノートで使う分だけ: 見出し（# ## ###）、段落、箇条書き（入れ子は 1 段）、
    表、`コード`、**太字**、[リンク](URL) と [リンク][参照]・参照の定義、> 引用、``` で囲んだコード。
@@ -35,6 +37,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const L = createRequire(import.meta.url)('../assets/layers.js');
 const AS = createRequire(import.meta.url)('../assets/anim-script.js');
+const T = createRequire(import.meta.url)('../assets/tags.js');
 const NEWS = path.join(ROOT, 'news');
 const SITE = 'https://sukitooru.shiraoka.workers.dev/';
 const REPO = 'https://github.com/okayus/sukitooru/blob/main/news/';
@@ -43,8 +46,10 @@ const PER_MONTHS = 24;   // 「月ごと」の 1 場面に並べる月の数（4
 const PER_MISSING = 24;   // 「教材に無い」の 1 場面に並べる概念の数（3 列 × 8 行）
 const CANDIDATE = 3;   // この数のノートに出た「教材に無い」概念は、章の候補として印を付ける
 const CARD_LAYERS = 5;   // 一覧のカードに出す層の札の数（ほかは「ほか N」）
+const CARD_TAGS = 3;   // 一覧のカードに出す内容のタグの数（ほかは「ほか N」）
+const PER_TAGS = 24;   // タグの一覧の 1 場面に並べるタグの数（3 列 × 8 行）
 const RE_DAILY = /^<!--\s*kind:\s*daily\s*-->\s*$/m;   // 日刊のノートの印（行だけの注釈。本文には出ない）
-const RE_TAGS = /^<!--\s*tags:\s*([^>]*?)\s*-->\s*$/m;   // 層の指定。先頭が中心の層
+const RE_LAYER = /^<!--\s*layer:\s*([^>]*?)\s*-->\s*$/m;   // 層の指定。先頭が中心の層
 const RE_MISSING = /^<!--\s*missing:\s*([^>]*?)\s*-->\s*$/m;   // 教材に無い概念（「、」で区切る）
 
 /* ---------- 章の一覧（帯に使う） ---------- */
@@ -313,10 +318,10 @@ function readNote(file) {
   const tableCount = tally(table ? table.rows.map((r) => layersOf(linksIn(r.join(' | '), refs))) : []);
   const leadRefs = sentenceRefs(n.leadFirst, refs);
   const leadCount = tally(leadRefs.map((p) => layersOf([p])));
-  n.tags = (RE_TAGS.exec(src) || [, ''])[1].split(/[、,\s]+/).filter(Boolean);
-  for (const id of n.tags) if (!L.byId[id]) throw new Error(`news/${file}: tags の ${id} は assets/layers.js に無い`);
-  const set = new Set([...layersOf(links), ...layersOf(leadRefs), ...n.tags]);
-  n.center = n.tags[0] || top(leadCount, tableCount) || top(tableCount) || [...set][0] || '';
+  n.pinned = (RE_LAYER.exec(src) || [, ''])[1].split(/[、,\s]+/).filter(Boolean);
+  for (const id of n.pinned) if (!L.byId[id]) throw new Error(`news/${file}: layer の ${id} は assets/layers.js に無い`);
+  const set = new Set([...layersOf(links), ...layersOf(leadRefs), ...n.pinned]);
+  n.center = n.pinned[0] || top(leadCount, tableCount) || top(tableCount) || [...set][0] || '';
   const order = (id) => L.layers.indexOf(L.byId[id]);
   const cnt = (m, id) => (m.get(id) ? m.get(id).n : 0);
   n.layers = [...set].sort((a, b) => (b === n.center) - (a === n.center) || cnt(tableCount, b) - cnt(tableCount, a) || cnt(leadCount, b) - cnt(leadCount, a) || order(a) - order(b));
@@ -331,6 +336,14 @@ function readNote(file) {
   put(n.head); put(n.lead); n.scenes.forEach((s) => s.groups.forEach((g) => put(g.blocks)));
   n.missing = (RE_MISSING.exec(src) || [, ''])[1].split('、').map((s) => s.trim()).filter(Boolean).map((name) => ({ name, near: nearScenes(name, units, refs) }));
   n.walk = walkOf(n, layerScene, refs);
+
+  /* タグ（assets/tags.js）。数の決まりは日刊の検査が確かめる。ここでは語彙に無い名前だけを止める */
+  const tg = T.checkNote(src, { daily: n.daily, isLayer: (s) => !!L.byId[s] });
+  if (tg.errors.length) throw new Error(`news/${file} のタグ:\n  ` + tg.errors.join('\n  '));
+  tg.warnings.forEach((w) => console.warn(`注意 news/${file}: ${w}`));
+  n.tags = [...tg.tags, ...tg.promoted.map((p) => p.tag)];
+  n.prereqs = tg.prereqs;
+  n.candidates = tg.candidates;
   return n;
 }
 
@@ -388,6 +401,14 @@ function layerChips(n, max) {
   const shown = max ? n.layers.slice(0, max) : n.layers;
   const more = n.layers.length - shown.length;
   return `<p class="nw-layers" aria-label="層（先頭が中心の層）">${shown.map((id) => `<a class="chip nw-lc${id === n.center ? ' c' : ''}" href="index.html?layer=${id}#s1" title="${esc(layerName(id))}${id === n.center ? '（中心の層）' : ''}">${esc(L.label(id))}</a>`).join('')}${more > 0 ? `<span class="chip nw-more" title="${esc(n.layers.slice(shown.length).map(layerName).join('、'))}">ほか ${more}</span>` : ''}</p>`;
+}
+
+/* タグの札（角の丸い札。押すとタグのページ）。pre があれば、前提のタグを「前提」の後に破線の札で並べる */
+const tagChip = (t, pre) => `<a class="chip nw-tag${pre ? ' p' : ''}" href="tag-${esc(t.id)}.html" title="${pre ? '前提のタグ' : '内容のタグ'}「${esc(t.name)}」のページ">${esc(t.name)}</a>`;
+function tagChips(tags, pre = [], max = 0) {
+  if (!tags.length && !pre.length) return '';
+  const shown = max ? tags.slice(0, max) : tags, more = tags.slice(shown.length);
+  return `<p class="nw-tags" aria-label="タグ">${shown.map((t) => tagChip(t)).join('')}${more.length ? `<span class="chip nw-more" title="${esc(more.map((t) => t.name).join('、'))}">ほか ${more.length}</span>` : ''}${pre.length ? `<span class="nw-tl">前提</span>${pre.map((t) => tagChip(t, true)).join('')}` : ''}</p>`;
 }
 
 /* ---------- ページの骨組み ---------- */
@@ -452,6 +473,18 @@ const STYLE = `<style>
   a.nw-lc.c { color: var(--fg); border-color: var(--fg); font-weight: 600; }
   .nw-more { color: var(--fg-dim); border-style: dashed; }
 
+  /* タグの札（角の丸い札。前提のタグは破線） */
+  .nw-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+  .sc-cover .nw-tags { margin-top: 0.5rem; }
+  .nw-chead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.25rem 0.8rem; }
+  .nw-chead .nw-tags { justify-content: flex-end; gap: 0.25rem; }
+  .nw-chead .nw-tag { line-height: 1.45; }
+  a.nw-tag { border-radius: 999px; padding: 0 0.6rem; color: var(--fg); border-color: var(--fg-dim); text-decoration: none; }
+  a.nw-tag:hover { border-color: var(--fg); }
+  a.nw-tag.p { border-style: dashed; color: var(--fg-mid); }
+  .nw-tl { font-size: 0.72rem; color: var(--fg-dim); margin-left: 0.5rem; }
+  .nw-unused { font-size: 0.86rem; line-height: 1.9; color: var(--fg-mid); }
+
   /* 層の地図（assets/news-graph.js が中身を入れる） */
   .sc-nwmap { grid-template-areas: "sh" "left" "fig"; }
   .fit .sc-nwmap { grid-template-columns: 31fr 69fr; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "sh sh" "left fig"; }
@@ -511,6 +544,15 @@ const STYLE = `<style>
   .nw-miss .nw-n { font-family: var(--mono); font-size: 0.78rem; color: var(--fg-mid); margin-left: 0.4rem; }
   .nw-miss .cand-mark { color: var(--c-x); border-color: var(--c-x); margin-left: 0.4rem; }
   .nw-miss small { font-size: 0.8rem; line-height: 1.6; color: var(--fg-mid); }
+
+  /* タグの一覧（候補は破線） */
+  .nw-tlist { list-style: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.55rem 1.4rem; align-content: start; }
+  .fit .nw-tlist { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; }
+  .nw-tlist li { display: grid; gap: 0.1rem; border-left: 2px solid var(--rule); padding-left: 0.7rem; }
+  .nw-tlist li.cand { border-left-style: dashed; }
+  .nw-tlist b { font-weight: 600; }
+  .nw-tlist .nw-n { font-family: var(--mono); font-size: 0.78rem; color: var(--fg-mid); margin-left: 0.4rem; }
+  .nw-tlist small { font-size: 0.8rem; line-height: 1.6; color: var(--fg-mid); }
 </style>`;
 
 /* graph があるページは、層の地図（assets/news-graph.js）を場面 graph.k に描く。graph.opts はその場面の絞り込み。
@@ -564,6 +606,8 @@ ${graph ? `YT_NEWS_GRAPH.mount(document.getElementById('s${graph.k}'), ${JSON.st
 }
 
 const KEYS = '上のタブで場面を選ぶ。<kbd>↓</kbd><kbd>↑</kbd>（または右上の <kbd>‹</kbd><kbd>›</kbd>）で場面を移る。';
+const CARDS_KEYS = `一覧の四角い札はそのノートの層（太字が中心の層）、丸い札は内容のタグ（押すとタグのページ）、帯は全 ${chapters.length} 章を部ごとに並べたもので、塗りつぶした番号がリンクしている章。`;
+const REPO_TAGS = REPO.replace(/news\/$/, 'assets/tags.js');
 
 function notePage(n) {
   const head = n.head.map((b) => (b.t === 'ul' || b.t === 'ol' ? b.items.map((it) => `<li>${inline(it.text, n.refs)}</li>`).join('') : `<li>${inline(b.text || '', n.refs)}</li>`)).join('');
@@ -598,10 +642,11 @@ ${groups}
   <div class="a-main">
     <div class="nw-eyebrow"><p class="eyebrow">${esc(eyebrow)}</p>${layerChips(n, CARD_LAYERS)}</div>
     <h1 id="h-s0">${inline(n.title, n.refs)}</h1>
+    ${tagChips(n.tags, n.prereqs)}
     ${lead}
     <ul class="nw-meta">${head}</ul>
     ${strip(n.chapters, 'このノートがリンクしている章')}
-    <p class="keys fit-only">${KEYS}上の札はこのノートの層（太字が中心の層。押すと層の地図で絞る）、帯の塗りつぶした番号はリンクしている章。</p>
+    <p class="keys fit-only">${KEYS}上の四角い札はこのノートの層（太字が中心の層。押すと層の地図で絞る）、題の下の丸い札はタグ（破線は前提のタグ。押すとタグのページ）、帯の塗りつぶした番号はリンクしている章。</p>
   </div>
   <nav class="toc a-toc" aria-labelledby="h-toc">
     <h2 id="h-toc">構成</h2>
@@ -681,8 +726,9 @@ function walkScene(n, s, k, fig) {
 
 /* ---------- 一覧のカードと、カードを並べた場面 ---------- */
 const monthLabel = (m) => `${m.slice(0, 4)} 年 ${Number(m.slice(5))} 月`;
+/* 内容のタグは日付の行の右に、先頭の CARD_TAGS 個まで置く（日付の行を折り返さず、一覧の 1 場面に 6 枚を収めるため） */
 const card = (n) => `<article class="nw-card">
-  <p class="nw-date">${esc(n.date)}${n.daily ? ' ／ 日刊' : ''}</p>
+  <div class="nw-chead"><p class="nw-date">${esc(n.date)}${n.daily ? ' ／ 日刊' : ''}</p>${tagChips(n.tags, [], CARD_TAGS)}</div>
   <h3><a href="${esc(n.slug)}.html">${inline(n.title, n.refs)}</a></h3>
   <p class="nw-lead">${inline(n.leadFirst, n.refs)}</p>
   ${layerChips(n, CARD_LAYERS)}
@@ -818,7 +864,7 @@ function indexPage(notes, ms) {
     <p class="eyebrow">ニュースから層へ ／ ${notes.length} 件</p>
     <h1 id="h-s0">ニュースから層へ</h1>
     <p class="standfirst">tech ニュースを 1 件ずつ調べ、この教材のどの層の話かを、章と場面へのリンクで示したノート。各ノートは、層ごとに何が起きるかを表にする。脆弱性と事故のノートは確かなことと確かでないことを、更新のノートは解決することと前提知識を書き分ける。日刊のノートは、毎朝 1 件を自動で選んで書いた短いノートで、人は確かめていない。</p>
-    <p class="keys fit-only">${KEYS}一覧の札はそのノートの層（太字が中心の層）、帯は全 ${chapters.length} 章を部ごとに並べたもので、塗りつぶした番号がリンクしている章。</p>
+    <p class="keys fit-only">${KEYS}${CARDS_KEYS}</p>
   </div>
   <nav class="toc a-toc" aria-labelledby="h-toc">
     <h2 id="h-toc">構成</h2>
@@ -827,7 +873,7 @@ function indexPage(notes, ms) {
     </ol>
   </nav>
   <footer class="cover-foot a-foot">
-    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">層の地図 ›</a><a href="#s2" data-go="2">新着</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">層の地図 ›</a><a href="#s2" data-go="2">新着</a><a href="tags.html">タグ</a><a href="../index.html">目次</a><a href="../glossary.html">用語索引</a></nav>
     <p>ノートの元は news/ の Markdown（書き方は <a href="${REPO}README.md" target="_blank" rel="noopener">news/README.md</a>）。このページは <code>node tools/build-news.mjs</code> で作る。</p>
   </footer>
 </section>
@@ -853,7 +899,7 @@ function monthPage(x, older, newer) {
     <p class="eyebrow">ニュースから層へ ／ ${esc(x.m)} ／ ${x.notes.length} 件</p>
     <h1 id="h-s0">${esc(label)}のニュース</h1>
     <p class="standfirst">${esc(label)}に出たニュースのノート ${x.notes.length} 件（${esc(monthCount(x))}）を、新しい順に並べる。日付はニュースが出た日で、ノートを書いた日ではない。</p>
-    <p class="keys fit-only">${KEYS}一覧の札はそのノートの層（太字が中心の層）、帯は全 ${chapters.length} 章を部ごとに並べたもので、塗りつぶした番号がリンクしている章。</p>
+    <p class="keys fit-only">${KEYS}${CARDS_KEYS}</p>
   </div>
   <nav class="toc a-toc" aria-labelledby="h-toc">
     <h2 id="h-toc">構成</h2>
@@ -862,7 +908,7 @@ function monthPage(x, older, newer) {
     </ol>
   </nav>
   <footer class="cover-foot a-foot">
-    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">層の地図 ›</a><a href="#s2" data-go="2">一覧</a>${near(newer, '次の月')}${near(older, '前の月')}<a href="index.html">ニュースの一覧</a><a href="../index.html">目次</a></nav>
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">層の地図 ›</a><a href="#s2" data-go="2">一覧</a>${near(newer, '次の月')}${near(older, '前の月')}<a href="index.html">ニュースの一覧</a><a href="tags.html">タグ</a><a href="../index.html">目次</a></nav>
     <p>ノートの元は news/ の Markdown（書き方は <a href="${REPO}README.md" target="_blank" rel="noopener">news/README.md</a>）。このページは <code>node tools/build-news.mjs</code> で作る。</p>
   </footer>
 </section>
@@ -877,16 +923,143 @@ ${scenes.map((s) => s.html).join('\n\n')}`;
   });
 }
 
+/* ---------- タグ（assets/tags.js） ---------- */
+/* 語彙の順に、内容のタグに持つノート（notes）と、前提のタグに持つノート（pre）を集める。どちらも新しい順 */
+function tagIndex(notes) {
+  const m = new Map(T.tags.map((t) => [t.id, { t, notes: [], pre: [] }]));
+  for (const n of notes) {
+    n.tags.forEach((t) => m.get(t.id).notes.push(n));
+    n.prereqs.forEach((t) => m.get(t.id).pre.push(n));
+  }
+  return [...m.values()];
+}
+const tagUsed = (x) => x.notes.length + x.pre.length > 0;
+const tagCount = (x) => [x.notes.length ? `内容 ${x.notes.length} 件` : '', x.pre.length ? `前提 ${x.pre.length} 件` : ''].filter(Boolean).join('・');
+const tagAbout = '内容のタグはノートが何の話か、前提のタグはノートを読むのに要る知識のうち層より細かいもの。';
+
+/* タグのページ。そのタグを内容のタグに持つノートと、前提のタグに持つノートを、新しい順のカードで並べる */
+function tagPage(x) {
+  const { t } = x;
+  const a = x.notes.length ? cardScenes(x.notes, 1, 'ノート') : [];
+  const scenes = [...a, ...(x.pre.length ? cardScenes(x.pre, 1 + a.length, '前提にするノート') : [])];
+  const what = [x.notes.length ? `内容のタグに持つノート ${x.notes.length} 件` : '', x.pre.length ? `前提のタグに持つノート ${x.pre.length} 件` : ''].filter(Boolean).join('と、');
+  const meta = (t.layer ? `<li>層: <a href="index.html?layer=${esc(t.layer)}#s1">${esc(layerName(t.layer))}</a>（層の地図で絞る）</li>` : '<li>層: 層をまたぐ語</li>')
+    + (t.alias && t.alias.length ? `<li>別名: ${esc(t.alias.join('、'))}（mazuoboeru のタグや表記の揺れ。ノートには正規の名前を書く）</li>` : '');
+  const body = `<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">ニュースから層へ ／ タグ ／ ${esc(tagCount(x))}</p>
+    <h1 id="h-s0">${esc(t.name)}</h1>
+    <p class="standfirst">「${esc(t.name)}」を${what}を、新しい順に並べる。${tagAbout}</p>
+    <ul class="nw-meta">${meta}</ul>
+    <p class="keys fit-only">${KEYS}${CARDS_KEYS}</p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      ${scenes.map(tocItem).join('\n      ')}
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">${esc(scenes[0].label)} ›</a><a href="tags.html">タグの一覧</a><a href="index.html">ニュースの一覧</a><a href="../index.html">目次</a></nav>
+    <p>タグの語彙は <a href="${REPO_TAGS}" target="_blank" rel="noopener">assets/tags.js</a>（id は ${esc(t.id)}）。このページは <code>node tools/build-news.mjs</code> で作る。</p>
+  </footer>
+</section>
+
+${scenes.map((s) => s.html).join('\n\n')}`;
+  return page({
+    title: `${t.name} — タグ — ニュースから層へ`,
+    description: `「${t.name}」のタグが付いた tech ニュースのノート（${tagCount(x)}）の一覧。`,
+    body,
+    meta: { eyebrow: 'ニュースから層へ ／ タグ', title: t.name, home: 'tags.html', actions: [{ href: 'tags.html', label: 'タグの一覧' }] }
+  });
+}
+
+/* タグの一覧のページ。付いたタグ（ノートの数が多い順）、候補（ノートが挙げた語彙に無い語）、語彙の残り */
+function tagsPage(xs, notes) {
+  const used = xs.filter(tagUsed).sort((a, b) => b.notes.length + b.pre.length - a.notes.length - a.pre.length || b.notes.length - a.notes.length || T.tags.indexOf(a.t) - T.tags.indexOf(b.t));
+  const rest = xs.filter((x) => !tagUsed(x));
+  const cm = new Map();
+  for (const n of notes) for (const c of n.candidates) {
+    const k = T.key(c);
+    if (!cm.has(k)) cm.set(k, { name: c, notes: [] });
+    cm.get(k).notes.push(n);
+  }
+  const cands = [...cm.values()].sort((a, b) => b.notes.length - a.notes.length || (a.notes[0].date < b.notes[0].date ? 1 : a.notes[0].date > b.notes[0].date ? -1 : 0));
+  const section = (k, label, h2, chips, inner) => `<!-- ================= ${k} ${esc(label)} ================= -->
+<section class="scene sc-nwlist" id="s${k}" data-tab="${esc(label)}" aria-labelledby="h-s${k}">
+  <header class="sh a-sh">
+    <h2 id="h-s${k}"><span class="n">${k}</span>${esc(h2)}</h2>
+    <p class="sh-meta">${chips.map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</p>
+  </header>
+  ${inner}
+</section>`;
+  const chunks = [];
+  for (let i = 0; i < used.length; i += PER_TAGS) chunks.push(used.slice(i, i + PER_TAGS));
+  if (!chunks.length) chunks.push([]);
+  const item = (x) => `<li><span><a href="tag-${esc(x.t.id)}.html"><b>${esc(x.t.name)}</b></a><span class="nw-n">${esc(tagCount(x))}</span></span><small>${x.t.layer ? `層: ${esc(L.label(x.t.layer))}` : '層をまたぐ'}${x.t.alias && x.t.alias.length ? `。別名: ${esc(x.t.alias.join('、'))}` : ''}</small></li>`;
+  const scenes = chunks.map((ys, i) => {
+    const k = 1 + i, label = 'タグ' + (chunks.length > 1 ? ` ${i + 1}` : '');
+    return {
+      k, label, note: ys.length ? `付いている ${used.length} 個のうち ${i * PER_TAGS + 1}〜${i * PER_TAGS + ys.length} 個目` : 'まだ無い',
+      html: section(k, label, 'タグ — 付いたノートの数が多い順', ['内容 = 内容のタグに持つノート', '前提 = 前提のタグに持つノート'],
+        ys.length ? `<ul class="nw-tlist a-tbl">\n${ys.map(item).join('\n')}\n  </ul>` : '<p class="nw-unused a-tbl">まだ無い。</p>')
+    };
+  });
+  const kc = 1 + scenes.length;
+  const cand = (c) => `<li class="cand"><span><b>${esc(c.name)}</b><span class="nw-n">${c.notes.length} 件</span></span><small>ノート: ${c.notes.map((n) => `<a href="${esc(n.slug)}.html" title="${esc(plain(n.title))}">${esc(n.date)}</a>`).join('・')}</small></li>`;
+  scenes.push({
+    k: kc, label: '候補', note: cands.length ? `${cands.length} 個` : 'まだ無い',
+    html: section(kc, '候補', '候補 — ノートが挙げた、語彙に無い語', ['出たノートの数が多い順', '語彙に足すと、そのノートの内容のタグになる'],
+      cands.length ? `<ul class="nw-tlist a-tbl">\n${cands.map(cand).join('\n')}\n  </ul>` : '<p class="nw-unused a-tbl">まだ無い。</p>')
+  });
+  scenes.push({
+    k: kc + 1, label: '語彙の残り', note: `${rest.length} 個`,
+    html: section(kc + 1, '語彙の残り', '語彙の残り — まだどのノートにも付いていないタグ', [`${rest.length} 個`, '語彙の順'],
+      `<p class="nw-unused a-tbl">${rest.length ? rest.map((x) => esc(x.t.name)).join('、') : 'なし。'}</p>`)
+  });
+  const body = `<!-- ================= 表紙 ================= -->
+<section class="scene sc-cover on" id="s0" data-tab="表紙" aria-labelledby="h-s0">
+  <div class="a-main">
+    <p class="eyebrow">ニュースから層へ ／ タグ ／ 語彙 ${T.tags.length} 個</p>
+    <h1 id="h-s0">タグ</h1>
+    <p class="standfirst">ノートに付けたタグ ${used.length} 個を、付いたノートの数が多い順に並べる。${tagAbout}タグの語彙は、mazuoboeru のクイズのタグと kokemusu の石に名前をそろえてある。</p>
+    <p class="keys fit-only">${KEYS}タグの名前を押すと、そのタグのページを開く。</p>
+  </div>
+  <nav class="toc a-toc" aria-labelledby="h-toc">
+    <h2 id="h-toc">構成</h2>
+    <ol>
+      ${scenes.map(tocItem).join('\n      ')}
+    </ol>
+  </nav>
+  <footer class="cover-foot a-foot">
+    <nav class="chnav" aria-label="移動"><a class="next" href="#s1" data-go="1">タグ ›</a><a href="#s${kc}" data-go="${kc}">候補</a><a href="index.html">ニュースの一覧</a><a href="../index.html">目次</a></nav>
+    <p>タグの語彙は <a href="${REPO_TAGS}" target="_blank" rel="noopener">assets/tags.js</a>（書き方は <a href="${REPO}README.md" target="_blank" rel="noopener">news/README.md</a>「タグ」）。このページは <code>node tools/build-news.mjs</code> で作る。</p>
+  </footer>
+</section>
+
+${scenes.map((s) => s.html).join('\n\n')}`;
+  return page({
+    title: 'タグ — ニュースから層へ',
+    description: 'tech ニュースのノートに付けたタグ（内容のタグ・前提のタグ）と、語彙に無い候補の一覧。',
+    body,
+    meta: { eyebrow: 'ニュースから層へ', title: 'タグ', home: 'index.html', actions: [{ href: 'index.html', label: 'ニュースの一覧' }] }
+  });
+}
+
 /* ---------- ノートのデータ（news/news-data.js） ---------- */
 /* 層の地図（assets/news-graph.js）、章の札（engine.js）、目次の表紙の「最新のニュース」が読む。新しい順に 1 行 1 件 */
 function dataFile(notes) {
   const rows = notes.map((n) => {
     const o = { slug: n.slug, date: n.date, title: plain(n.title), daily: n.daily, center: n.center, layers: n.layers, scenes: n.sceneKeys, missing: n.missing.map((m) => m.name) };
+    if (n.tags.length) o.tags = n.tags.map((t) => t.name);
+    if (n.prereqs.length) o.prereqs = n.prereqs.map((t) => t.name);
     if (n.anims.length) o.anim = [...new Set(n.anims.map((a) => a.part))];
     return JSON.stringify(o);
   });
   return `/* このファイルは tools/build-news.mjs が news/ の Markdown から作る（手で直さない）。
    ノートごとに slug・日付・題・日刊か・中心の層・層（assets/layers.js の id。中心が先頭）・リンクしている章の場面（'章-場面'、場面を指さないリンクは '章'）・教材に無い概念、
+   タグのあるノートは内容のタグ（tags）と前提のタグ（prereqs。どちらも assets/tags.js の正規の名前）、
    台本のあるノートは使う部品（anim。parts.html?set=anim の「使うノート」が読む） */
 window.YT_NEWS = [
 ${rows.join(',\n')}
@@ -914,7 +1087,8 @@ function updateReadme(notes, ms) {
 /* ---------- 実行 ---------- */
 const notes = fs.readdirSync(NEWS).filter((f) => /^\d{4}-\d\d-\d\d-[a-z0-9-]+\.md$/.test(f)).sort().reverse().map(readNote);
 const ms = byMonth(notes);
-const wanted = new Set(notes.map((n) => n.slug + '.html').concat(ms.map((x) => x.m + '.html'), 'index.html'));
+const tx = tagIndex(notes), txUsed = tx.filter(tagUsed);
+const wanted = new Set(notes.map((n) => n.slug + '.html').concat(ms.map((x) => x.m + '.html'), txUsed.map((x) => `tag-${x.t.id}.html`), 'index.html', 'tags.html'));
 for (const f of fs.readdirSync(NEWS)) {
   // ノートを消したり名前を変えたりしたときに残る古いページを消す
   if (f.endsWith('.html') && !wanted.has(f)) { fs.unlinkSync(path.join(NEWS, f)); console.log(`消した: news/${f}`); }
@@ -922,7 +1096,8 @@ for (const f of fs.readdirSync(NEWS)) {
 for (const n of notes) {
   fs.writeFileSync(path.join(NEWS, n.slug + '.html'), notePage(n));
   console.log(`news/${n.slug}.html: ${n.title} — ${n.daily ? '日刊、' : ''}場面 ${n.scenes.length}、章 ${n.chapters.join('・') || 'なし'}、`
-    + `中心の層 ${n.center || 'なし'}${n.tags.length ? '（tags）' : ''}、層 ${n.layers.join('・') || 'なし'}、教材に無い ${n.missing.length}、`
+    + `中心の層 ${n.center || 'なし'}${n.pinned.length ? '（layer）' : ''}、層 ${n.layers.join('・') || 'なし'}、教材に無い ${n.missing.length}、`
+    + `タグ ${n.tags.map((t) => t.name).join('・') || 'なし'}${n.prereqs.length ? `（前提 ${n.prereqs.map((t) => t.name).join('・')}）` : ''}${n.candidates.length ? `［候補 ${n.candidates.join('・')}］` : ''}、`
     + (n.walk ? `層の歩き ${n.walk.rows.length} 段（場面 ${n.walk.k}: ${n.walk.rows.map((r) => [...new Set(r.l.flatMap((x) => x.ids))].join('+') + (r.l.some((x) => x.n) ? '（近い）' : '') + (r.m.length ? '［無い ' + r.m.length + '］' : '') || '—').join(' → ')}）` : '層の歩き なし（表のまま）')
     + (n.anims.length ? `、動き ${n.anims.map((a) => `場面 ${a.k} ${a.part} ${a.script.steps.length} 段`).join('・')}` : ''));
 }
@@ -932,5 +1107,8 @@ ms.forEach((x, i) => {   // ms は新しい月から並ぶ。前の月は i + 1�
   console.log(`news/${x.m}.html: ${x.notes.length} 件（${monthCount(x)}）`);
 });
 fs.writeFileSync(path.join(NEWS, 'index.html'), indexPage(notes, ms));
+for (const x of txUsed) fs.writeFileSync(path.join(NEWS, `tag-${x.t.id}.html`), tagPage(x));
+fs.writeFileSync(path.join(NEWS, 'tags.html'), tagsPage(tx, notes));
 updateReadme(notes, ms);
-console.log(`→ news/index.html（${notes.length} 件、${ms.length} か月分）、news/news-data.js、news/README.md の一覧`);
+const cands = new Set(notes.flatMap((n) => n.candidates.map(T.key)));
+console.log(`→ news/index.html（${notes.length} 件、${ms.length} か月分）、news/tags.html（語彙 ${T.tags.length} 個のうち付いている ${txUsed.length} 個、候補 ${cands.size} 個）と news/tag-*.html、news/news-data.js、news/README.md の一覧`);

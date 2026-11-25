@@ -1,6 +1,8 @@
 # nginx の HTTP/2 の処理にあった 2 つのメモリ安全の脆弱性（2026-11-18）
 <!-- kind: daily -->
-<!-- tags: http -->
+<!-- layer: http -->
+<!-- tags: nginx、HTTP/2、メモリ安全、リモートコード実行、セキュリティ -->
+<!-- prereqs: 解放後の使用、整数オーバーフロー -->
 <!-- missing: HTTP/2 のフロー制御、ASLR -->
 
 - 出典: nginx の[セキュリティ勧告の一覧](https://nginx.org/en/security_advisories.html)と[変更の記録](https://nginx.org/en/CHANGES)（2026-11-18。1.31.9 と 1.30.7）。見つけた組の 1 つ、Wiz Research の[記事](https://www.wiz.io/blog/nginx-http2-rce-vulnerabilities)（2026-11-18）。

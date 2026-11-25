@@ -1,5 +1,6 @@
 # 1960 年代の論理 IC「Signetics ST680A」の解析（2026-11-08）
 <!-- kind: daily -->
+<!-- tags: 集積回路、論理回路、トランジスタ、リバースエンジニアリング -->
 <!-- missing: バイポーラトランジスタ -->
 
 - 出典: [Reverse engineering a vintage diode-transistor logic chip](https://www.righto.com/2026/11/signetics-st680a-dtl-nand.html)（Ken Shirriff、2026-11-08）。解析した本人の記事。

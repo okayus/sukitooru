@@ -1,4 +1,6 @@
 # 作って学ぶ、JSX (TSX) ランタイムの基本（2026-06-06）
+<!-- tags: JSX、JavaScript、TypeScript、トランスパイラ -->
+<!-- prereqs: HTML、DOM -->
 <!-- missing: トランスパイラ、モジュール、関数を値として渡す、名前空間と型の宣言、テンプレートエンジン -->
 
 - 出典: [作って学ぶ、JSX (TSX) ランタイムの基本](https://speakerdeck.com/syumai/jsx-runtime-basics)（syumai、フロントエンド・PHPカンファレンス北海道2026、2026-06-06、56 枚）と、サンプル [syumai/minimum-jsx](https://github.com/syumai/minimum-jsx)（コミット 737a3e4、MIT）

@@ -19,7 +19,9 @@
      ・ほかのファイルは変えない。tools/build-news.mjs が作る news/ の .html と news-data.js もコミットしない（.gitignore。公開のときに作る）
      ・ノートの中身: 大きさ、題と「要点」と場面の数、日付が未来でない、
        リンクが https:// か http:// だけ、章の場面へのリンクが 2 つ以上の場面にある、
-       <!-- tags: … --> の id が層の登録簿（この検査と同じ側の assets/layers.js）にある、
+       <!-- layer: … --> の id が層の登録簿（この検査と同じ側の assets/layers.js）にある、
+       タグ（<!-- tags: … --> が 1〜5 個、<!-- prereqs: … --> が 4 個まで、<!-- tag-candidates: … --> が 3 個まで）が
+       語彙（この検査と同じ側の assets/tags.js）の正規の名前だけを使い、候補が語彙に無い（assets/tags.js の checkNote。strict）、
        <!-- missing: … --> の名前の数と長さ、
        「層」の場面の表が「層 | 起きること | 章と場面」の 3 列で 2〜6 行（ページでは行が層の歩きの段階になる）、
        台本（```anim。任意）は 1 つまでで、部品が seq・mem・stack・boxes・tree・timeline のどれか、形・段階 2〜6・本文 160 字・
@@ -38,6 +40,7 @@ import { fileURLToPath } from 'node:url';
 
 const L = createRequire(import.meta.url)('../assets/layers.js');   // main の側の登録簿（プルリクエストの側は読まない）
 const AS = createRequire(import.meta.url)('../assets/anim-script.js');   // main の側の台本の読み方
+const T = createRequire(import.meta.url)('../assets/tags.js');   // main の側のタグの語彙（プルリクエストの側は読まない）
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');   // main の側（章は main と同じ。プルリクエストは news/ の外を変えない）
 const MAX_BYTES = 16000;
 const MAX_MISSING = 8, MAX_MISSING_LEN = 40;
@@ -99,10 +102,13 @@ if (note && added.length === 1) {
   if (scenesLinked.size < 2) bad(`章の場面へのリンク（…/chapters/NN-名前.html#sK）は 2 つ以上の場面に張る（今は ${scenesLinked.size} つ）`);
 
   /* 層の指定と、教材に無い概念（行だけの印。書き方は news/README.md） */
-  const tags = [...src.matchAll(/^<!--\s*tags:\s*([^>]*?)\s*-->\s*$/gm)];
-  if (tags.length > 1) bad('<!-- tags: … --> の行は 1 つだけ');
-  for (const id of tags.length ? tags[0][1].split(/[、,\s]+/).filter(Boolean) : []) if (!L.byId[id]) bad(`tags の ${id} は層の登録簿（assets/layers.js）に無い`);
-  if (/<!--\s*tags:/.test(src) && !tags.length) bad('<!-- tags: … --> は 1 行に書く');
+  const layer = [...src.matchAll(/^<!--\s*layer:\s*([^>]*?)\s*-->\s*$/gm)];
+  if (layer.length > 1) bad('<!-- layer: … --> の行は 1 つだけ');
+  for (const id of layer.length ? layer[0][1].split(/[、,\s]+/).filter(Boolean) : []) if (!L.byId[id]) bad(`layer の ${id} は層の登録簿（assets/layers.js）に無い`);
+  if (/<!--\s*layer:/.test(src) && !layer.length) bad('<!-- layer: … --> は 1 行に書く');
+
+  /* タグ（内容のタグ・前提のタグ・候補）。語彙の正規の名前だけ。数と、候補が語彙に無いことも確かめる */
+  for (const e of T.checkNote(src, { daily: true, strict: true, isLayer: (s) => !!L.byId[s] }).errors) bad('タグ: ' + e);
   const missing = [...src.matchAll(/^<!--\s*missing:\s*([^>]*?)\s*-->\s*$/gm)];
   if (missing.length > 1) bad('<!-- missing: … --> の行は 1 つだけ');
   if (/<!--\s*missing:/.test(src) && !missing.length) bad('<!-- missing: … --> は 1 行に書く');

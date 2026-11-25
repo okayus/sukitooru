@@ -1,5 +1,6 @@
 # C++ の言語サーバー clice の 1.0 版（2026-11-15）
 <!-- kind: daily -->
+<!-- tags: 言語サーバー、C++、コンパイラ -->
 <!-- missing: モジュール、1 ファイルずつ作る（分割コンパイル） -->
 
 - 出典: [clice v1.0 Released: Welcome to Modern C++](https://ykiko.me/en/articles/2105384023094834022/)（ykiko、2026-11-15）。作った本人の記事。
