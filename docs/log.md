@@ -3,6 +3,9 @@
 1 行が 1 つの節目（push・マージ・持ち主の作業の完了・公開の状態の変化）。形は `- YYYY-MM-DD 何を（コミット・記録）`。記録は `docs/log/` からの相対パス。
 自動では全体を読まない（SessionStart hook が新しい 5 行を出す）。作業中の試行錯誤は書かない（git log と `docs/log/` の作業記録にある）。
 
+- 2026-11-26 持ち主が PC と iPhone から苔むすに積めて、P4 の記録の導線が端から端まで通った。iPhone では初めボタンが出なかった（Safari に印が無かったとみる。印はブラウザごとで、Safari は 7 日操作しないサイトの印を消す。faf3d24、plans/learning-loop.md §6 P4）
+- 2026-11-26 透き通るの P4 の記録の導線を push した（b4d90ec）。ノートのページの「苔むすに積む」（`assets/kokemusu.js`。持ち主のブラウザだけに出す。`?kokemusu=on`）、契約の写し `contracts/kokemusu/`、検査 `tools/kokemusucheck.mjs`。直しは 2e674c2（`verify.mjs --base` が replaceState を転送と取り違えた）と 439ab1d（縦読み版で表紙のタグの下にも置く。ページの終わりだけでは持ち主が iPhone で見つけられなかった）
+- 2026-11-26 日刊 #12（1Password の裏側のシステムへの侵入）が CI の Chrome の起動の時間切れで落ちた。持ち主の許可で落ちたジョブを走らせ直し、マージした（cb0633b）
 - 2026-11-25 learning-loop.md §3 の 3・4 を、持ち主が推奨に決めた（積む石は内容のタグと「透き通る」で、前提のタグは積まない。クイズが無い前提タグは、章の場面へのリンクとクイズ待ちの一覧）
 - 2026-11-25 日刊の候補の 3 語（ファイアウォール、Cookie、疑似乱数）を持ち主が語彙に足した（aeff2c5。語彙 95 個）。候補はノートを直さずに内容のタグになるが、札が増え、Check Point のノートの表紙の余りが 1280×688 で 29px から 2px に減った（CI は新しいノートしか検証しないので、足したら手元で verify.mjs にかける）
 - 2026-11-25 手で起こした日刊（#11、fd3ebeb）で P3 の出口を満たした。語彙のタグ 5 個・前提 2 個・候補 3 語で出て、news-pr.yml（タグの strict の検査を含む）と Workers Builds が success、本番の tags.html とタグのページが verify.mjs で ✓（plans/learning-loop.md §6 P3）
