@@ -9,7 +9,7 @@
 
    公開のサイトなので、導線は持ち主の端末だけに出す。出す端末で、ニュースのページを一度 ?kokemusu=on を付けて開く
    （localStorage の ytm-kokemusu に残る。?kokemusu=off で消す。どちらも開いた後に URL から外す）。
-   1画面版は上部バーのボタン（収まらなければ表紙の下のリンクの並び）、縦読み版（上部バーが無い）はページの終わりに置く。
+   1画面版は上部バーのボタン（収まらなければ表紙の下のリンクの並び）、縦読み版（上部バーが無い）は表紙のタグの下とページの終わりに置く。
 
    tools/build-news.mjs が post で中身を作ってノートのページに埋め、ページが mount を呼ぶ。ニュースのページはどれもこのファイルを読む
    （?kokemusu= をどのページでも受けるため）。ブラウザでは window.YT_KOKEMUSU、Node では module.exports。
@@ -56,7 +56,7 @@
 
   var TITLE = 'このノートを苔むすの積むダイアログで開く（新しいタブ）。題とリンク、石（「' + K.SOURCE + '」と内容のタグ）、向き（インプット）、読んだ日を渡す。積むを押すまで記録されない';
 
-  /* ノートのページが YT.chapter の後に呼ぶ。持ち主の端末なら、上部バーか表紙の下（1画面版）と、ページの終わり（縦読み版）に置く。
+  /* ノートのページが YT.chapter の後に呼ぶ。持ち主の端末なら、上部バーか表紙の下（1画面版）と、表紙のタグの下とページの終わり（縦読み版）に置く。
      URL は押すときに作り直す（ページを開いたまま日付が変わっても、押した日を渡す） */
   K.mount = function (post) {
     if (!K.on() || /(?:^|&)embed=1(?:&|$)/.test(location.search.slice(1))) return;
@@ -75,8 +75,17 @@
     }
     var main = document.querySelector('main.scenes');
     if (main) {
+      // 縦読み版は、開いてすぐ見える表紙のタグの下と、読み終えた所（ページの終わり）に置く。1画面版では CSS が隠す
+      var h1 = main.querySelector('.sc-cover h1');
+      if (h1) {
+        var after = h1.nextElementSibling && h1.nextElementSibling.classList.contains('nw-tags') ? h1.nextElementSibling : h1;
+        var head = document.createElement('p');
+        head.className = 'nw-koke top';
+        head.appendChild(link(''));
+        after.parentNode.insertBefore(head, after.nextSibling);
+      }
       var end = document.createElement('p');
-      end.className = 'nw-koke';
+      end.className = 'nw-koke end';
       end.appendChild(link(''));
       end.appendChild(document.createElement('span')).textContent = '読み終えたら、題とリンク、石（「' + K.SOURCE + '」と内容のタグ）を苔むすに渡す。積むを押すまで記録されない。';
       main.appendChild(end);

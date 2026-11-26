@@ -558,8 +558,11 @@ const STYLE = `<style>
   .nw-tlist .nw-n { font-family: var(--mono); font-size: 0.78rem; color: var(--fg-mid); margin-left: 0.4rem; }
   .nw-tlist small { font-size: 0.8rem; line-height: 1.6; color: var(--fg-mid); }
 
-  /* 苔むすに積む（assets/kokemusu.js が持ち主の端末だけに置く）。1画面版は上部バーのボタン（収まらなければ表紙の下）、縦読み版はページの終わり */
-  .nw-koke { display: grid; justify-items: start; gap: 0.5rem; margin-top: 2.75rem; padding-top: 1.75rem; border-top: 1px solid var(--rule); font-size: 0.84rem; line-height: 1.7; color: var(--fg-mid); }
+  /* 苔むすに積む（assets/kokemusu.js が持ち主の端末だけに置く）。1画面版は上部バーのボタン（収まらなければ表紙の下）、
+     縦読み版は表紙のタグの下（top）とページの終わり（end） */
+  .nw-koke { display: grid; justify-items: start; gap: 0.5rem; font-size: 0.84rem; line-height: 1.7; color: var(--fg-mid); }
+  .nw-koke.top { margin-top: 0.75rem; }
+  .nw-koke.end { margin-top: 2.75rem; padding-top: 1.75rem; border-top: 1px solid var(--rule); }
   .fit .nw-koke { display: none; }
   .nw-koke a { font-weight: 600; font-size: 0.95rem; color: var(--fg); text-decoration: none; border: 1px solid var(--fg-dim); border-radius: 4px; padding: 0.3rem 0.9rem; }
   .nw-koke a:hover { border-color: var(--fg); }
