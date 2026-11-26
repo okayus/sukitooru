@@ -586,7 +586,9 @@ async function checkPage(cdp, sid, base, page, report) {
   for (const [w, h] of DESKTOP) {
     await load(w, h, false);
     if (opt.base && w === DESKTOP[0][0]) {
-      const here = await ev('location.href');
+      // 比べるのは、サーバーが返した文書の URL（転送の後の URL）。location.href はページの JS が history.replaceState で変える
+      // （assets/kokemusu.js が ?kokemusu= を外す）
+      const here = await ev("performance.getEntriesByType('navigation')[0].name");
       if (here.split('#')[0] !== url.split('#')[0]) { bad = true; lines.push('  転送された: ' + url.replace(base, '') + ' → ' + here.replace(base, '')); }
     }
     const r = await ev(MEASURE_DESKTOP.replace('STEPS', opt.steps ? 'true' : 'false'), true);
