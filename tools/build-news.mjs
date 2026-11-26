@@ -28,6 +28,9 @@
    段階の説明欄・台本より後の文、右に部品（assets/parts/<部品>.js、詳しいノートだけは news/anim/<部品>.js も）が描く図。
    台本の読み方と検査は assets/anim-script.js（tools/news-pr-check.mjs と同じもの）、場面の組み立ては assets/anim.js。
    段階の本文の Markdown はここで HTML にし（章の場面へのリンクは板を開く）、ノートの文字は部品が SVG の文字として描く。
+
+   苔むすへの記録の導線（assets/kokemusu.js）: ノートのページに、苔むすに渡す中身（題とリンク、「透き通る」と内容のタグ、向き）を埋める。
+   「苔むすに積む」は持ち主の端末だけに出る。中身が苔むすの契約に合うかは tools/kokemusucheck.mjs（このページを作った後に走らせる）。
    ============================================================ */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -38,6 +41,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const L = createRequire(import.meta.url)('../assets/layers.js');
 const AS = createRequire(import.meta.url)('../assets/anim-script.js');
 const T = createRequire(import.meta.url)('../assets/tags.js');
+const K = createRequire(import.meta.url)('../assets/kokemusu.js');
 const NEWS = path.join(ROOT, 'news');
 const SITE = 'https://sukitooru.shiraoka.workers.dev/';
 const REPO = 'https://github.com/okayus/sukitooru/blob/main/news/';
@@ -553,14 +557,21 @@ const STYLE = `<style>
   .nw-tlist b { font-weight: 600; }
   .nw-tlist .nw-n { font-family: var(--mono); font-size: 0.78rem; color: var(--fg-mid); margin-left: 0.4rem; }
   .nw-tlist small { font-size: 0.8rem; line-height: 1.6; color: var(--fg-mid); }
+
+  /* 苔むすに積む（assets/kokemusu.js が持ち主の端末だけに置く）。1画面版は上部バーのボタン（収まらなければ表紙の下）、縦読み版はページの終わり */
+  .nw-koke { display: grid; justify-items: start; gap: 0.5rem; margin-top: 2.75rem; padding-top: 1.75rem; border-top: 1px solid var(--rule); font-size: 0.84rem; line-height: 1.7; color: var(--fg-mid); }
+  .fit .nw-koke { display: none; }
+  .nw-koke a { font-weight: 600; font-size: 0.95rem; color: var(--fg); text-decoration: none; border: 1px solid var(--fg-dim); border-radius: 4px; padding: 0.3rem 0.9rem; }
+  .nw-koke a:hover { border-color: var(--fg); }
 </style>`;
 
 /* graph があるページは、層の地図（assets/news-graph.js）を場面 graph.k に描く。graph.opts はその場面の絞り込み。
    walk があるページは、場面 walk.k を層の歩き（同じファイルの YT_NEWS_GRAPH.walk）にする。walk.data はその値。
    anims（[{ k, part, custom, data }]）は、場面 k を台本の動きの場面（assets/anim.js の YT_ANIM.scene）にする。
-   部品は assets/parts/<part>.js、手書きの部品（custom）は news/anim/<part>.js */
-function page({ title, description, body, meta, graph, walk, anims = [] }) {
-  const scripts = graph ? ['../assets/layers.js', 'news-data.js', '../assets/news-graph.js'] : walk ? ['../assets/layers.js', '../assets/news-graph.js'] : [];
+   部品は assets/parts/<part>.js、手書きの部品（custom）は news/anim/<part>.js。
+   koke（ノートのページだけ）は苔むすに渡す中身（assets/kokemusu.js の post）。どのページも kokemusu.js を読む（?kokemusu= を受けるため） */
+function page({ title, description, body, meta, graph, walk, anims = [], koke = null }) {
+  const scripts = ['../assets/kokemusu.js'].concat(graph ? ['../assets/layers.js', 'news-data.js', '../assets/news-graph.js'] : walk ? ['../assets/layers.js', '../assets/news-graph.js'] : []);
   if (anims.length) scripts.push('../assets/anim.js', ...[...new Set(anims.map((a) => (a.custom ? 'anim/' : '../assets/parts/') + a.part + '.js'))]);
   const json = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
   const entries = [];
@@ -599,7 +610,7 @@ ${body}
 
 <script>
 ${graph ? `YT_NEWS_GRAPH.mount(document.getElementById('s${graph.k}'), ${JSON.stringify(graph.opts)});\n` : ''}YT.chapter({ meta: ${json(meta)}${scenes} });
-</script>
+${koke ? `YT_KOKEMUSU.mount(${json(koke)});\n` : ''}</script>
 </body>
 </html>
 `;
@@ -667,7 +678,8 @@ ${scenes}`;
     body,
     meta: { eyebrow, title: n.title, home: 'index.html', actions: [{ href: 'index.html', label: 'ニュースの一覧' }] },
     walk: n.walk ? { k: n.walk.k, data: { layers: n.layers, missing: n.missing.map((m) => m.name), rows: n.walk.rows } } : null,
-    anims: n.anims.map((a) => ({ k: a.k, part: a.part, custom: a.custom, data: animData(n, a) }))
+    anims: n.anims.map((a) => ({ k: a.k, part: a.part, custom: a.custom, data: animData(n, a) })),
+    koke: K.post({ title: n.title, url: `${SITE}news/${n.slug}.html`, tags: n.tags.map((t) => t.name) })
   });
 }
 
